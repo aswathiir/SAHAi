@@ -18,6 +18,20 @@ class ExecutionResult:
     timed_out: bool = False
 
 
+# Both the student's attempted solution and (since the leakage fix) the
+# tutor's extracted code block run here verbatim. Models routinely append
+# "# Example usage\nprint(...)" after a function definition, which writes to
+# stdout *before* our own result line. Reading raw stdout as JSON then fails
+# to parse and silently reports passed=False with no error — this was
+# deflating r_sol in every run to date, not just the new leakage check, and
+# it went unnoticed because the failure mode has no error message.
+#
+# Fixed the same way services/executor/app/sandbox.py already does it: read
+# only the line after a sentinel, so anything the candidate itself prints
+# cannot interfere with (or forge) the result.
+_SENTINEL = "__SAHAI_RESULT__"
+
+
 class CodeVerifier:
     def __init__(self, timeout: int = 10, memory_mb: int = 256):
         self.timeout = timeout
@@ -33,7 +47,7 @@ class CodeVerifier:
             )
         lines.append(code)
         lines.append(f"result = {call}")
-        lines.append("print(json.dumps(result))")
+        lines.append(f"sys.stdout.write('\\n{_SENTINEL}' + json.dumps(result))")
         script = "\n".join(lines)
         try:
             proc = subprocess.run(
@@ -48,14 +62,24 @@ class CodeVerifier:
         if proc.returncode != 0:
             return ExecutionResult(passed=False, error=proc.stderr.strip())
 
+        if _SENTINEL not in proc.stdout:
+            return ExecutionResult(
+                passed=False,
+                output=proc.stdout.strip(),
+                error="no result sentinel in output (candidate produced no return value)",
+            )
+
+        payload = proc.stdout.rsplit(_SENTINEL, 1)[1]
         try:
             import json
 
-            output = json.loads(proc.stdout.strip())
+            output = json.loads(payload)
             passed = output == test_case.expected
             return ExecutionResult(passed=passed, output=str(output))
         except (json.JSONDecodeError, ValueError):
-            return ExecutionResult(passed=False, output=proc.stdout.strip())
+            return ExecutionResult(
+                passed=False, output=payload.strip(), error="result was not JSON-serialisable"
+            )
 
     def verify(self, code: str, problem: Problem) -> float:
         if not problem.test_cases:
