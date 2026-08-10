@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Test / tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Training artefacts — regenerate by re-running; too large for git
+output/
+kaggle_results/
+artifacts/
+*.safetensors
+
+# Local env
+.env
+.DS_Store
+
+# Literature review PDF — likely contains copyrighted paper content.
+# Excluded from the public repo deliberately.
+RL LIT REVIEW.pdf

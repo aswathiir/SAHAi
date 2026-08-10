@@ -1,0 +1,40 @@
+[tool.poetry]
+name = "sahai"
+version = "0.1.0"
+description = "RL-trained AI tutor for placement DSA preparation with code-mixed pedagogy"
+authors = ["SAHAi Team"]
+packages = [{include = "sahai"}]
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.14"
+torch = ">=2.4"
+transformers = ">=4.45"
+peft = ">=0.13"
+accelerate = ">=1.0"
+pydantic = ">=2.0"
+typer = {version = ">=0.12", extras = ["all"]}
+openai-whisper = ">=20231117"
+
+[tool.poetry.group.serve.dependencies]
+vllm = ">=0.6"
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.0"
+ruff = ">=0.5"
+
+[tool.poetry.scripts]
+sahai = "sahai.cli:app"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

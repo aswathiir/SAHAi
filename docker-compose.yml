@@ -1,0 +1,116 @@
+# SAHAi — local stack.
+#
+# Two networks on purpose: only the gateway is reachable from the host, and the
+# executor sits on an internal-only network with no egress at all.
+
+name: sahai
+
+x-service-base: &service-base
+  restart: unless-stopped
+  networks: [internal]
+  environment: &base-env
+    PYTHONUNBUFFERED: "1"
+    SAHAI_TUTOR_URL: http://tutor:8000
+    SAHAI_TRACER_URL: http://tracer:8000
+    SAHAI_EXECUTOR_URL: http://executor:8000
+    SAHAI_SESSION_URL: http://session:8000
+    SAHAI_ASR_URL: http://asr:8000
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sahai
+      POSTGRES_PASSWORD: sahai
+      POSTGRES_DB: sahai
+    volumes: [pgdata:/var/lib/postgresql/data]
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sahai -d sahai"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  gateway:
+    <<: *service-base
+    build: {context: ., dockerfile: services/gateway/Dockerfile}
+    ports: ["8080:8000"]          # the only port published to the host
+    networks: [internal, public]
+    environment:
+      <<: *base-env
+      SAHAI_RATE_LIMIT_PER_MIN: "60"
+    depends_on:
+      session: {condition: service_healthy}
+
+  session:
+    <<: *service-base
+    build: {context: ., dockerfile: services/session/Dockerfile}
+    # On both networks: `internal` to reach tutor/tracer/postgres, `sandbox` to
+    # reach the executor. The executor itself stays on `sandbox` only, so it can
+    # be called but cannot call anything.
+    networks: [internal, sandbox]
+    environment:
+      <<: *base-env
+      SAHAI_SESSION_DSN: postgresql+asyncpg://sahai:sahai@postgres:5432/sahai
+      SAHAI_MAX_TURNS: "12"
+    depends_on:
+      postgres: {condition: service_healthy}
+      tutor: {condition: service_started}
+      executor: {condition: service_started}
+      tracer: {condition: service_started}
+
+  tracer:
+    <<: *service-base
+    build: {context: ., dockerfile: services/tracer/Dockerfile}
+    environment:
+      <<: *base-env
+      SAHAI_TRACER_DSN: postgresql+asyncpg://sahai:sahai@postgres:5432/sahai
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  tutor:
+    <<: *service-base
+    build: {context: ., dockerfile: services/tutor/Dockerfile}
+    environment:
+      <<: *base-env
+      # Switch to "hf" and mount an adapter to serve a trained policy.
+      SAHAI_TUTOR_BACKEND: ${SAHAI_TUTOR_BACKEND:-stub}
+      SAHAI_BASE_MODEL: ${SAHAI_BASE_MODEL:-Qwen/Qwen2.5-1.5B-Instruct}
+      SAHAI_ADAPTER_PATH: ${SAHAI_ADAPTER_PATH:-}
+      SAHAI_DEVICE: ${SAHAI_DEVICE:-cpu}
+    volumes:
+      - ./artifacts:/srv/artifacts:ro
+
+  asr:
+    <<: *service-base
+    build: {context: ., dockerfile: services/asr/Dockerfile}
+    environment:
+      <<: *base-env
+      SAHAI_ASR_BACKEND: stub
+
+  # Runs untrusted code. Everything here is a containment control.
+  executor:
+    build: {context: ., dockerfile: services/executor/Dockerfile}
+    restart: unless-stopped
+    networks: [sandbox]           # no route to postgres, no route out
+    read_only: true               # rootfs immutable
+    tmpfs:
+      - /tmp:size=64m,mode=1777   # the only writable path
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128               # blunts fork bombs at the container level
+    mem_limit: 1g
+    cpus: 1.0
+    environment:
+      PYTHONUNBUFFERED: "1"
+
+networks:
+  public:
+  internal:
+    internal: false               # needs egress for model/dataset downloads
+  sandbox:
+    internal: true                # no egress whatsoever
+
+volumes:
+  pgdata:
