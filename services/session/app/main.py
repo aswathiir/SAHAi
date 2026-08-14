@@ -89,7 +89,10 @@ SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    app.state.http = httpx.AsyncClient(timeout=60.0)
+    # 60s was fine for the stub backend; CPU inference on the real "hf"
+    # backend (no GPU passthrough into Docker) can take well over a minute
+    # for ~200 tokens, so this needs headroom for that path too.
+    app.state.http = httpx.AsyncClient(timeout=240.0)
     yield
     await app.state.http.aclose()
     await engine.dispose()
