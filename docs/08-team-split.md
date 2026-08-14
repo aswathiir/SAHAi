@@ -67,17 +67,23 @@ signal; why only tutor tokens are masked into the loss, and what that forbids.
   `populate_existing` staleness bug and its regression test
 - Request-id tracing across gateway → session; aggregate health
 - End-to-end test running all four services in one process, no mocks
+- **Student assessment interface** — a static page (`services/gateway/app/static/index.html`)
+  served straight off the gateway at `/`: pick a problem, chat with the tutor,
+  submit code, see pass/fail per test and live per-skill mastery. Talks only to
+  the existing `/v1/*` API, no new service. Problem catalogue
+  (`services/gateway/app/data/problems.json`, built by `scripts/export_problems.py`)
+  deliberately excludes `solution` — verified by test that it never reaches the browser.
 
 ### Next
 
-1. **Tests for gateway, tutor, asr** — currently zero. The gateway handles auth
-   and rate limiting untested.
+1. **Tests for tutor, asr** — currently zero. Gateway now has 5 (problem
+   catalogue + leak check), but auth and rate limiting are still untested.
 2. **Finish the trace** into tutor, executor and tracer. They receive
    `x-request-id` but do not log it, so a failure inside the executor is not
    findable by request id — which is exactly the case where tracing matters.
 3. **Alembic migrations.** Tables are created by `create_all` at startup. Fine
    for adding a table, wrong for changing one.
-4. **CI** — run `make test` on push. 100 tests exist and nothing runs them
+4. **CI** — run `make test` on push. 108 tests exist and nothing runs them
    automatically.
 
 **Must be able to explain:** why the executor is on its own network and session
@@ -142,11 +148,17 @@ bridges two; why a request with no log line never arrived.
    base.
 3. **Build a code-mixed evaluation set.** There is currently no way to say
    whether Indic performance is good or bad.
-4. **Real ASR** — code-mixed Indic speech; `whisper-large-v3` is mediocre here.
+4. **Wire a pretrained Indic ASR + TTS model into `services/asr`** once the
+   text tutor is solid. Scope correction: this is integration, not training —
+   no ASR fine-tuning or WER/CER benchmark is planned. `whisper-large-v3` (or
+   an equivalent pretrained model) is wrapped around the trained tutor, not
+   tuned. The Indic-base-model decision in item 2 is the fallback if Qwen's
+   code-mixed dialogue itself is too weak, evaluated like any base-model swap.
 
 **Must be able to explain:** why LoRA + KL are the forgetting mitigations and
 why measurement is the missing half; why continued pretraining (unlike LoRA) is
-where forgetting risk is genuinely high.
+where forgetting risk is genuinely high; why ASR/TTS are wrap-around
+integrations, not a training workstream.
 
 ---
 
@@ -156,7 +168,7 @@ where forgetting risk is genuinely high.
 - **Training and serving still have duplicate reward code** (`sahai/reward/` and
   `libs/sahai-core/sahai_core/reward/`). Two bugs so far had to be fixed twice.
   Merging them onto `sahai-core` is joint A+B work and should happen soon.
-- **`make test` must pass before any push.** 100 tests today.
+- **`make test` must pass before any push.** 108 tests today.
 - After changing `sahai/`, run
   `rsync -a --delete --exclude='__pycache__' sahai/ kaggle_upload/sahai/` or the
   Kaggle run uses stale code.

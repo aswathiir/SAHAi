@@ -12,6 +12,8 @@ Read in order if you are new. Each file is self-contained.
 | 06 | [Roadmap](06-roadmap.md) | Four phases and how much is done |
 | 07 | [Operations — Kaggle](07-operations-kaggle.md) | Running training, and the traps that fail silently |
 | 08 | [Team split](08-team-split.md) | Four-way ownership |
+| 09 | [Track A tutorial](09-track-a-tutorial.md) | RL taught from zero: policy gradients, GRPO, LoRA, BKT — every formula derived and tied to code |
+| 10 | [Fundamentals guide](10-fundamentals-guide.md) | **Start here to learn Track A.** Paper → formula → code → worked example, repeated for every concept, beginner pace |
 
 ## Two programs, not one
 
@@ -32,6 +34,10 @@ database, no network and no ability to execute code.
 
 ## Current state
 
-Infrastructure is essentially complete; the science has barely started. 100
-tests pass. A tutor that demonstrably learns is the open item that gates
-everything else — see [06-roadmap.md](06-roadmap.md).
+Infrastructure is essentially complete, including a student-facing assessment
+interface (`services/gateway/app/static/`) served off the gateway. The
+science has started but isn't there yet: a scaled 20-epoch run produced a
+real learning signal every epoch, but held-out solve rate (6.3%) is far below
+training-epoch peaks (45%), and 37% of turns are truncated mid-generation —
+the main open bug. 108 tests pass. A tutor that generalizes is the open item
+that gates everything else — see [06-roadmap.md](06-roadmap.md).
