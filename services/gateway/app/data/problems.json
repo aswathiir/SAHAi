@@ -1,0 +1,1172 @@
+[
+  {
+    "id": "mbpp_602",
+    "title": "Write a python function to find the first repeated character in a given string.",
+    "description": "Write a python function to find the first repeated character in a given string.",
+    "difficulty": 1,
+    "skills": [
+      "strings"
+    ],
+    "function_name": "first_repeated_char",
+    "function_signature": "def first_repeated_char(str1):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": "abcabc"
+        },
+        "expected": "a"
+      },
+      {
+        "input": {
+          "arg0": "abc"
+        },
+        "expected": "None"
+      },
+      {
+        "input": {
+          "arg0": "123123"
+        },
+        "expected": "1"
+      }
+    ]
+  },
+  {
+    "id": "mbpp_603",
+    "title": "Write a function to get a lucid number smaller than or equal to n.",
+    "description": "Write a function to get a lucid number smaller than or equal to n.",
+    "difficulty": 1,
+    "skills": [
+      "general"
+    ],
+    "function_name": "get_ludic",
+    "function_signature": "def get_ludic(n):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": 10
+        },
+        "expected": [
+          1,
+          2,
+          3,
+          5,
+          7
+        ]
+      },
+      {
+        "input": {
+          "arg0": 25
+        },
+        "expected": [
+          1,
+          2,
+          3,
+          5,
+          7,
+          11,
+          13,
+          17,
+          23,
+          25
+        ]
+      },
+      {
+        "input": {
+          "arg0": 45
+        },
+        "expected": [
+          1,
+          2,
+          3,
+          5,
+          7,
+          11,
+          13,
+          17,
+          23,
+          25,
+          29,
+          37,
+          41,
+          43
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mbpp_604",
+    "title": "Write a function to reverse words in a given string.",
+    "description": "Write a function to reverse words in a given string.",
+    "difficulty": 1,
+    "skills": [
+      "strings"
+    ],
+    "function_name": "reverse_words",
+    "function_signature": "def reverse_words(s):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": "python program"
+        },
+        "expected": "program python"
+      },
+      {
+        "input": {
+          "arg0": "java language"
+        },
+        "expected": "language java"
+      },
+      {
+        "input": {
+          "arg0": "indian man"
+        },
+        "expected": "man indian"
+      }
+    ]
+  },
+  {
+    "id": "mbpp_605",
+    "title": "Write a function to check if the given integer is a prime number.",
+    "description": "Write a function to check if the given integer is a prime number.",
+    "difficulty": 1,
+    "skills": [
+      "math"
+    ],
+    "function_name": "prime_num",
+    "function_signature": "def prime_num(num):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": 13
+        },
+        "expected": true
+      },
+      {
+        "input": {
+          "arg0": 7
+        },
+        "expected": true
+      },
+      {
+        "input": {
+          "arg0": -1010
+        },
+        "expected": false
+      }
+    ]
+  },
+  {
+    "id": "mbpp_606",
+    "title": "Write a function to convert degrees to radians.",
+    "description": "Write a function to convert degrees to radians.",
+    "difficulty": 1,
+    "skills": [
+      "general"
+    ],
+    "function_name": "radian_degree",
+    "function_signature": "def radian_degree(degree):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": 90
+        },
+        "expected": 1.5707963267948966
+      },
+      {
+        "input": {
+          "arg0": 60
+        },
+        "expected": 1.0471975511965976
+      },
+      {
+        "input": {
+          "arg0": 120
+        },
+        "expected": 2.0943951023931953
+      }
+    ]
+  },
+  {
+    "id": "mbpp_608",
+    "title": "Write a python function to find nth bell number.",
+    "description": "Write a python function to find nth bell number.",
+    "difficulty": 1,
+    "skills": [
+      "general"
+    ],
+    "function_name": "bell_Number",
+    "function_signature": "def bell_Number(n):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": 2
+        },
+        "expected": 2
+      },
+      {
+        "input": {
+          "arg0": 3
+        },
+        "expected": 5
+      },
+      {
+        "input": {
+          "arg0": 4
+        },
+        "expected": 15
+      }
+    ]
+  },
+  {
+    "id": "mbpp_610",
+    "title": "Write a python function to remove the k'th element from a given list.",
+    "description": "Write a python function to remove the k'th element from a given list.",
+    "difficulty": 1,
+    "skills": [
+      "arrays"
+    ],
+    "function_name": "remove_kth_element",
+    "function_signature": "def remove_kth_element(list1, L):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": [
+            1,
+            1,
+            2,
+            3,
+            4,
+            4,
+            5,
+            1
+          ],
+          "arg1": 3
+        },
+        "expected": [
+          1,
+          1,
+          3,
+          4,
+          4,
+          5,
+          1
+        ]
+      },
+      {
+        "input": {
+          "arg0": [
+            0,
+            0,
+            1,
+            2,
+            3,
+            4,
+            4,
+            5,
+            6,
+            6,
+            6,
+            7,
+            8,
+            9,
+            4,
+            4
+          ],
+          "arg1": 4
+        },
+        "expected": [
+          0,
+          0,
+          1,
+          3,
+          4,
+          4,
+          5,
+          6,
+          6,
+          6,
+          7,
+          8,
+          9,
+          4,
+          4
+        ]
+      },
+      {
+        "input": {
+          "arg0": [
+            10,
+            10,
+            15,
+            19,
+            18,
+            18,
+            17,
+            26,
+            26,
+            17,
+            18,
+            10
+          ],
+          "arg1": 5
+        },
+        "expected": [
+          10,
+          10,
+          15,
+          19,
+          18,
+          17,
+          26,
+          26,
+          17,
+          18,
+          10
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mbpp_612",
+    "title": "Write a python function to merge the first and last elements separately in a lis",
+    "description": "Write a python function to merge the first and last elements separately in a list of lists.",
+    "difficulty": 1,
+    "skills": [
+      "arrays",
+      "two_pointers"
+    ],
+    "function_name": "merge",
+    "function_signature": "def merge(lst):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": [
+            [
+              "x",
+              "y"
+            ],
+            [
+              "a",
+              "b"
+            ],
+            [
+              "m",
+              "n"
+            ]
+          ]
+        },
+        "expected": [
+          [
+            "x",
+            "a",
+            "m"
+          ],
+          [
+            "y",
+            "b",
+            "n"
+          ]
+        ]
+      },
+      {
+        "input": {
+          "arg0": [
+            [
+              1,
+              2
+            ],
+            [
+              3,
+              4
+            ],
+            [
+              5,
+              6
+            ],
+            [
+              7,
+              8
+            ]
+          ]
+        },
+        "expected": [
+          [
+            1,
+            3,
+            5,
+            7
+          ],
+          [
+            2,
+            4,
+            6,
+            8
+          ]
+        ]
+      },
+      {
+        "input": {
+          "arg0": [
+            [
+              "x",
+              "y",
+              "z"
+            ],
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            [
+              "m",
+              "n",
+              "o"
+            ]
+          ]
+        },
+        "expected": [
+          [
+            "x",
+            "a",
+            "m"
+          ],
+          [
+            "y",
+            "b",
+            "n"
+          ],
+          [
+            "z",
+            "c",
+            "o"
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mbpp_618",
+    "title": "Write a function to divide two lists using map and lambda function.",
+    "description": "Write a function to divide two lists using map and lambda function.",
+    "difficulty": 1,
+    "skills": [
+      "arrays"
+    ],
+    "function_name": "div_list",
+    "function_signature": "def div_list(nums1,nums2):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": [
+            4,
+            5,
+            6
+          ],
+          "arg1": [
+            1,
+            2,
+            3
+          ]
+        },
+        "expected": [
+          4.0,
+          2.5,
+          2.0
+        ]
+      },
+      {
+        "input": {
+          "arg0": [
+            3,
+            2
+          ],
+          "arg1": [
+            1,
+            4
+          ]
+        },
+        "expected": [
+          3.0,
+          0.5
+        ]
+      },
+      {
+        "input": {
+          "arg0": [
+            90,
+            120
+          ],
+          "arg1": [
+            50,
+            70
+          ]
+        },
+        "expected": [
+          1.8,
+          1.7142857142857142
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mbpp_619",
+    "title": "Write a function to move all the numbers in it to the given string.",
+    "description": "Write a function to move all the numbers in it to the given string.",
+    "difficulty": 1,
+    "skills": [
+      "strings"
+    ],
+    "function_name": "move_num",
+    "function_signature": "def move_num(test_str):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": "I1love143you55three3000thousand"
+        },
+        "expected": "Iloveyouthreethousand1143553000"
+      },
+      {
+        "input": {
+          "arg0": "Avengers124Assemble"
+        },
+        "expected": "AvengersAssemble124"
+      },
+      {
+        "input": {
+          "arg0": "Its11our12path13to14see15things16do17things"
+        },
+        "expected": "Itsourpathtoseethingsdothings11121314151617"
+      }
+    ]
+  },
+  {
+    "id": "mbpp_620",
+    "title": "Write a function to find the largest subset where each pair is divisible.",
+    "description": "Write a function to find the largest subset where each pair is divisible.",
+    "difficulty": 1,
+    "skills": [
+      "sorting"
+    ],
+    "function_name": "largest_subset",
+    "function_signature": "def largest_subset(a, n):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": [
+            1,
+            3,
+            6,
+            13,
+            17,
+            18
+          ],
+          "arg1": 6
+        },
+        "expected": 4
+      },
+      {
+        "input": {
+          "arg0": [
+            10,
+            5,
+            3,
+            15,
+            20
+          ],
+          "arg1": 5
+        },
+        "expected": 3
+      },
+      {
+        "input": {
+          "arg0": [
+            18,
+            1,
+            3,
+            6,
+            13,
+            17
+          ],
+          "arg1": 6
+        },
+        "expected": 4
+      }
+    ]
+  },
+  {
+    "id": "mbpp_626",
+    "title": "Write a python function to find the largest triangle that can be inscribed in th",
+    "description": "Write a python function to find the largest triangle that can be inscribed in the semicircle.",
+    "difficulty": 1,
+    "skills": [
+      "sorting"
+    ],
+    "function_name": "triangle_area",
+    "function_signature": "def triangle_area(r):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": 0
+        },
+        "expected": 0
+      },
+      {
+        "input": {
+          "arg0": -1
+        },
+        "expected": -1
+      },
+      {
+        "input": {
+          "arg0": 2
+        },
+        "expected": 4
+      }
+    ]
+  },
+  {
+    "id": "mbpp_634",
+    "title": "Write a python function to find the sum of fourth power of first n even natural ",
+    "description": "Write a python function to find the sum of fourth power of first n even natural numbers.",
+    "difficulty": 1,
+    "skills": [
+      "math"
+    ],
+    "function_name": "even_Power_Sum",
+    "function_signature": "def even_Power_Sum(n):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": 2
+        },
+        "expected": 272
+      },
+      {
+        "input": {
+          "arg0": 3
+        },
+        "expected": 1568
+      },
+      {
+        "input": {
+          "arg0": 4
+        },
+        "expected": 5664
+      }
+    ]
+  },
+  {
+    "id": "mbpp_635",
+    "title": "Write a function to push all values into a heap and then pop off the smallest va",
+    "description": "Write a function to push all values into a heap and then pop off the smallest values one at a time.",
+    "difficulty": 1,
+    "skills": [
+      "sorting",
+      "heaps"
+    ],
+    "function_name": "heap_sort",
+    "function_signature": "def heap_sort(iterable):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": [
+            1,
+            3,
+            5,
+            7,
+            9,
+            2,
+            4,
+            6,
+            8,
+            0
+          ]
+        },
+        "expected": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      {
+        "input": {
+          "arg0": [
+            25,
+            35,
+            22,
+            85,
+            14,
+            65,
+            75,
+            25,
+            58
+          ]
+        },
+        "expected": [
+          14,
+          22,
+          25,
+          25,
+          35,
+          58,
+          65,
+          75,
+          85
+        ]
+      },
+      {
+        "input": {
+          "arg0": [
+            7,
+            1,
+            9,
+            5
+          ]
+        },
+        "expected": [
+          1,
+          5,
+          7,
+          9
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mbpp_646",
+    "title": "Write a python function to count number of cubes of size k in a cube of size n.",
+    "description": "Write a python function to count number of cubes of size k in a cube of size n.",
+    "difficulty": 1,
+    "skills": [
+      "hash_maps"
+    ],
+    "function_name": "No_of_cubes",
+    "function_signature": "def No_of_cubes(N,K):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": 2,
+          "arg1": 1
+        },
+        "expected": 8
+      },
+      {
+        "input": {
+          "arg0": 5,
+          "arg1": 2
+        },
+        "expected": 64
+      },
+      {
+        "input": {
+          "arg0": 1,
+          "arg1": 1
+        },
+        "expected": 1
+      }
+    ]
+  },
+  {
+    "id": "mbpp_655",
+    "title": "Write a python function to find the sum of fifth power of n natural numbers.",
+    "description": "Write a python function to find the sum of fifth power of n natural numbers.",
+    "difficulty": 1,
+    "skills": [
+      "math"
+    ],
+    "function_name": "fifth_Power_Sum",
+    "function_signature": "def fifth_Power_Sum(n):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": 2
+        },
+        "expected": 33
+      },
+      {
+        "input": {
+          "arg0": 4
+        },
+        "expected": 1300
+      },
+      {
+        "input": {
+          "arg0": 3
+        },
+        "expected": 276
+      }
+    ]
+  },
+  {
+    "id": "mbpp_657",
+    "title": "Write a python function to find the first digit in factorial of a given number.",
+    "description": "Write a python function to find the first digit in factorial of a given number.",
+    "difficulty": 1,
+    "skills": [
+      "recursion",
+      "math"
+    ],
+    "function_name": "first_Digit",
+    "function_signature": "def first_Digit(n):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": 5
+        },
+        "expected": 1
+      },
+      {
+        "input": {
+          "arg0": 10
+        },
+        "expected": 3
+      },
+      {
+        "input": {
+          "arg0": 7
+        },
+        "expected": 5
+      }
+    ]
+  },
+  {
+    "id": "mbpp_671",
+    "title": "Write a python function to set the right most unset bit.",
+    "description": "Write a python function to set the right most unset bit.",
+    "difficulty": 1,
+    "skills": [
+      "bit_manipulation"
+    ],
+    "function_name": "get_Pos_Of_Right_most_Set_Bit",
+    "function_signature": "def get_Pos_Of_Right_most_Set_Bit(n):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": 21
+        },
+        "expected": 23
+      },
+      {
+        "input": {
+          "arg0": 11
+        },
+        "expected": 15
+      },
+      {
+        "input": {
+          "arg0": 15
+        },
+        "expected": 15
+      }
+    ]
+  },
+  {
+    "id": "mbpp_687",
+    "title": "Write a function to find the greatest common divisor (gcd) of two integers by us",
+    "description": "Write a function to find the greatest common divisor (gcd) of two integers by using recursion.",
+    "difficulty": 1,
+    "skills": [
+      "recursion",
+      "math"
+    ],
+    "function_name": "recur_gcd",
+    "function_signature": "def recur_gcd(a, b):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": 12,
+          "arg1": 14
+        },
+        "expected": 2
+      },
+      {
+        "input": {
+          "arg0": 13,
+          "arg1": 17
+        },
+        "expected": 1
+      },
+      {
+        "input": {
+          "arg0": 9,
+          "arg1": 3
+        },
+        "expected": 3
+      }
+    ]
+  },
+  {
+    "id": "mbpp_692",
+    "title": "Write a python function to find the last two digits in factorial of a given numb",
+    "description": "Write a python function to find the last two digits in factorial of a given number.",
+    "difficulty": 1,
+    "skills": [
+      "recursion",
+      "math"
+    ],
+    "function_name": "last_Two_Digits",
+    "function_signature": "def last_Two_Digits(N):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": 7
+        },
+        "expected": 40
+      },
+      {
+        "input": {
+          "arg0": 5
+        },
+        "expected": 20
+      },
+      {
+        "input": {
+          "arg0": 2
+        },
+        "expected": 2
+      }
+    ]
+  },
+  {
+    "id": "mbpp_694",
+    "title": "Write a function to extract unique values from the given dictionary values.",
+    "description": "Write a function to extract unique values from the given dictionary values.",
+    "difficulty": 1,
+    "skills": [
+      "hash_maps"
+    ],
+    "function_name": "extract_unique",
+    "function_signature": "def extract_unique(test_dict):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": {
+            "msm": [
+              5,
+              6,
+              7,
+              8
+            ],
+            "is": [
+              10,
+              11,
+              7,
+              5
+            ],
+            "best": [
+              6,
+              12,
+              10,
+              8
+            ],
+            "for": [
+              1,
+              2,
+              5
+            ]
+          }
+        },
+        "expected": [
+          1,
+          2,
+          5,
+          6,
+          7,
+          8,
+          10,
+          11,
+          12
+        ]
+      },
+      {
+        "input": {
+          "arg0": {
+            "Built": [
+              7,
+              1,
+              9,
+              4
+            ],
+            "for": [
+              11,
+              21,
+              36,
+              14,
+              9
+            ],
+            "ISP": [
+              4,
+              1,
+              21,
+              39,
+              47
+            ],
+            "TV": [
+              1,
+              32,
+              38
+            ]
+          }
+        },
+        "expected": [
+          1,
+          4,
+          7,
+          9,
+          11,
+          14,
+          21,
+          32,
+          36,
+          38,
+          39,
+          47
+        ]
+      },
+      {
+        "input": {
+          "arg0": {
+            "F": [
+              11,
+              13,
+              14,
+              17
+            ],
+            "A": [
+              12,
+              11,
+              15,
+              18
+            ],
+            "N": [
+              19,
+              21,
+              15,
+              36
+            ],
+            "G": [
+              37,
+              36,
+              35
+            ]
+          }
+        },
+        "expected": [
+          11,
+          12,
+          13,
+          14,
+          15,
+          17,
+          18,
+          19,
+          21,
+          35,
+          36,
+          37
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mbpp_707",
+    "title": "Write a python function to count the total set bits from 1 to n.",
+    "description": "Write a python function to count the total set bits from 1 to n.",
+    "difficulty": 1,
+    "skills": [
+      "hash_maps",
+      "bit_manipulation"
+    ],
+    "function_name": "count_Set_Bits",
+    "function_signature": "def count_Set_Bits(n):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": 16
+        },
+        "expected": 33
+      },
+      {
+        "input": {
+          "arg0": 2
+        },
+        "expected": 2
+      },
+      {
+        "input": {
+          "arg0": 14
+        },
+        "expected": 28
+      }
+    ]
+  },
+  {
+    "id": "mbpp_735",
+    "title": "Write a python function to toggle bits of the number except the first and the la",
+    "description": "Write a python function to toggle bits of the number except the first and the last bit.",
+    "difficulty": 1,
+    "skills": [
+      "bit_manipulation"
+    ],
+    "function_name": "set_middle_bits",
+    "function_signature": "def set_middle_bits(n):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": 9
+        },
+        "expected": 15
+      },
+      {
+        "input": {
+          "arg0": 10
+        },
+        "expected": 12
+      },
+      {
+        "input": {
+          "arg0": 11
+        },
+        "expected": 13
+      }
+    ]
+  },
+  {
+    "id": "mbpp_752",
+    "title": "Write a function to find the nth jacobsthal number.",
+    "description": "Write a function to find the nth jacobsthal number.",
+    "difficulty": 1,
+    "skills": [
+      "trees"
+    ],
+    "function_name": "jacobsthal_num",
+    "function_signature": "def jacobsthal_num(n):",
+    "test_cases": [
+      {
+        "input": {
+          "arg0": 5
+        },
+        "expected": 11
+      },
+      {
+        "input": {
+          "arg0": 2
+        },
+        "expected": 1
+      },
+      {
+        "input": {
+          "arg0": 4
+        },
+        "expected": 5
+      }
+    ]
+  }
+]

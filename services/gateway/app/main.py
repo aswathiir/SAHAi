@@ -11,18 +11,29 @@ without pretending to be a real identity provider.
 from __future__ import annotations
 
 import contextvars
+import json
 import logging
 import os
 import time
 import uuid
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+# Curated by scripts/export_problems.py. Deliberately excludes `solution` —
+# this file is served straight to the browser, and the tutor's entire job is
+# to never reveal the answer, so the answer must not be sitting in a
+# fetchable JSON file either.
+_PROBLEMS_PATH = Path(__file__).parent / "data" / "problems.json"
+PROBLEMS: list[dict] = json.loads(_PROBLEMS_PATH.read_text()) if _PROBLEMS_PATH.exists() else []
+PROBLEMS_BY_ID: dict[str, dict] = {p["id"]: p for p in PROBLEMS}
 
 SESSION_URL = os.getenv("SAHAI_SESSION_URL", "http://session:8000")
 TRACER_URL = os.getenv("SAHAI_TRACER_URL", "http://tracer:8000")
@@ -43,7 +54,9 @@ _hits: dict[str, deque[float]] = defaultdict(deque)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.http = httpx.AsyncClient(timeout=90.0)
+    # Must exceed session's own downstream timeout, or the gateway gives up
+    # first and hides the real (slower but successful) response.
+    app.state.http = httpx.AsyncClient(timeout=270.0)
     yield
     await app.state.http.aclose()
 
@@ -252,3 +265,29 @@ async def mastery(x_learner_id: str | None = LearnerHeader) -> dict:
     )
     r.raise_for_status()
     return r.json()
+
+
+@app.get("/v1/problems")
+async def list_problems() -> list[dict]:
+    """Catalogue for the assessment interface. No auth — browsing is harmless.
+
+    Trimmed to what a picker needs; full detail (test cases, function name)
+    comes from /v1/problems/{id} once a student actually starts a session.
+    """
+    return [
+        {"id": p["id"], "title": p["title"], "difficulty": p["difficulty"], "skills": p["skills"]}
+        for p in PROBLEMS
+    ]
+
+
+@app.get("/v1/problems/{problem_id}")
+async def get_problem(problem_id: str) -> dict:
+    problem = PROBLEMS_BY_ID.get(problem_id)
+    if problem is None:
+        raise HTTPException(404, "problem not found")
+    return problem
+
+
+# Mounted last so it never shadows an API route above — StaticFiles matches
+# on whatever wasn't already claimed, with html=True serving index.html at "/".
+app.mount("/", StaticFiles(directory=Path(__file__).parent / "static", html=True), name="static")

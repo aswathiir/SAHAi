@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SAHAi — Tutor</title>
+<style>
+  :root {
+    --navy: #1e2761; --pink: #f96167; --grey: #555; --bg: #f6f7fb;
+    --card: #ffffff; --border: #e2e4ee; --ok: #1f9d55; --bad: #d1453b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg); color: #1a1a1a;
+  }
+  header {
+    background: var(--navy); color: #fff; padding: 14px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  header .learner { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  header input {
+    padding: 6px 8px; border-radius: 6px; border: none; font-size: 13px; width: 120px;
+  }
+  .layout { display: grid; grid-template-columns: 280px 1fr 240px; gap: 16px; padding: 16px; align-items: start; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px; margin-bottom: 14px;
+  }
+  .card h2 { font-size: 14px; margin: 0 0 10px; color: var(--navy); text-transform: uppercase; letter-spacing: .04em; }
+  #problem-list { display: flex; flex-direction: column; gap: 8px; max-height: 70vh; overflow-y: auto; }
+  .problem-item {
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; cursor: pointer; font-size: 13px;
+  }
+  .problem-item:hover { border-color: var(--navy); }
+  .problem-item.active { border-color: var(--pink); background: #fff3f3; }
+  .chip {
+    display: inline-block; font-size: 10px; padding: 1px 7px; border-radius: 999px;
+    background: #eef0fb; color: var(--navy); margin-right: 4px; margin-top: 4px;
+  }
+  #main { min-height: 70vh; display: flex; flex-direction: column; }
+  #problem-detail { font-size: 13px; color: var(--grey); margin-bottom: 10px; }
+  #problem-detail h3 { color: #1a1a1a; font-size: 15px; margin: 0 0 6px; }
+  button {
+    background: var(--navy); color: #fff; border: none; border-radius: 6px;
+    padding: 8px 14px; font-size: 13px; cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.secondary { background: #eef0fb; color: var(--navy); }
+  #chat { flex: 1; display: flex; flex-direction: column; }
+  #turns {
+    flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
+    padding: 10px; background: #fbfbfd; border: 1px solid var(--border); border-radius: 8px;
+    min-height: 220px; max-height: 320px;
+  }
+  .turn { max-width: 80%; padding: 8px 12px; border-radius: 10px; font-size: 13px; line-height: 1.4; white-space: pre-wrap; }
+  .turn.tutor { align-self: flex-start; background: #eef0fb; }
+  .turn.student { align-self: flex-end; background: var(--navy); color: #fff; }
+  .chat-input { display: flex; gap: 8px; margin-top: 10px; }
+  .chat-input textarea {
+    flex: 1; resize: none; height: 44px; border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-size: 13px;
+  }
+  #code-area {
+    width: 100%; min-height: 140px; font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 13px; border: 1px solid var(--border); border-radius: 6px; padding: 10px;
+  }
+  #results { margin-top: 10px; font-size: 13px; }
+  .result-row { padding: 6px 8px; border-radius: 6px; margin-bottom: 4px; }
+  .result-row.pass { background: #eafaf0; color: var(--ok); }
+  .result-row.fail { background: #fdecec; color: var(--bad); }
+  #status-pill {
+    display: inline-block; font-size: 11px; padding: 2px 10px; border-radius: 999px;
+    background: #eef0fb; color: var(--navy); margin-left: 8px; vertical-align: middle;
+  }
+  .mastery-row { margin-bottom: 10px; font-size: 12px; }
+  .mastery-row .label { display: flex; justify-content: space-between; margin-bottom: 3px; }
+  .bar-bg { background: #eef0fb; border-radius: 6px; height: 8px; overflow: hidden; }
+  .bar-fill { background: var(--pink); height: 100%; }
+  .empty { color: #999; font-size: 13px; padding: 20px 0; text-align: center; }
+  #pedagogy { font-size: 12px; color: var(--grey); margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SAHAi — DSA Tutor</h1>
+  <div class="learner">
+    <span>Learner ID</span>
+    <input id="learner-id" placeholder="me">
+  </div>
+</header>
+
+<div class="layout">
+  <div class="card">
+    <h2>Problems</h2>
+    <div id="problem-list" class="empty">Loading…</div>
+  </div>
+
+  <div id="main">
+    <div class="card" id="problem-detail-card" style="display:none">
+      <div id="problem-detail"></div>
+      <button id="start-btn">Start tutoring session</button>
+      <span id="status-pill" style="display:none"></span>
+    </div>
+
+    <div class="card" id="chat-card" style="display:none">
+      <h2>Conversation</h2>
+      <div id="chat">
+        <div id="turns"></div>
+        <div class="chat-input">
+          <textarea id="chat-text" placeholder="Type your response to the tutor…"
+            data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"></textarea>
+          <button id="send-btn">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="submit-card" style="display:none">
+      <h2>Your solution</h2>
+      <textarea id="code-area" spellcheck="false"
+        data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"></textarea>
+      <div style="margin-top:8px">
+        <button id="submit-btn">Run &amp; submit</button>
+      </div>
+      <div id="results"></div>
+      <div id="pedagogy"></div>
+    </div>
+
+    <div class="card empty" id="placeholder">Pick a problem on the left to begin.</div>
+  </div>
+
+  <div class="card">
+    <h2>Your mastery</h2>
+    <div id="mastery-list" class="empty">No data yet</div>
+    <button class="secondary" id="refresh-mastery" style="width:100%; margin-top:6px">Refresh</button>
+  </div>
+</div>
+
+<script>
+const state = { problems: [], selected: null, sessionId: null, status: null, sending: false };
+
+function learnerId() {
+  let v = document.getElementById('learner-id').value.trim();
+  if (!v) v = 'me';
+  return v;
+}
+document.getElementById('learner-id').value = localStorage.getItem('sahai_learner') || 'me';
+document.getElementById('learner-id').addEventListener('change', e => {
+  localStorage.setItem('sahai_learner', e.target.value.trim() || 'me');
+});
+
+async function api(path, opts = {}) {
+  const headers = Object.assign({ 'x-learner-id': learnerId() }, opts.headers || {});
+  if (opts.body) headers['Content-Type'] = 'application/json';
+  const res = await fetch(path, Object.assign({}, opts, { headers }));
+  if (!res.ok) {
+    let detail = res.statusText;
+    try { detail = (await res.json()).detail || detail; } catch (_) {}
+    throw new Error(`${res.status}: ${detail}`);
+  }
+  return res.json();
+}
+
+async function loadProblems() {
+  const list = document.getElementById('problem-list');
+  try {
+    state.problems = await api('/v1/problems');
+  } catch (e) {
+    list.textContent = 'Could not reach the tutor service: ' + e.message;
+    return;
+  }
+  if (!state.problems.length) {
+    list.textContent = 'No problems available.';
+    return;
+  }
+  list.className = '';
+  list.innerHTML = '';
+  for (const p of state.problems) {
+    const div = document.createElement('div');
+    div.className = 'problem-item';
+    div.dataset.id = p.id;
+    div.innerHTML = `<strong>${p.title}</strong><br>` +
+      p.skills.map(s => `<span class="chip">${s}</span>`).join('') +
+      `<span class="chip">difficulty ${p.difficulty}</span>`;
+    div.addEventListener('click', () => selectProblem(p.id));
+    list.appendChild(div);
+  }
+}
+
+async function selectProblem(id) {
+  document.querySelectorAll('.problem-item').forEach(el =>
+    el.classList.toggle('active', el.dataset.id === id));
+
+  const problem = await api(`/v1/problems/${id}`);
+  state.selected = problem;
+  state.sessionId = null;
+  state.status = null;
+
+  document.getElementById('placeholder').style.display = 'none';
+  document.getElementById('problem-detail-card').style.display = '';
+  document.getElementById('chat-card').style.display = 'none';
+  document.getElementById('submit-card').style.display = 'none';
+  document.getElementById('status-pill').style.display = 'none';
+
+  document.getElementById('problem-detail').innerHTML =
+    `<h3>${problem.title}</h3><div>${problem.description}</div>`;
+  document.getElementById('code-area').value = problem.function_signature + '\n    pass\n';
+  document.getElementById('turns').innerHTML = '';
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('pedagogy').innerHTML = '';
+  document.getElementById('start-btn').disabled = false;
+}
+
+function renderTurns(turns) {
+  const box = document.getElementById('turns');
+  box.innerHTML = '';
+  for (const t of turns) {
+    const div = document.createElement('div');
+    div.className = 'turn ' + (t.role === 'tutor' ? 'tutor' : 'student');
+    div.textContent = t.content;
+    box.appendChild(div);
+  }
+  box.scrollTop = box.scrollHeight;
+}
+
+function setStatus(status) {
+  state.status = status;
+  const pill = document.getElementById('status-pill');
+  pill.textContent = status;
+  pill.style.display = '';
+}
+
+document.getElementById('start-btn').addEventListener('click', async () => {
+  const p = state.selected;
+  const btn = document.getElementById('start-btn');
+  btn.disabled = true;
+  try {
+    const session = await api('/v1/sessions', {
+      method: 'POST',
+      body: JSON.stringify({
+        problem_id: p.id, problem_title: p.title, problem_description: p.description,
+      }),
+    });
+    state.sessionId = session.session_id;
+    setStatus(session.status);
+    renderTurns(session.turns);
+    document.getElementById('chat-card').style.display = '';
+    document.getElementById('submit-card').style.display = '';
+  } catch (e) {
+    alert('Could not start a session: ' + e.message);
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('send-btn').addEventListener('click', sendTurn);
+document.getElementById('chat-text').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendTurn(); }
+});
+
+async function sendTurn() {
+  // Guards two things: a stray keystroke firing Enter mid-request, and a
+  // click landing while the textarea is disabled but before the browser has
+  // repainted — both used to fire a second request with whatever partial
+  // text was in the box at that instant.
+  if (state.sending) return;
+  const box = document.getElementById('chat-text');
+  const content = box.value.trim();
+  if (!content || !state.sessionId) return;
+
+  state.sending = true;
+  box.value = '';
+  box.disabled = true;
+  const sendBtn = document.getElementById('send-btn');
+  sendBtn.disabled = true;
+
+  // Show the student's own message immediately — waiting for the full round
+  // trip (which can take well over a minute against a real model on CPU)
+  // before the message even appears reads as broken, not slow.
+  const turnsBox = document.getElementById('turns');
+  const studentDiv = document.createElement('div');
+  studentDiv.className = 'turn student';
+  studentDiv.textContent = content;
+  turnsBox.appendChild(studentDiv);
+  const thinkingDiv = document.createElement('div');
+  thinkingDiv.className = 'turn tutor';
+  thinkingDiv.style.opacity = '0.6';
+  thinkingDiv.textContent = 'Tutor is thinking…';
+  turnsBox.appendChild(thinkingDiv);
+  turnsBox.scrollTop = turnsBox.scrollHeight;
+
+  try {
+    const session = await api(`/v1/sessions/${state.sessionId}/turns`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+    setStatus(session.status);
+    renderTurns(session.turns);
+  } catch (e) {
+    thinkingDiv.remove();
+    thinkingDiv.textContent = '';
+    alert('Message failed: ' + e.message);
+  } finally {
+    state.sending = false;
+    box.disabled = false;
+    sendBtn.disabled = false;
+    box.focus();
+  }
+}
+
+document.getElementById('submit-btn').addEventListener('click', async () => {
+  if (!state.sessionId) return;
+  const p = state.selected;
+  const code = document.getElementById('code-area').value;
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  try {
+    const res = await api(`/v1/sessions/${state.sessionId}/submit`, {
+      method: 'POST',
+      body: JSON.stringify({
+        code, function_name: p.function_name, test_cases: p.test_cases, skills: p.skills,
+      }),
+    });
+    const resultsBox = document.getElementById('results');
+    resultsBox.innerHTML = `<strong>${res.solved ? 'All tests passed' : 'Not solved yet'}</strong> ` +
+      `(${Math.round(res.pass_rate * 100)}% of tests)<br>`;
+    res.results.forEach((r, i) => {
+      const row = document.createElement('div');
+      const passed = r.outcome === 'passed';
+      row.className = 'result-row ' + (passed ? 'pass' : 'fail');
+      row.textContent = `Test ${i + 1}: ${passed ? 'passed' : (r.error || r.outcome)}`;
+      resultsBox.appendChild(row);
+    });
+    document.getElementById('pedagogy').textContent =
+      `Tutor pedagogy score this session: ${(res.pedagogy_score * 100).toFixed(0)}%`;
+    setStatus(res.solved ? 'solved' : 'attempted');
+    refreshMastery();
+  } catch (e) {
+    alert('Submission failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+async function refreshMastery() {
+  const box = document.getElementById('mastery-list');
+  try {
+    const m = await api('/v1/me/mastery');
+    const skills = Object.entries(m.skills || {});
+    if (!skills.length) { box.className = 'empty'; box.textContent = 'No data yet'; return; }
+    box.className = '';
+    box.innerHTML = `<div class="mastery-row"><div class="label"><span>overall ability</span>` +
+      `<span>${(m.ability * 100).toFixed(0)}%</span></div></div>`;
+    for (const [skill, val] of skills.sort()) {
+      const pct = Math.round(val * 100);
+      const row = document.createElement('div');
+      row.className = 'mastery-row';
+      row.innerHTML = `<div class="label"><span>${skill}</span><span>${pct}%</span></div>` +
+        `<div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>`;
+      box.appendChild(row);
+    }
+  } catch (e) {
+    box.className = 'empty';
+    box.textContent = 'Could not load mastery';
+  }
+}
+document.getElementById('refresh-mastery').addEventListener('click', refreshMastery);
+
+loadProblems();
+refreshMastery();
+</script>
+</body>
+</html>
