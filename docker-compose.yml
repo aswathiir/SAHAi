@@ -80,6 +80,7 @@ services:
       SAHAI_DEVICE: ${SAHAI_DEVICE:-cpu}
     volumes:
       - ./artifacts:/srv/artifacts:ro
+      - hf-cache:/home/sahai/.cache/huggingface
 
   asr:
     <<: *service-base
@@ -114,3 +115,6 @@ networks:
 
 volumes:
   pgdata:
+  # Base model weights for SAHAI_TUTOR_BACKEND=hf (~3GB). Without this, every
+  # container recreate re-downloads from Hugging Face from scratch.
+  hf-cache:
