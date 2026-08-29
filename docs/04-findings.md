@@ -171,7 +171,111 @@ on both networks, reports the executor's health on the gateway's behalf.
 
 ---
 
-## 8. Corrections to our own measurements
+## 8. The pedagogy reward penalised dialogue length, not bad teaching
+
+**Symptom.** Across three runs, held-out `ped_acceptance` fell monotonically
+(80% → 71% → 68%) while solve rate rose. It read like a real trade-off: the
+tutor buying solve rate at the cost of teaching quality.
+
+**Cause.** Four of the five rule checks scanned *every* tutor turn and failed
+the whole dialogue if any one turn violated them. The probability of passing a
+conjunctive check therefore decays with turn count, independent of quality.
+Measured over the 304 rollouts of the v11 run:
+
+| tutor turns | n | mean `r_ped` | mean reward |
+|---|---|---|---|
+| 1 | 102 | 0.720 | −0.437 |
+| 2 | 46 | 0.639 | −0.631 |
+| 3 | 38 | 0.537 | −0.796 |
+| 4 | 118 | 0.453 | **−1.011** |
+
+Perfectly monotonic. GRPO reads that as *"shorter dialogues teach better"* and
+optimises for ending the conversation — a property of the scoring function, not
+of teaching. 33.6% of dialogues ended after a single tutor turn, and those
+scored the best rewards in the run.
+
+**Fix.** Score those four checks as the **fraction of tutor turns that pass**
+rather than all-or-nothing. `_tutor_asks_questions` was left alone: it is a
+ratio with a threshold and was never length-biased.
+
+**Measured.** Replaying all 304 real v11 dialogues through both versions, the
+spread in mean `r_ped` across dialogue lengths fell from **0.267 → 0.044** — a
+6× reduction. The residue is real signal, not artifact: longer dialogues in that
+run genuinely did contain more code. Two regression tests now pin
+length-neutrality.
+
+**Caveat.** `ped` values after this change are **not comparable** to values from
+earlier runs.
+
+---
+
+## 9. Twenty epochs of training changed the tutor's behaviour by nothing
+
+**Symptom.** Reward, solve rate and leakage all moved between epochs, so the run
+looked alive.
+
+**Cause.** They were moving for other reasons. Measured directly on tutor turns
+in the v11 run:
+
+| | epochs 0–4 | epochs 15–19 |
+|---|---|---|
+| turns containing code | 30.5% | 30.2% |
+| turns asking a question | 11.7% | 12.6% |
+| avg tutor turns / dialogue | 2.66 | 2.77 |
+
+Nothing moved. KL to the reference policy finished at **0.005** — the policy was
+still essentially the base model. A 20-epoch run performs only **160 optimizer
+steps** at `lr=2e-5` on 0.14% of parameters (LoRA rank 8), and the loss divides
+by token count (mean, not sum, log-prob), shrinking the effective step further.
+
+Gradients *were* flowing — KL grew monotonically, so the graph is intact. The
+steps were simply too small to move a 1.5B model.
+
+**Fix.** `learning_rate 2e-5 → 1e-4`. 2e-5 is a full-finetune-scale rate; LoRA
+adapters are normally trained at 1e-4–3e-4. `max_grad_norm=1.0` clips every step
+and the KL penalty starts to bite once KL is non-trivial — at 0.005 it
+contributed ~0.00025 to the loss, i.e. nothing.
+
+**Measured.** Pending the next run. Watch KL: if it exceeds ~0.1 or reward
+collapses, the rate is too hot.
+
+**Why this matters most.** Much of what earlier runs read as "training progress"
+was never the policy improving.
+
+---
+
+## 10. Epoch metrics measured problem difficulty, not tutor skill
+
+**Symptom.** Solve rate swung between 0.00 and 0.52 with no trend; every curve
+looked like noise.
+
+**Cause.** `batch_size=2` — each epoch drew **2 problems** from a 198-problem
+bank via unstratified `random.sample`, so *which* problems were drawn dominated
+the epoch mean. Per-problem breakdown of the run's best epoch (13, solve=0.516):
+
+- modulo function → **0.00**
+- rhombus perimeter (a one-line `4 × side`) → **0.88**
+
+One trivially easy draw made it the best epoch of the run. The same modulo
+problem appeared in epochs 0 and 13 and scored 0.00 both times — problem
+identity, not policy state.
+
+**Measured.** If the true solve probability were constant and all variation were
+sampling noise (64 Bernoulli draws/epoch), expected epoch-to-epoch σ would be
+**0.042**. Observed σ was **0.156** — **3.7×** the noise floor.
+
+Also found: epochs 5 and 6 drew only **1** problem, not 2, because `zpd_sample`
+falls back to `min(n, len(candidates))` when fewer than `batch_size` problems
+sit in the 30–70% mastery band. Sample size was not even constant.
+
+**Fix.** `batch_size 2 → 4`, `epochs 20 → 10` — identical total rollouts (320),
+identical optimizer steps (160), identical ~8.4h wall clock, measured over twice
+as many problems per epoch. 20 epochs at `batch_size=4` would have run ~16.7h
+and been killed by Kaggle's 12h cap around epoch 14.
+
+---
+
+## 11. Corrections to our own measurements
 
 Recorded because the discipline matters more than the individual numbers.
 

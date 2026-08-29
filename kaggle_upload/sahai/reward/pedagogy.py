@@ -45,69 +45,81 @@ class RuleBasedJudge:
     """Heuristic pedagogy judge — no LLM needed. Usable on constrained hardware."""
 
     def evaluate(self, dialogue: Dialogue) -> float:
-        """Fraction of checks passed.
+        """Mean of five checks, each scored over the tutor's turns.
 
         All-or-nothing scoring collapses a GRPO group to a single reward value,
         which zeroes every advantage and kills the gradient. Grading keeps
         within-group variance so the update has something to learn from.
+
+        **The four "never do X" checks are scored per turn, not per dialogue.**
+        They used to fail the whole dialogue if *any* single tutor turn
+        violated them. That made the score fall purely as a function of length:
+        measured over the 304 rollouts of the v11 run, mean r_ped was 0.720 at
+        one tutor turn, 0.639 at two, 0.537 at three, 0.453 at four — a clean
+        monotonic slide, because more turns simply meant more chances to trip a
+        conjunctive check. GRPO reads that as "shorter dialogues teach better"
+        and optimises for ending the conversation, which is an artifact of this
+        function rather than anything about teaching.
+
+        Scoring each check as the *fraction of tutor turns that pass* removes
+        that: adding a turn no worse than the others now leaves the score
+        unchanged. It also gives a finer-grained signal — three clean turns and
+        one with code scores 0.75 on that check instead of 0.
         """
         # A dialogue with no tutor turns must score zero, not 0.8. Every "no X"
         # check passes vacuously when there is nothing to inspect, so a rollout
         # where the tutor stays silent would be rewarded as good teaching.
-        if not any(t.role == "tutor" for t in dialogue.turns):
+        tutor_turns = [t for t in dialogue.turns if t.role == "tutor"]
+        if not tutor_turns:
             return 0.0
 
         checks = [
-            self._no_code_blocks(dialogue),
-            self._no_solution_patterns(dialogue),
-            self._tutor_asks_questions(dialogue),
-            self._reasonable_length(dialogue),
-            self._no_dangling_promises(dialogue),
+            self._no_code_blocks(tutor_turns),
+            self._no_solution_patterns(tutor_turns),
+            self._tutor_asks_questions(tutor_turns),
+            self._reasonable_length(tutor_turns),
+            self._no_dangling_promises(tutor_turns),
         ]
         return sum(checks) / len(checks)
 
-    def _no_dangling_promises(self, dialogue: Dialogue) -> bool:
+    @staticmethod
+    def _fraction(turns: list, predicate) -> float:
+        """Share of tutor turns satisfying `predicate` — the length-neutral form."""
+        return sum(1 for t in turns if predicate(t.content)) / len(turns)
+
+    def _no_dangling_promises(self, tutor_turns: list) -> float:
         """A tutor turn ending in ':' promises content it never delivers.
 
         The student then completes the promise instead of answering, which is
         how the two roles invert. The tutor is the policy, so this cannot be
         fixed by post-processing — it has to be priced into the reward.
         """
-        for turn in dialogue.turns:
-            if turn.role == "tutor" and turn.content.rstrip().endswith(":"):
-                return False
-        return True
+        return self._fraction(tutor_turns, lambda c: not c.rstrip().endswith(":"))
 
-    def _no_code_blocks(self, dialogue: Dialogue) -> bool:
-        for turn in dialogue.turns:
-            if turn.role != "tutor":
-                continue
-            # Bare "```" catches blocks left unclosed by a length-truncated turn.
-            if CODE_BLOCK_PATTERN.search(turn.content) or "```" in turn.content:
-                return False
-        return True
+    def _no_code_blocks(self, tutor_turns: list) -> float:
+        # Bare "```" catches blocks left unclosed by a length-truncated turn.
+        return self._fraction(
+            tutor_turns,
+            lambda c: not (CODE_BLOCK_PATTERN.search(c) or "```" in c),
+        )
 
-    def _no_solution_patterns(self, dialogue: Dialogue) -> bool:
-        for turn in dialogue.turns:
-            if turn.role != "tutor":
-                continue
-            for pattern in SOLUTION_INDICATORS:
-                if re.search(pattern, turn.content):
-                    return False
-        return True
+    def _no_solution_patterns(self, tutor_turns: list) -> float:
+        return self._fraction(
+            tutor_turns,
+            lambda c: not any(re.search(p, c) for p in SOLUTION_INDICATORS),
+        )
 
-    def _tutor_asks_questions(self, dialogue: Dialogue) -> bool:
-        tutor_turns = [t for t in dialogue.turns if t.role == "tutor"]
-        if not tutor_turns:
-            return False
+    def _tutor_asks_questions(self, tutor_turns: list) -> float:
+        """Left as a ratio-with-threshold: it was never length-biased.
+
+        Unlike the "never do X" checks, this one already normalises by turn
+        count, so adding turns does not systematically hurt it.
+        """
         questions = sum(1 for t in tutor_turns if "?" in t.content)
-        return questions >= len(tutor_turns) * 0.3
+        return float(questions >= len(tutor_turns) * 0.3)
 
-    def _reasonable_length(self, dialogue: Dialogue) -> bool:
-        for turn in dialogue.turns:
-            if turn.role == "tutor" and len(turn.content.split()) > 200:
-                return False
-        return True
+    def _reasonable_length(self, tutor_turns: list) -> float:
+        return self._fraction(tutor_turns, lambda c: len(c.split()) <= 200)
 
 
 class PedagogyReward:

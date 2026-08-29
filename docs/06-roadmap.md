@@ -3,14 +3,20 @@
 Four phases. Phase 1 is done; the rest are gated on each other in order.
 
 **Headline:** the *infrastructure* is essentially finished. The *science* has
-started but isn't there yet. A naive checkbox count says 62% complete; weighted
-by effort and risk it is closer to **35–40%** — the scaled run (20 epochs, 320
-dialogues, kernel v6) landed and shows a real, non-zero learning signal every
-epoch, but it doesn't yet generalize: held-out solve rate (6.3%) is far below
-what training epochs peak at (45%), and 37% of all turns are cut off
-mid-generation, which is corrupting a third of the reward signal. The gate is
-no longer "does a scaled run exist" — it's "does the tutor learn something
-that survives contact with an unseen problem."
+started and just produced its first real, controlled evidence of progress. A
+naive checkbox count says 62% complete; weighted by effort and risk it is
+closer to **38–42%**. Two scaled runs now exist on the same fixed 20-problem
+held-out set: kernel v6 (truncation uncontrolled) scored 6.3% held-out solve;
+after raising `max_new_tokens` to fix the truncation bug, the next run scored
+**11.25%** — a real, apples-to-apples improvement, not noise. It came with a
+cost, though: held-out teaching acceptance dropped (80%→71%) and leakage rose
+slightly (9.9%→11.25%), so the tutor traded some pedagogical faithfulness for
+outcome performance. The gate is no longer "does truncation explain the gap"
+— that's answered, partially — it's "does the tutor learn something that
+survives contact with an unseen problem *without* leaking more to get there,"
+and the next lever (per the run's own transcripts) is role inversion: the
+simulated 0.5B student still writes cleaner, more complete solutions than the
+1.5B tutor gives hints.
 
 ```
 Phase 1  Foundation & infrastructure    ████████████████████  done
@@ -59,15 +65,16 @@ Nothing downstream is measurable until this produces a trained tutor.
 | Empty-dialogue guard | silence scored 0.8, now 0.0 |
 | Execution-verified leakage | a full solution leak scored 0.000, now 1.000 |
 | Sentinel-based result parsing | candidate `print()` statements were silently breaking `r_sol` scoring in every prior run; fixed |
-| Scaled run executed | `G=8`, 20 epochs, 320 dialogues, kernel v6 — reward spread non-zero every epoch, so a real gradient existed throughout |
+| Scaled run executed (v6) | `G=8`, 20 epochs, 320 dialogues — reward spread non-zero every epoch, so a real gradient existed throughout |
+| **Truncation fix, re-run, and validated** | Raised `tutor_max_new_tokens` (192→256) and `student_max_new_tokens` (160→224), added defensive `bitsandbytes`/`datasets` install checks (Kaggle's image had silently stopped preinstalling `bitsandbytes`, which failed the first re-run attempt). Re-ran the identical 20-epoch config. Held-out solve rate on the same 20-problem set: **6.3% → 11.25%**, nearly double. This is the first real before/after comparison in the project, not a single-run reading. |
 
 ### Not done
 
 | Item | Why it matters |
 |---|---|
-| **Truncation** | 37% of all turns (765/2,059) in the scaled run are cut off mid-generation — worse than earlier estimates, and the single biggest source of noise in the reward signal. Fix: raise `max_new_tokens`, then re-run. |
-| **Generalization** | Best training-epoch solve rate hit 45%, but held-out eval solve rate is 6.3% on 20 unseen problems. The scaled run proves the loop can move reward around; it does not yet prove the tutor learned a transferable skill. |
-| **Role inversion** | Student writes code in 233 turns vs. the tutor's 218 in the scaled run — roughly matched, sometimes exceeding it. Countermeasures shipped but did not resolve this at scale. |
+| **Generalization is still low in absolute terms** | 11.25% held-out solve is real progress but still far from a usable tutor. Best training-epoch solve rate this run was 34.4% (down from v6's 45%, but that's an extreme-value statistic over 32 solve-samples/epoch — noisy by construction, not a reliable regression signal on its own). |
+| **Pedagogy/leakage regressed on held-out** | Teaching acceptance 80%→71%, leakage 9.9%→11.25%. The tutor got somewhat more outcome-focused and somewhat less faithful to "guide, don't tell." Worth watching on the next run, not yet a confirmed trend (n=1 comparison). |
+| **Role inversion** | Still directly visible in this run's own smoke-test transcript: the simulated 0.5B student volunteers a complete, well-explained Python solution unprompted, while the 1.5B tutor's hints are sometimes broken/garbled (mixed-language). Countermeasures shipped earlier did not resolve this. This is now the best-evidenced next lever. |
 | **Retention benchmark** | LoRA + KL *should* prevent forgetting. Nothing measures whether it did. This turns an assertion into a number. |
 | ACE causal probes | The review's central defence against rewarding non-causal solves. `ace_leakage()` exists but receives no data. |
 | Importance ratio + clipping | `clip_epsilon` is defined but unused — this is REINFORCE with a KL penalty, not clipped GRPO. Do not call it GRPO in a writeup until fixed. |
@@ -75,11 +82,11 @@ Nothing downstream is measurable until this produces a trained tutor.
 | `K ≥ 8` solve samples | Currently 4. Deliberate: `solve ≈ 0`, so more samples measure noise more precisely. Raise once the student can actually solve. |
 
 **Likely blocker:** role inversion may not be fixable by prompt or
-post-processing. The 0.5B student breaks persona; moving it to 1.5B on the
-second T4 is the obvious next lever and is mostly free. Truncation, however,
-is probably the higher-leverage fix — a third of the signal is currently noise
-from cut-off generations, and that alone could be masking whether the
-role-inversion countermeasures are working at all.
+post-processing. Truncation *was* fixed and *did* move held-out solve rate
+(6.3%→11.25%), confirming it was masking real signal — but role inversion is
+still visible in the fixed run's own transcripts, unchanged. The 0.5B student
+breaks persona; moving it to 1.5B on the second T4 is the obvious next lever
+and is mostly free.
 
 ---
 
@@ -158,12 +165,11 @@ worth putting in front of a person.
 
 ## Next three actions
 
-1. **Fix truncation, then re-run.** Blocked on the weekly Kaggle GPU quota
-   (30 hrs) resetting. Raise `max_new_tokens` — 37% of turns in the last run
-   were cut off mid-generation, which is the most likely single explanation
-   for the gap between training-epoch solve rate (45% peak) and held-out
-   solve rate (6.3%).
-2. **Student → 1.5B on the second GPU** if role inversion persists once
-   truncation is no longer confounding the measurement.
+1. **Student → 1.5B on the second GPU.** Truncation is fixed and validated
+   (held-out solve 6.3%→11.25%); role inversion is now the best-evidenced
+   remaining lever, confirmed again in this run's own transcripts.
+2. **Investigate the pedagogy/leakage regression** (80%→71% ped, 9.9%→11.25%
+   leak on held-out) before assuming it's noise — re-run once to see if it
+   replicates, since it's currently an n=1 comparison.
 3. **Retention benchmark** — MBPP pass@1 with adapters on vs off, before vs
    after. Cheap, and it is the answer to "did it forget?"

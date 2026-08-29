@@ -18,7 +18,7 @@ r_SAHAI(a_T | s_T, α) = (r_sol − α) + (r_ped − 1)·λ − γ·L
 |---|---|---|
 | `r_sol` | fraction of `K` post-dialogue student attempts that pass **every** unit test | [0,1] |
 | `α` | the student's traced ability, from BKT | [0,1] |
-| `r_ped` | fraction of 5 pedagogy checks passed | {0, .2, .4, .6, .8, 1} |
+| `r_ped` | mean of 5 pedagogy checks, four scored per tutor turn | [0,1] |
 | `L` | leakage | [0,1] |
 
 **Why `r_sol − α`.** A tutor should get no credit for a student who could

@@ -241,8 +241,15 @@ the 0.5B student is not holding its persona and needs to move to 1.5B.
 it moves in units of 1/32 = 0.031. A reading of `0.0312` is **one** passing
 attempt out of 32, i.e. noise, not a solve rate.
 
-`ped` moves in units of 1/8 across rollouts and, per rollout, in units of 0.25
-(four rule checks). `0.625` = 5/8 rollouts.
+`ped` is no longer coarsely quantized. Four of its five checks are scored as
+the *fraction of tutor turns* that pass, so a per-rollout score can land on any
+value in [0,1] (three clean turns and one with code scores 0.75 on that check,
+not 0). Before that change the four checks failed the whole dialogue if any one
+turn tripped them, which made `ped` slide down purely with dialogue length —
+measured 0.720 / 0.639 / 0.537 / 0.453 for 1 / 2 / 3 / 4 tutor turns — and
+taught the policy to end conversations early. Expect higher and less
+length-correlated `ped` values from runs after that fix; they are not
+comparable to earlier runs.
 
 `leak` has a high floor. The estimator counts any word overlap between tutor
 text and the reference solution after removing Python keywords, and it does

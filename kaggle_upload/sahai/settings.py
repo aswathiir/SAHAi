@@ -17,6 +17,16 @@ class ModelSettings(BaseModel):
         default_factory=lambda: ["q_proj", "k_proj", "v_proj", "o_proj"]
     )
     student_quantize_4bit: bool = False
+    # Was hardcoded on TutorPolicy/StudentSimulator (192/160) and never raised.
+    # In the v6 run, tokenizing the actual rollouts showed p99 length of a
+    # *naturally-ending* turn is ~187 (tutor) / ~153 (student) tokens, but 30%
+    # of tutor turns and 44% of student turns hit the old cap and got cut —
+    # and those cut turns are ~3x more likely to contain code than complete
+    # ones, meaning truncation was disproportionately corrupting exactly the
+    # leakage-risk turns. Raised past the p99 of natural length, not past the
+    # point where the existing leakage/pedagogy penalty stops mattering.
+    tutor_max_new_tokens: int = 256
+    student_max_new_tokens: int = 224
 
 
 class RewardSettings(BaseModel):
@@ -79,7 +89,13 @@ class Settings(BaseModel):
         return cls(
             model=ModelSettings(
                 tutor="Qwen/Qwen2.5-1.5B-Instruct",
-                student="Qwen/Qwen2.5-0.5B-Instruct",
+                # Was 0.5B. That size couldn't reliably hold the "confused
+                # student" persona under RL pressure — it volunteered
+                # complete, well-explained solutions unprompted while the
+                # tutor's own hints were sometimes broken/garbled (visible in
+                # the v6-truncation-fix run's transcripts). Matching the
+                # tutor's size is the next lever per docs/06-roadmap.md.
+                student="Qwen/Qwen2.5-1.5B-Instruct",
                 judge="",
                 dtype="bfloat16",
                 lora_rank=8,
@@ -100,11 +116,40 @@ class Settings(BaseModel):
                 # Raised before batch_size or K for exactly that reason.
                 group_size=8,
                 max_turns=4,
-                learning_rate=2e-5,
-                batch_size=2,
-                # 20 x 16 rollouts = 320 dialogues, 20 optimizer steps.
-                # ~29 min/epoch measured => ~9.5h, inside Kaggle's 12h limit.
-                epochs=20,
+                # Raised 2e-5 -> 1e-4. The v11 run finished with KL to the
+                # reference policy at 0.005 and the tutor's measured behaviour
+                # essentially unchanged from epoch 0 to 19: code in 30.5% ->
+                # 30.2% of turns, a question in 11.7% -> 12.6%. Gradients were
+                # flowing (KL grew monotonically, so the graph is fine) — the
+                # steps were simply too small to move a 1.5B model in the 160
+                # optimizer steps a run gets. 2e-5 is a full-finetune-scale LR;
+                # LoRA adapters are normally trained at 1e-4..3e-4, and the
+                # loss further divides by token count (mean, not sum, log-prob)
+                # which shrinks the effective step again.
+                # Guardrails already in place if this proves too hot:
+                # max_grad_norm=1.0 clips every step, and the KL penalty
+                # (kl_coeff=0.05) starts actually biting once KL is non-trivial
+                # — at 0.005 it contributed ~0.00025 to the loss, i.e. nothing.
+                learning_rate=1e-4,
+                # Raised 2 -> 4. With only 2 problems/epoch the reported metrics
+                # were dominated by *which* problems got drawn, not by policy
+                # quality: measured epoch-to-epoch solve-rate std was 0.156,
+                # 3.7x the ~0.042 floor expected from sampling noise alone.
+                # Per-problem breakdown of the v11 run showed epoch 13's
+                # "best epoch" (solve=0.52) was one trivial problem (rhombus
+                # perimeter, solve=0.88) paired with a 0.00 — not a better
+                # tutor. 4 problems halves that variance.
+                batch_size=4,
+                # Halved 20 -> 10 to pay for batch_size going 2 -> 4.
+                # Measured 25.1 min/epoch at batch_size=2 (v11 log); doubling
+                # problems/epoch doubles that, so 20 epochs would be ~16.7h and
+                # Kaggle would kill the session at 12h (~epoch 14, no eval).
+                # 10 epochs x 32 rollouts = 320 dialogues in ~8.4h — identical
+                # total rollouts, identical wall-clock, and identical optimizer
+                # step count (32/accum2 = 16 steps/epoch x 10 = 160, same as
+                # 16/2 = 8 x 20) as the previous run. Strictly the same compute,
+                # just measured over 4 problems/epoch instead of 2.
+                epochs=10,
                 gradient_accumulation_steps=2,
                 # Every 5 epochs, so a session that dies at hour 8 still leaves
                 # usable checkpoints instead of nothing.

@@ -2,7 +2,8 @@
 # # SAHAI: RL-Trained AI Tutor via GRPO
 # Train a pedagogical tutor using Group Relative Policy Optimization on Kaggle T4 GPU.
 # - Tutor: Qwen2.5-1.5B-Instruct (LoRA)
-# - Student: Qwen2.5-0.5B-Instruct (4-bit)
+# - Student: Qwen2.5-1.5B-Instruct (4-bit) — raised from 0.5B, which couldn't
+#   reliably hold the "confused student" persona under RL pressure
 # - Judge: Rule-based (no extra GPU cost)
 # - Dataset: MBPP (Mostly Basic Python Problems)
 # - Reward: r_SAHAI = (r_sol - ability_baseline) + (r_ped - 1)*lambda - gamma*L
@@ -51,6 +52,49 @@ def drop_incompatible_torchao(minimum=(0, 16, 0)):
 
 
 drop_incompatible_torchao()
+
+
+def ensure_bitsandbytes(minimum="0.46.1"):
+    """`Settings.kaggle()` sets `student_quantize_4bit=True`, which needs this.
+
+    Historically preinstalled on Kaggle's image; stopped being true at some
+    point and broke a run at the very first model load with a plain
+    ImportError. Checking and installing defensively means a future image
+    change fails the same way silently instead of wasting a GPU session.
+    """
+    if importlib.util.find_spec("bitsandbytes") is not None:
+        print("bitsandbytes already installed — nothing to do.")
+        return
+    print(f"bitsandbytes missing — installing >= {minimum}...")
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-q", f"bitsandbytes>={minimum}"],
+        check=True,
+    )
+    importlib.invalidate_caches()
+    ok = importlib.util.find_spec("bitsandbytes") is not None
+    print("bitsandbytes installed." if ok else "WARNING: bitsandbytes still missing.")
+
+
+ensure_bitsandbytes()
+
+
+def ensure_datasets(minimum="2.14.0"):
+    """`load_mbpp` needs this; docs already flagged it as unreliably present
+    alongside bitsandbytes, so check it the same defensive way."""
+    if importlib.util.find_spec("datasets") is not None:
+        print("datasets already installed — nothing to do.")
+        return
+    print(f"datasets missing — installing >= {minimum}...")
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-q", f"datasets>={minimum}"],
+        check=True,
+    )
+    importlib.invalidate_caches()
+    ok = importlib.util.find_spec("datasets") is not None
+    print("datasets installed." if ok else "WARNING: datasets still missing.")
+
+
+ensure_datasets()
 
 # %% [markdown]
 # ## 2. Upload SAHAI Package
@@ -219,7 +263,7 @@ from sahai.agents.tutor import TutorPolicy
 from sahai.agents.student import StudentSimulator, StudentPersona
 from sahai.reward.pedagogy import PedagogyReward
 
-tutor = TutorPolicy(tutor_model, tutor_tok)
+tutor = TutorPolicy(tutor_model, tutor_tok, max_new_tokens=settings.model.tutor_max_new_tokens)
 
 persona = StudentPersona(
     ability_level=2,
@@ -227,7 +271,9 @@ persona = StudentPersona(
     language="hinglish",
     persistence=0.7,
 )
-student = StudentSimulator(student_model, student_tok, persona)
+student = StudentSimulator(
+    student_model, student_tok, persona, max_new_tokens=settings.model.student_max_new_tokens
+)
 
 pedagogy = PedagogyReward(use_rules=True)
 print("Agents and rewards initialized.")
