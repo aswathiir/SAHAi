@@ -15,6 +15,14 @@ x-service-base: &service-base
     SAHAI_EXECUTOR_URL: http://executor:8000
     SAHAI_SESSION_URL: http://session:8000
     SAHAI_ASR_URL: http://asr:8000
+    # Anonymous Hugging Face requests get rate-limited hard. Harmless for
+    # services that never touch HF (empty string, ignored).
+    HF_TOKEN: ${HF_TOKEN:-}
+    # HF's newer Xet transfer backend has repeatedly failed mid-download on
+    # this network ("I/O error: error decoding response body"), crash-looping
+    # the container each time. Standard HTTP downloads are slower but resume
+    # properly instead of restarting a file from zero on every retry.
+    HF_HUB_DISABLE_XET: "1"
 
 services:
   postgres:
@@ -87,7 +95,15 @@ services:
     build: {context: ., dockerfile: services/asr/Dockerfile}
     environment:
       <<: *base-env
-      SAHAI_ASR_BACKEND: stub
+      # Switch both to "hf" to serve real IndicConformer (ASR) + Indic
+      # Parler-TTS (TTS). Independent toggles: ASR-only or TTS-only work too.
+      SAHAI_ASR_BACKEND: ${SAHAI_ASR_BACKEND:-stub}
+      SAHAI_TTS_BACKEND: ${SAHAI_TTS_BACKEND:-stub}
+      SAHAI_ASR_MODEL: ${SAHAI_ASR_MODEL:-ai4bharat/indic-conformer-600m-multilingual}
+      SAHAI_TTS_MODEL: ${SAHAI_TTS_MODEL:-ai4bharat/indic-parler-tts}
+      SAHAI_DEVICE: ${SAHAI_DEVICE:-cpu}
+    volumes:
+      - hf-cache-asr:/home/sahai/.cache/huggingface
 
   # Runs untrusted code. Everything here is a containment control.
   executor:
@@ -118,3 +134,6 @@ volumes:
   # Base model weights for SAHAI_TUTOR_BACKEND=hf (~3GB). Without this, every
   # container recreate re-downloads from Hugging Face from scratch.
   hf-cache:
+  # Same reasoning, separate volume: IndicConformer + Indic Parler-TTS for
+  # the asr service (~5-6GB combined).
+  hf-cache-asr:

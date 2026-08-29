@@ -17,7 +17,7 @@ test-core:
 	@cd libs/sahai-core && PYTHONPATH=. $(PY) -m pytest tests -q
 
 test-services:
-	@for s in executor tracer session gateway; do \
+	@for s in executor tracer session gateway asr; do \
 		echo "── services/$$s ───────────────────────────────────────"; \
 		(cd services/$$s && PYTHONPATH=".:$(CORE)" $(PY) -m pytest tests -q) || exit 1; \
 	done

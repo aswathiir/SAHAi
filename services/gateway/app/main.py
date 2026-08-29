@@ -10,6 +10,7 @@ without pretending to be a real identity provider.
 
 from __future__ import annotations
 
+import base64
 import contextvars
 import json
 import logging
@@ -21,7 +22,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -242,6 +243,84 @@ async def submit(
     if r.status_code >= 400:
         raise HTTPException(r.status_code, r.json().get("detail", "submit error"))
     return r.json()
+
+
+@app.websocket("/v1/ws/voice/{session_id}")
+async def voice_turn(
+    websocket: WebSocket, session_id: str, learner_id: str = "me", lang: str = "hi"
+) -> None:
+    """Voice front-end for an existing tutoring session.
+
+    Record-then-send, not continuous streaming: the client sends one binary
+    audio clip per utterance and gets back one JSON reply. It's still a real
+    websocket connection (kept open across the whole conversation, not one
+    HTTP round trip per turn) — just not frame-by-frame partial transcription,
+    which IndicConformer isn't built for anyway (it's a batch model).
+
+    Deliberately reuses the exact same /sessions/{id}/turns call the text
+    chat path uses, so voice goes through identical tutor/reward logic — this
+    is a new front door onto the existing pipeline, not a parallel one.
+    """
+    await websocket.accept()
+    try:
+        while True:
+            audio_bytes = await websocket.receive_bytes()
+            try:
+                _rate_limit(learner_id)
+
+                asr_resp = await app.state.http.post(
+                    f"{ASR_URL}/transcribe",
+                    files={"audio": ("clip.webm", audio_bytes, "audio/webm")},
+                    headers=_trace(),
+                )
+                if asr_resp.status_code >= 400:
+                    await websocket.send_json(
+                        {"error": "transcription_failed", "detail": asr_resp.text}
+                    )
+                    continue
+                transcript = asr_resp.json()["text"]
+                if not transcript.strip():
+                    await websocket.send_json({"error": "empty_transcript"})
+                    continue
+
+                turn_resp = await app.state.http.post(
+                    f"{SESSION_URL}/sessions/{session_id}/turns",
+                    json={"content": transcript},
+                    headers=_trace(),
+                )
+                if turn_resp.status_code >= 400:
+                    await websocket.send_json(
+                        {"error": "turn_failed", "detail": turn_resp.text}
+                    )
+                    continue
+                turn_body = turn_resp.json()
+                tutor_reply = turn_body["tutor_reply"]
+
+                tts_resp = await app.state.http.post(
+                    f"{ASR_URL}/synthesize",
+                    json={"text": tutor_reply, "language": lang},
+                    headers=_trace(),
+                )
+                audio_b64 = None
+                if tts_resp.status_code < 400:
+                    audio_b64 = base64.b64encode(tts_resp.content).decode("ascii")
+                # TTS failing (e.g. still on the stub backend) shouldn't lose
+                # the turn — text-only is a legitimate degraded response.
+
+                await websocket.send_json(
+                    {
+                        "transcript": transcript,
+                        "tutor_reply": tutor_reply,
+                        "status": turn_body["status"],
+                        "audio_b64": audio_b64,
+                    }
+                )
+            except httpx.HTTPError as exc:
+                await websocket.send_json({"error": "upstream_unreachable", "detail": str(exc)})
+            except HTTPException as exc:
+                await websocket.send_json({"error": "rate_limited", "detail": exc.detail})
+    except WebSocketDisconnect:
+        pass
 
 
 @app.get("/v1/sessions/{session_id}", responses=AUTH_RESPONSES)

@@ -79,6 +79,16 @@
   .bar-fill { background: var(--pink); height: 100%; }
   .empty { color: #999; font-size: 13px; padding: 20px 0; text-align: center; }
   #pedagogy { font-size: 12px; color: var(--grey); margin-top: 6px; }
+  #voice-lang {
+    float: right; font-size: 11px; padding: 3px 6px; border-radius: 6px;
+    border: 1px solid var(--border); color: var(--navy); font-weight: normal;
+  }
+  #mic-btn {
+    background: #eef0fb; color: var(--navy); font-size: 16px; padding: 8px 12px; line-height: 1;
+  }
+  #mic-btn.recording { background: var(--pink); color: #fff; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .6; } }
+  #voice-status { font-size: 12px; color: var(--grey); margin-top: 6px; min-height: 16px; }
 </style>
 </head>
 <body>
@@ -105,14 +115,22 @@
     </div>
 
     <div class="card" id="chat-card" style="display:none">
-      <h2>Conversation</h2>
+      <h2>Conversation
+        <select id="voice-lang" title="Speech language">
+          <option value="hi">Hindi</option>
+          <option value="ta">Tamil</option>
+          <option value="en">English</option>
+        </select>
+      </h2>
       <div id="chat">
         <div id="turns"></div>
         <div class="chat-input">
           <textarea id="chat-text" placeholder="Type your response to the tutor…"
             data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"></textarea>
+          <button id="mic-btn" title="Speak instead of typing">🎤</button>
           <button id="send-btn">Send</button>
         </div>
+        <div id="voice-status"></div>
       </div>
     </div>
 
@@ -138,7 +156,10 @@
 </div>
 
 <script>
-const state = { problems: [], selected: null, sessionId: null, status: null, sending: false };
+const state = {
+  problems: [], selected: null, sessionId: null, status: null, sending: false,
+  voiceSocket: null, mediaRecorder: null, recording: false,
+};
 
 function learnerId() {
   let v = document.getElementById('learner-id').value.trim();
@@ -196,6 +217,7 @@ async function selectProblem(id) {
   state.selected = problem;
   state.sessionId = null;
   state.status = null;
+  closeVoiceSocket();
 
   document.getElementById('placeholder').style.display = 'none';
   document.getElementById('problem-detail-card').style.display = '';
@@ -247,6 +269,7 @@ document.getElementById('start-btn').addEventListener('click', async () => {
     renderTurns(session.turns);
     document.getElementById('chat-card').style.display = '';
     document.getElementById('submit-card').style.display = '';
+    openVoiceSocket();
   } catch (e) {
     alert('Could not start a session: ' + e.message);
     btn.disabled = false;
@@ -365,6 +388,107 @@ async function refreshMastery() {
   }
 }
 document.getElementById('refresh-mastery').addEventListener('click', refreshMastery);
+
+// ---------------------------------------------------------------- voice ---
+// Record-then-send over a websocket kept open for the whole session, not a
+// per-utterance HTTP call: one socket, many turns. The server-side pipeline
+// (ASR -> the same /sessions/{id}/turns call the text box uses -> TTS) is
+// what makes this "not disrupting the current implementation" — voice is a
+// second front door onto the exact same tutoring logic, not a parallel path.
+
+function voiceStatus(text) {
+  document.getElementById('voice-status').textContent = text;
+}
+
+function openVoiceSocket() {
+  closeVoiceSocket();
+  const lang = document.getElementById('voice-lang').value;
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const url = `${proto}://${location.host}/v1/ws/voice/${state.sessionId}` +
+    `?learner_id=${encodeURIComponent(learnerId())}&lang=${lang}`;
+  const ws = new WebSocket(url);
+  ws.onmessage = onVoiceMessage;
+  ws.onerror = () => voiceStatus('Voice connection error.');
+  ws.onclose = () => { if (state.voiceSocket === ws) state.voiceSocket = null; };
+  state.voiceSocket = ws;
+}
+
+function closeVoiceSocket() {
+  if (state.voiceSocket) {
+    state.voiceSocket.onclose = null;
+    state.voiceSocket.close();
+    state.voiceSocket = null;
+  }
+}
+
+function onVoiceMessage(event) {
+  const msg = JSON.parse(event.data);
+  if (msg.error) {
+    voiceStatus(`Voice error: ${msg.error}${msg.detail ? ' — ' + msg.detail : ''}`);
+    return;
+  }
+  voiceStatus('');
+  // Same rendering path as typed turns: append what the mic heard, then the
+  // reply, rather than re-fetching the whole session.
+  const turnsBox = document.getElementById('turns');
+  const studentDiv = document.createElement('div');
+  studentDiv.className = 'turn student';
+  studentDiv.textContent = msg.transcript;
+  turnsBox.appendChild(studentDiv);
+  const tutorDiv = document.createElement('div');
+  tutorDiv.className = 'turn tutor';
+  tutorDiv.textContent = msg.tutor_reply;
+  turnsBox.appendChild(tutorDiv);
+  turnsBox.scrollTop = turnsBox.scrollHeight;
+  setStatus(msg.status);
+
+  if (msg.audio_b64) {
+    const audio = new Audio(`data:audio/wav;base64,${msg.audio_b64}`);
+    audio.play().catch(() => {});  // autoplay can be blocked; not fatal
+  }
+}
+
+async function toggleRecording() {
+  const btn = document.getElementById('mic-btn');
+  if (state.recording) {
+    state.mediaRecorder.stop();  // onstop (below) does the rest
+    return;
+  }
+  if (!state.sessionId) {
+    voiceStatus('Start a tutoring session first.');
+    return;
+  }
+  if (!state.voiceSocket || state.voiceSocket.readyState !== WebSocket.OPEN) {
+    voiceStatus('Voice connection not ready — try again in a moment.');
+    openVoiceSocket();
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+    const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    const chunks = [];
+    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      state.recording = false;
+      btn.classList.remove('recording');
+      const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+      if (blob.size > 0 && state.voiceSocket && state.voiceSocket.readyState === WebSocket.OPEN) {
+        voiceStatus('Sending…');
+        state.voiceSocket.send(blob);
+      }
+    };
+    state.mediaRecorder = recorder;
+    recorder.start();
+    state.recording = true;
+    btn.classList.add('recording');
+    voiceStatus('Recording — click the mic again to stop.');
+  } catch (e) {
+    voiceStatus('Microphone access denied or unavailable: ' + e.message);
+  }
+}
+document.getElementById('mic-btn').addEventListener('click', toggleRecording);
 
 loadProblems();
 refreshMastery();
