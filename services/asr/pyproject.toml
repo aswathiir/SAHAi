@@ -6,6 +6,17 @@ dependencies = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "pydantic>=2.0", "h
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+# Only needed for SAHAI_ASR_BACKEND=hf / SAHAI_TTS_BACKEND=hf. Kept optional
+# so the stub image (the default, and what CI runs) stays fast to build.
+hf = [
+    "torch>=2.4",
+    "torchaudio>=2.4",
+    "transformers>=4.45",
+    "onnxruntime==1.20.1",
+    "onnx==1.20.1",
+    "soundfile>=0.12",
+    "parler-tts @ git+https://github.com/huggingface/parler-tts.git",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
