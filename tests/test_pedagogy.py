@@ -146,3 +146,51 @@ def test_one_good_tutor_turn_still_scores_well():
     d.add("student", "I am stuck")
     d.add("tutor", "What structure gives you O(1) lookup?")
     assert judge.evaluate(d) == 1.0
+
+
+def _uniform_dialogue(n_turns, tutor_msg):
+    d = Dialogue(problem_id="p")
+    for _ in range(n_turns):
+        d.add("student", "I am stuck")
+        d.add("tutor", tutor_msg)
+    return d
+
+
+def test_score_is_length_neutral():
+    """Equally good dialogues must score the same regardless of length.
+
+    The checks used to fail the whole dialogue if any single tutor turn
+    violated them, so the score slid down purely with turn count — measured
+    across the v11 run, mean r_ped went 0.720 / 0.639 / 0.537 / 0.453 for
+    1 / 2 / 3 / 4 tutor turns. GRPO then optimises for ending the conversation
+    early, which is an artifact of the scoring rather than better teaching.
+    """
+    judge = RuleBasedJudge()
+    good = "What structure gives you O(1) lookup?"
+    scores = {n: judge.evaluate(_uniform_dialogue(n, good)) for n in (1, 2, 4, 8)}
+    assert len(set(scores.values())) == 1, f"length-dependent scores: {scores}"
+
+    bad = "```python\ndef f(): return 1\n```"
+    bad_scores = {n: judge.evaluate(_uniform_dialogue(n, bad)) for n in (1, 2, 4, 8)}
+    assert len(set(bad_scores.values())) == 1, f"length-dependent scores: {bad_scores}"
+
+
+def test_violations_scored_per_turn_not_all_or_nothing():
+    """One bad turn among several good ones must cost partial credit, not all.
+
+    Under all-or-nothing scoring a single slip erased the whole check, which
+    both overstated the penalty and flattened the gradient between rollouts
+    that differ by one turn.
+    """
+    judge = RuleBasedJudge()
+    d = Dialogue(problem_id="p")
+    for _ in range(3):
+        d.add("student", "I am stuck")
+        d.add("tutor", "What structure gives you O(1) lookup?")
+    d.add("student", "still stuck")
+    d.add("tutor", "```python\ndef f(): return 1\n```")
+
+    score = judge.evaluate(d)
+    all_good = judge.evaluate(_uniform_dialogue(4, "What gives O(1) lookup?"))
+    all_bad = judge.evaluate(_uniform_dialogue(4, "```python\ndef f(): return 1\n```"))
+    assert all_bad < score < all_good
