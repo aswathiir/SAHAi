@@ -194,3 +194,34 @@ def test_violations_scored_per_turn_not_all_or_nothing():
     all_good = judge.evaluate(_uniform_dialogue(4, "What gives O(1) lookup?"))
     all_bad = judge.evaluate(_uniform_dialogue(4, "```python\ndef f(): return 1\n```"))
     assert all_bad < score < all_good
+
+
+def test_every_question_is_rewarded_not_just_crossing_a_threshold():
+    """The question check must pay for partial progress.
+
+    It used to be `questions >= 30% of tutor turns` -> 1.0/0.0. In a 4-turn
+    dialogue the first question lands at 25%, still under the bar, so going
+    from zero questions to one earned nothing; only the second flipped it.
+    Measured on the v14 run's late epochs, 81% of dialogues had zero tutor
+    questions and the check's mean was 0.125 — a near-constant, and a constant
+    contributes nothing to a GRPO advantage (a within-group z-score).
+
+    This is the reward's only positive signal; the other four checks are all
+    "never do X", which a silent tutor satisfies perfectly.
+    """
+    judge = RuleBasedJudge()
+
+    def dialogue_with(n_questions, n_turns=4):
+        d = Dialogue(problem_id="p")
+        for i in range(n_turns):
+            d.add("student", "stuck")
+            d.add(
+                "tutor",
+                "What structure would help here?" if i < n_questions else "Use a hash map.",
+            )
+        return d
+
+    scores = [judge.evaluate(dialogue_with(q)) for q in range(5)]
+    assert scores == sorted(scores), f"not monotonic: {scores}"
+    assert len(set(scores)) == 5, f"some questions earn nothing: {scores}"
+    assert scores[1] > scores[0], "the first question must already be rewarded"
