@@ -20,12 +20,36 @@ operation that belongs to the caller (`CodeVerifier` in training,
 from __future__ import annotations
 
 import re
+from collections import Counter
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from sahai_core.domain.dialogue import Dialogue
 
 FENCED_CODE = re.compile(r"```(?:\w+)?\n?(.*?)(?:```|$)", re.DOTALL)
+
+# A solution token only counts as leakage if it appears in at most this many
+# solutions across the whole problem bank.
+#
+# Rationale, measured on the 228 code-free dialogues of the v14 run. Plain
+# overlap charged the tutor for ordinary teaching vocabulary — `count`, `sum`,
+# `append`, `index` each appear in 14-19 of 198 MBPP solutions — so every extra
+# sentence raised leakage and the reward paid the tutor to say less
+# (corr(verbosity, leak) = +0.380). Restricting to the rare tail keeps the real
+# signal (`first_repeated_char`, `reverse_words`, `prime_num` each appear in
+# exactly one solution and are unambiguous give-aways) while letting the tutor
+# discuss the problem freely:
+#
+#   max_df   mean leak   corr(verbosity)   dialogues with signal
+#      1       0.0252        +0.060              9.6%
+#      2       0.0406        +0.160             13.6%   <- chosen
+#      3       0.0565        +0.207             18.0%
+#      5       0.0537        +0.224             19.3%
+#
+# 1 almost eliminates the length penalty but fires so rarely it degenerates
+# into execution-only leakage; 2 keeps prose-leak detection while more than
+# halving the pressure toward silence.
+RARE_TOKEN_MAX_DF = 2
 
 # Words that carry no evidence of leakage: Python's own vocabulary.
 PROGRAMMING_NOISE = {
@@ -40,9 +64,47 @@ UNVERIFIED_CODE_LEAKAGE = 0.5
 
 
 class LeakageEstimator:
-    def __init__(self, token_weight: float = 0.7, ace_weight: float = 0.3):
+    def __init__(
+        self,
+        token_weight: float = 0.7,
+        ace_weight: float = 0.3,
+        solution_corpus: list[str] | None = None,
+        max_doc_freq: int = RARE_TOKEN_MAX_DF,
+    ):
         self.token_weight = token_weight
         self.ace_weight = ace_weight
+        self.max_doc_freq = max_doc_freq
+        self._doc_freq: Counter[str] = Counter()
+        if solution_corpus:
+            self.fit(solution_corpus)
+
+    def fit(self, solution_corpus: list[str]) -> None:
+        """Count how many solutions each token appears in.
+
+        Must be fitted on the **same** corpus for training and evaluation, or
+        the two score leakage by different rules — the exact class of bug that
+        made held-out leakage incomparable to training leakage for every run
+        before this one.
+        """
+        self._doc_freq = Counter()
+        for solution in solution_corpus:
+            for token in self._meaningful_tokens(solution):
+                self._doc_freq[token] += 1
+
+    @property
+    def is_fitted(self) -> bool:
+        return bool(self._doc_freq)
+
+    def _rare(self, tokens: set[str]) -> set[str]:
+        """Keep only tokens distinctive enough to be evidence of a leak.
+
+        Unfitted, this is the identity — every token counts, i.e. the old
+        behaviour. That is deliberate: silently applying a filter with no
+        corpus behind it would be worse than not filtering at all.
+        """
+        if not self.is_fitted:
+            return tokens
+        return {t for t in tokens if self._doc_freq.get(t, 0) <= self.max_doc_freq}
 
     # --- signals the caller may need to gather -----------------------------
 
@@ -96,8 +158,8 @@ class LeakageEstimator:
         cannot discuss the problem without using them. Omitting this gave the
         metric a high floor that made its absolute value meaningless.
         """
-        solution_tokens = self._meaningful_tokens(solution) - self._meaningful_tokens(
-            problem_text
+        solution_tokens = self._rare(
+            self._meaningful_tokens(solution) - self._meaningful_tokens(problem_text)
         )
         if not solution_tokens:
             return 0.0

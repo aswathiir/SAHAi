@@ -108,3 +108,30 @@ class SolveReward:
             if score == 1.0:
                 passed += 1
         return passed / self.num_samples
+
+
+def tutor_code_solves(dialogue, problem: Problem, verifier: CodeVerifier, estimator) -> bool:
+    """Did the tutor write code that actually solves the problem?
+
+    Execution is the only reliable test. Token overlap scored 0.000 for a
+    tutor that wrote a complete working solution, because it chose a
+    different algorithm than the reference — so it was measuring plagiarism,
+    not leakage. Code that passes the problem's own tests IS the answer,
+    however it is written.
+
+    Lives here rather than on `LeakageEstimator` because that module is
+    deliberately execution-free — running untrusted code is a privileged
+    operation belonging to the caller. It is a shared function rather than a
+    method on the trainer because both the trainer and the evaluator need it,
+    and the evaluator silently not calling it was a real bug: held-out
+    leakage fell back to token overlap and under-detected exactly the
+    complete code leaks this check exists to catch.
+    """
+    for block in estimator.extract_tutor_code(dialogue):
+        for variant in estimator.runnable_variants(block, problem.function_name):
+            try:
+                if verifier.verify(variant, problem) == 1.0:
+                    return True
+            except Exception:  # noqa: BLE001 - a broken block is not a leak
+                continue
+    return False
