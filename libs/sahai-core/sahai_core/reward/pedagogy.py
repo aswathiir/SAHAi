@@ -111,13 +111,27 @@ class RuleBasedJudge:
         )
 
     def _tutor_asks_questions(self, tutor_turns: list) -> float:
-        """Left as a ratio-with-threshold: it was never length-biased.
+        """Share of tutor turns that ask something. Was a 30% threshold.
 
-        Unlike the "never do X" checks, this one already normalises by turn
-        count, so adding turns does not systematically hurt it.
+        The threshold was never length-biased, so it survived the per-turn
+        rewrite of the other four checks — but it turned out to carry almost no
+        gradient. Measured over the late epochs of the v14 run: 81% of dialogues
+        contained *zero* tutor questions, and the threshold's mean was 0.125, so
+        for nearly every rollout it was a constant 0. A constant contributes
+        nothing to a GRPO advantage, which is a within-group z-score.
+
+        Worse, it was a cliff. In a 4-turn dialogue the first question moves the
+        rate to 25% — still below the 30% bar — so the check pays nothing for
+        going from zero questions to one. Only the second question, at 50%,
+        flips it to 1.0. Nothing rewards partial progress toward asking.
+
+        As a fraction every added question raises the score immediately, and the
+        gap between the current mean (0.085) and 1.0 is real headroom to climb.
+        This is the reward's only positive signal — the other four checks are
+        all "never do X", which a silent tutor satisfies perfectly — so it is
+        also the only place the model is told to actually teach.
         """
-        questions = sum(1 for t in tutor_turns if "?" in t.content)
-        return float(questions >= len(tutor_turns) * 0.3)
+        return self._fraction(tutor_turns, lambda c: "?" in c)
 
     def _reasonable_length(self, tutor_turns: list) -> float:
         return self._fraction(tutor_turns, lambda c: len(c.split()) <= 200)
