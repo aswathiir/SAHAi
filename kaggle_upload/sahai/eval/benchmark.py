@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from sahai.core.dialogue import DialogueEngine
 from sahai.reward.combined import SAHAIReward
 from sahai.reward.leakage import LeakageEstimator
-from sahai.reward.solve import CodeVerifier, SolveReward
+from sahai.reward.solve import CodeVerifier, SolveReward, tutor_code_solves
 
 if TYPE_CHECKING:
     from sahai.agents.student import StudentSimulator
@@ -35,7 +35,17 @@ class MetricsReport:
 
 
 class Evaluator:
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, solution_corpus: list[str] | None = None):
+        """`solution_corpus` must be the *training* problem bank's solutions —
+        the same corpus the trainer fits on. Leakage counts a token only if it
+        is rare across that corpus, so fitting on the 20-problem eval set
+        instead would make "rare" mean something entirely different and put
+        held-out leakage back on a different scale from training leakage.
+
+        Left optional so existing callers keep working, but the notebook passes
+        it; unfitted, leakage falls back to counting every token (old behaviour)
+        rather than silently applying a filter with no corpus behind it.
+        """
         self.settings = settings
         self.dialogue_engine = DialogueEngine(max_turns=settings.training.max_turns)
         self.verifier = CodeVerifier(
@@ -43,7 +53,7 @@ class Evaluator:
             memory_mb=settings.reward.exec_memory_mb,
         )
         self.solve_reward = SolveReward(self.verifier, settings.reward.num_solve_samples)
-        self.leakage_estimator = LeakageEstimator()
+        self.leakage_estimator = LeakageEstimator(solution_corpus=solution_corpus)
         self.sahai_reward = SAHAIReward(settings.reward)
 
     def evaluate_model(
@@ -62,7 +72,24 @@ class Evaluator:
 
             r_sol = self.solve_reward.compute(student, dialogue, problem)
             r_ped = pedagogy_reward.evaluate(dialogue)
-            leak = self.leakage_estimator.estimate(dialogue, problem.solution)
+            # Both keyword arguments were previously omitted, so eval silently
+            # used the defaults (problem_text="", tutor_code_solves=False) and
+            # scored leakage by a *different rule than training*:
+            #   - no problem-statement subtraction, inflating leak by 34%
+            #     relative (measured: 0.1495 -> 0.2006 over 304 v14 dialogues)
+            #   - no execution check, so a tutor writing a complete working
+            #     solution fell back to token overlap instead of scoring 1.0
+            # The two errors point opposite ways and partly cancelled, which is
+            # why the headline number never looked wrong. Held-out leakage from
+            # runs before this fix is not comparable to training leakage.
+            leak = self.leakage_estimator.estimate(
+                dialogue,
+                problem.solution,
+                problem_text=f"{problem.title} {problem.description}",
+                tutor_code_solves=tutor_code_solves(
+                    dialogue, problem, self.verifier, self.leakage_estimator
+                ),
+            )
             ability = student.tracer.get_ability()
             components = self.sahai_reward.compute(r_sol, r_ped, leak, ability)
 

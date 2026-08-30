@@ -11,7 +11,7 @@ import torch
 from sahai.core.dialogue import DialogueEngine
 from sahai.reward.combined import SAHAIReward
 from sahai.reward.leakage import LeakageEstimator
-from sahai.reward.solve import CodeVerifier, SolveReward
+from sahai.reward.solve import CodeVerifier, SolveReward, tutor_code_solves
 
 if TYPE_CHECKING:
     from sahai.agents.student import StudentSimulator
@@ -68,7 +68,12 @@ class GRPOTrainer:
             memory_mb=settings.reward.exec_memory_mb,
         )
         self.solve_reward = SolveReward(self.verifier, settings.reward.num_solve_samples)
-        self.leakage_estimator = LeakageEstimator()
+        # Fitted on the problem bank so "rare" is measured against the whole
+        # corpus. The evaluator must be fitted on this SAME corpus or the two
+        # score leakage by different rules.
+        self.leakage_estimator = LeakageEstimator(
+            solution_corpus=[p.solution for p in problem_bank.problems]
+        )
         self.sahai_reward = SAHAIReward(settings.reward)
 
         self.optimizer = torch.optim.AdamW(
@@ -119,24 +124,15 @@ class GRPOTrainer:
             rollout.reward = components.r_sahai
 
     def _tutor_code_solves(self, rollout: Rollout) -> bool:
-        """Did the tutor write code that actually solves the problem?
+        """Shared with the evaluator — see sahai.reward.solve.tutor_code_solves.
 
-        Execution is the only reliable test. Token overlap scored 0.000 for a
-        tutor that wrote a complete working solution, because it chose a
-        different algorithm than the reference — so it was measuring
-        plagiarism, not leakage. Code that passes the problem's own tests IS
-        the answer, however it is written.
+        This used to be implemented here only, and `Evaluator` simply never
+        called it, so held-out leakage was scored by a different rule than
+        training leakage for every run to date.
         """
-        for block in self.leakage_estimator.extract_tutor_code(rollout.dialogue):
-            for variant in self.leakage_estimator.runnable_variants(
-                block, rollout.problem.function_name
-            ):
-                try:
-                    if self.verifier.verify(variant, rollout.problem) == 1.0:
-                        return True
-                except Exception:  # noqa: BLE001 - a broken block is not a leak
-                    continue
-        return False
+        return tutor_code_solves(
+            rollout.dialogue, rollout.problem, self.verifier, self.leakage_estimator
+        )
 
     def _compute_advantages(self, rollouts: list[Rollout]) -> None:
         G = self.settings.training.group_size

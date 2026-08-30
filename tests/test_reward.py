@@ -82,3 +82,95 @@ def test_clean_tutoring_has_no_leakage_floor():
         "def other_name(x):\n    return x[0]",
         problem_text="Return the first character of a string",
     ) == 0.0
+
+
+def test_evaluator_scores_leakage_the_same_way_as_training():
+    """Eval must pass problem_text and tutor_code_solves, like the trainer does.
+
+    `Evaluator.evaluate_model` called `estimate(dialogue, solution)` and let both
+    keyword arguments fall back to their defaults, so held-out leakage was scored
+    by a different rule than training leakage in every run to date:
+      - problem_text="" removed the problem-statement subtraction, inflating
+        leak by 34% relative (0.1495 -> 0.2006, measured over 304 v14 dialogues)
+      - tutor_code_solves=False meant a complete working solution written by the
+        tutor fell back to token overlap instead of scoring 1.0
+    The two errors pointed opposite ways and partly cancelled, which is why the
+    headline number never looked obviously wrong.
+
+    This test pins the call itself rather than a score, because the bug was an
+    omitted argument, not a bad formula.
+    """
+    import inspect
+
+    from sahai.eval import benchmark
+
+    src = inspect.getsource(benchmark.Evaluator.evaluate_model)
+    assert "problem_text=" in src, "eval dropped the problem-statement subtraction"
+    assert "tutor_code_solves=" in src, "eval dropped execution-verified leakage"
+
+
+def test_tutor_code_solves_is_shared_by_trainer_and_evaluator():
+    """One implementation, imported by both — duplication has cost this repo
+    two bugs already (the same fix had to be applied twice).
+
+    grpo.py is checked by source rather than import: it pulls in torch, which
+    the test venv deliberately does not have.
+    """
+    import pathlib
+
+    from sahai.eval.benchmark import tutor_code_solves as eval_fn
+    from sahai.reward.solve import tutor_code_solves as canonical
+
+    assert eval_fn is canonical
+
+    grpo_src = pathlib.Path("sahai/training/grpo.py").read_text()
+    assert "from sahai.reward.solve import" in grpo_src
+    assert "tutor_code_solves" in grpo_src
+    # the old private implementation must be gone, not merely shadowed
+    assert "for block in self.leakage_estimator.extract_tutor_code" not in grpo_src
+
+
+def test_rare_token_filter_ignores_common_teaching_vocabulary():
+    """Ordinary teaching words must not count as leakage.
+
+    Plain overlap charged the tutor for saying `count`/`sum`/`index` — words in
+    14-19 of 198 MBPP solutions — so every extra sentence raised leakage and the
+    reward paid the tutor to stay silent (corr(verbosity, leak) = +0.380 over
+    the v14 run's 228 code-free dialogues; +0.160 after this filter).
+    """
+    common = "def f(x):\n    count = 0\n    return count"
+    corpus = [common] * 10 + ["def g(y):\n    return y"] * 10
+    estimator = LeakageEstimator(solution_corpus=corpus)
+
+    dialogue = Dialogue(problem_id="p")
+    dialogue.add("student", "stuck")
+    dialogue.add("tutor", "What would a running count give you here?")
+    assert estimator.estimate(dialogue, common, problem_text="Count things") == 0.0
+
+
+def test_rare_token_filter_still_catches_a_distinctive_giveaway():
+    """A token unique to one solution is that problem's signature."""
+    target = "def first_repeated_char(s):\n    return s[0]"
+    corpus = [target] + ["def g(y):\n    return y"] * 20
+    estimator = LeakageEstimator(solution_corpus=corpus)
+
+    dialogue = Dialogue(problem_id="p")
+    dialogue.add("student", "stuck")
+    dialogue.add("tutor", "Just write first_repeated_char and return the answer.")
+    assert estimator.estimate(dialogue, target, problem_text="Find a repeat") > 0.0
+
+
+def test_unfitted_estimator_does_not_silently_filter():
+    """With no corpus there is no basis for calling a token rare, so the
+    estimator must fall back to the old behaviour rather than quietly
+    filtering against an empty frequency table (which would score everything
+    as a leak)."""
+    estimator = LeakageEstimator()
+    assert not estimator.is_fitted
+    dialogue = Dialogue(problem_id="p")
+    dialogue.add("student", "stuck")
+    dialogue.add("tutor", "Think about using a running count.")
+    scored = estimator.estimate(
+        dialogue, "def f(x):\n    count = 0\n    return count", problem_text=""
+    )
+    assert 0.0 < scored <= 1.0
