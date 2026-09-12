@@ -12,7 +12,11 @@ venv/
 
 # Training artefacts — regenerate by re-running; too large for git
 output/
-kaggle_results/
+# Downloaded run artifacts. The trailing-slash form missed the timestamped
+# variants the pull scripts actually create (kaggle_results_stale_1786419155/
+# and friends) — 117MB of them were sitting untracked, one `git add -A`
+# away from the history.
+kaggle_results*/
 artifacts/
 *.safetensors
 
