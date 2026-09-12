@@ -46,10 +46,26 @@ def test_no_skills_yields_no_context():
     assert _learner_context([], {"arrays": 0.1}) == ""
 
 
-def test_bands_match_the_zpd_sampler():
-    """If these drift apart the tutor calls a skill 'solid' while the selector
-    is still offering problems on it."""
-    assert (MASTERY_NEW, MASTERY_SOLID) == (0.3, 0.7)
+def test_every_placement_level_produces_guidance():
+    """The bands must cover the range placement actually emits.
+
+    They were first set to the ZPD cut points (0.3/0.7). But placement is
+    capped inside [0.15, 0.65] so a confident learner still gets offered work,
+    so three of its four levels landed in the silent mid band: a learner who
+    had just imported 320 solved problems got no guidance at all.
+    """
+    placement_values = {"none": 0.15, "seen": 0.30, "practiced": 0.50, "confident": 0.65}
+    spoken = {
+        level: bool(_learner_context(["arrays"], {"arrays": value}))
+        for level, value in placement_values.items()
+    }
+    assert spoken["none"] and spoken["seen"], "weak levels must ask for the idea first"
+    assert spoken["confident"], "a confident level must stop the tutor re-explaining"
+    assert not spoken["practiced"], "mid-band is where the tutor should already be"
+
+
+def test_bands_are_not_silently_widened_to_nothing():
+    assert 0 < MASTERY_NEW < MASTERY_SOLID < 1
 
 
 def test_both_bands_can_appear_together():
