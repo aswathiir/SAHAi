@@ -123,3 +123,40 @@ def test_mastery_label_splits_name_from_value():
     block = page[page.index(".mastery-row .label {"):]
     block = block[: block.index("}")]
     assert "flex" in block and "space-between" in block
+
+
+def test_next_up_never_recommends_the_fallback_tag():
+    """`general` is what _tag_skills returns when it recognises nothing, so it
+    is absent from SKILL_KEYWORDS and placement never asks about it. With no
+    posterior it scores 0.0 and would win the "weakest skill" comparison for
+    every learner forever — recommending the one tag nobody can be weak at."""
+    from app.main import UNTRACKED_SKILL, _next_up
+
+    rich = {"arrays": 0.9, "heaps": 0.2}
+    picked = _next_up(rich, set())
+    assert picked is not None
+    assert picked["skill"] != UNTRACKED_SKILL
+
+
+def test_next_up_picks_the_weakest_practisable_skill():
+    from app.main import _next_up
+
+    picked = _next_up({"arrays": 0.9, "heaps": 0.1, "sorting": 0.5}, set())
+    assert picked["skill"] == "heaps"
+    assert picked["unsolved"] > 0
+    assert picked["href"] == "/?skill=heaps"
+
+
+def test_next_up_skips_a_skill_with_nothing_left_to_do():
+    """Naming a weak skill whose problems are all solved would repeat forever."""
+    from app.main import PROBLEMS, _next_up
+
+    heaps_ids = {p["id"] for p in PROBLEMS if "heaps" in p["skills"]}
+    picked = _next_up({"arrays": 0.9, "heaps": 0.1}, heaps_ids)
+    assert picked["skill"] != "heaps"
+
+
+def test_next_up_is_none_when_everything_is_solved():
+    from app.main import PROBLEMS, _next_up
+
+    assert _next_up({"arrays": 0.5}, {p["id"] for p in PROBLEMS}) is None

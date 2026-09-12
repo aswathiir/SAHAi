@@ -207,6 +207,8 @@ class TurnRequest(BaseModel):
 # These cuts make all four placement levels say something: "none" and "seen"
 # read as new, "confident" reads as solid, "practiced" stays quiet because
 # mid-band is where the tutor should already be pitching.
+UNTRACKED_SKILL = "general"
+
 MASTERY_NEW = 0.35
 MASTERY_SOLID = 0.65
 
@@ -587,6 +589,45 @@ def _streak(days: list[str]) -> tuple[int, int]:
     return current, longest
 
 
+def _next_up(skills: dict[str, float], solved: set[str]) -> dict | None:
+    """The weakest skill the learner can actually practise right now.
+
+    Weakest, not "next in a syllabus": the ZPD sampler already works on
+    mastery, so the recommendation and the selector agree rather than pulling
+    in different directions.
+
+    Skills with nothing left unsolved are excluded — telling someone their
+    weakest area is heaps is useless if all four heaps problems are done, and
+    it would keep saying so forever.
+    """
+    available: dict[str, int] = defaultdict(int)
+    for problem in PROBLEMS:
+        if problem["id"] in solved:
+            continue
+        for skill in problem["skills"]:
+            # "general" is what _tag_skills returns when it recognises nothing,
+            # so it is not in SKILL_KEYWORDS and placement never asks about it.
+            # It therefore has no posterior, scores 0.0, and would win this
+            # comparison for every learner forever — recommending the one tag
+            # nobody can be weak at.
+            if skill == UNTRACKED_SKILL:
+                continue
+            available[skill] += 1
+    if not available:
+        return None
+
+    # Unseen skills have no posterior; 0.0 is the honest prior, and it also
+    # puts "never touched" ahead of "touched and weak", which is the right
+    # order to work in.
+    skill = min(available, key=lambda s: (skills.get(s, 0.0), s))
+    return {
+        "skill": skill,
+        "mastery": skills.get(skill, 0.0),
+        "unsolved": available[skill],
+        "href": f"/?skill={skill}",
+    }
+
+
 @app.post("/v1/me/placement", responses=AUTH_RESPONSES)
 async def set_placement(
     body: PlacementIn, x_learner_id: str | None = LearnerHeader
@@ -668,8 +709,16 @@ async def progress(x_learner_id: str | None = LearnerHeader) -> dict:
             }
         )
 
+    # The one thing the page could not answer: what should I do now. Everything
+    # else here describes the past. Computed server-side because the gateway is
+    # the only place that holds both the posteriors and the bank — deciding it
+    # in the browser would mean shipping the bank's skill counts to it and
+    # keeping two copies of the rule in step.
+    next_up = _next_up(skills, solved_problems)
+
     return {
         "learner_id": learner,
+        "next_up": next_up,
         "solved": len(solved_problems),
         "attempted": len(attempted_problems),
         "total_problems": len(PROBLEMS),
