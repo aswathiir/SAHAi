@@ -194,6 +194,7 @@
     <a href="/" style="color:var(--cream);text-decoration:none;border-bottom:1px solid var(--pink);padding-bottom:3px">Tutor</a>
     <a href="/progress.html" style="color:var(--cream-dim);text-decoration:none;padding-bottom:3px">Record</a>
     <a href="/progress.html?assess=1" style="color:var(--cream-dim);text-decoration:none;padding-bottom:3px">Assessment</a>
+    <a href="/diagnostic.html" style="color:var(--cream-dim);text-decoration:none;padding-bottom:3px">Diagnostic</a>
     <span>learner</span>
     <input id="learner-id" placeholder="me" spellcheck="false">
   </div>
@@ -277,6 +278,10 @@ function learnerId() {
   return v;
 }
 document.getElementById('learner-id').value = localStorage.getItem('sahai_learner') || 'me';
+document.getElementById('learner-id').addEventListener('keydown', e => {
+  // `change` only fires on blur; pressing Enter looked like nothing happened.
+  if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+});
 document.getElementById('learner-id').addEventListener('change', e => {
   localStorage.setItem('sahai_learner', e.target.value.trim() || 'me');
 });

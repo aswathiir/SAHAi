@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SAHAi — Diagnostic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,600;9..144,900&family=Archivo:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink:#0d1030; --ink-2:#141845; --ink-3:#1c2158; --cream:#f2ece1;
+    --cream-dim:#9a99b8; --pink:#f96167; --pink-dim:#7a2f41; --rule:#272c66;
+    --ok:#4ec98a; --bad:#f96167;
+    --display:"Fraunces","Iowan Old Style",Georgia,serif;
+    --body:"Archivo","Helvetica Neue",Helvetica,sans-serif;
+    --mono:"JetBrains Mono","SF Mono",Menlo,monospace;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; font-family:var(--body); font-size:14px; line-height:1.5;
+    background:var(--ink); color:var(--cream); min-height:100vh;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(249,97,103,.13), transparent 70%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
+  }
+  header {
+    display:flex; align-items:baseline; justify-content:space-between; gap:20px;
+    padding:22px 28px 18px; border-bottom:1px solid var(--rule); flex-wrap:wrap;
+  }
+  .brand { font-family:var(--display); font-weight:900; font-size:23px; letter-spacing:-.02em; }
+  .brand em { color:var(--pink); font-style:normal; }
+  nav { display:flex; gap:20px; align-items:center; font-size:13px; }
+  nav a { text-decoration:none; color:var(--cream-dim); padding-bottom:3px; border-bottom:1px solid transparent; }
+  nav a:hover { color:var(--cream); border-color:var(--pink); }
+  nav a.here { color:var(--cream); border-color:var(--pink); }
+  main { max-width:900px; margin:0 auto; padding:26px 28px 70px; }
+
+  .lede { font-family:var(--display); font-size:20px; font-weight:300; line-height:1.4; margin:0 0 8px; max-width:62ch; }
+  .lede b { font-weight:600; color:var(--pink); }
+  .sub { font:400 12px var(--mono); color:var(--cream-dim); margin-bottom:26px; }
+
+  .cta {
+    font-family:var(--body); font-size:14px; font-weight:600; padding:11px 26px;
+    border-radius:8px; border:none; background:var(--pink); color:#2a0a10; cursor:pointer;
+  }
+  .cta:disabled { opacity:.4; cursor:not-allowed; }
+  .ghost { background:transparent; border:1px solid var(--rule); color:var(--cream-dim); }
+
+  .bar {
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    border:1px solid var(--rule); border-radius:10px; padding:12px 16px;
+    background:var(--ink-2); margin-bottom:18px;
+  }
+  .bar .pos { font:400 11px var(--mono); color:var(--cream-dim); }
+  #clock { font:700 19px var(--mono); }
+  #clock.over { color:var(--pink); }
+
+  .card { background:var(--ink-2); border:1px solid var(--rule); border-radius:12px; padding:20px; }
+  .card h3 { font-family:var(--display); font-size:19px; font-weight:600; margin:0 0 6px; }
+  .chip { display:inline-block; font:400 10px var(--mono); padding:1px 7px; border-radius:999px;
+          background:var(--ink-3); color:var(--cream-dim); margin-right:5px; }
+  textarea {
+    width:100%; min-height:230px; font:400 12.5px/1.6 var(--mono); padding:12px; margin-top:14px;
+    background:var(--ink); border:1px solid var(--rule); border-radius:8px; color:var(--cream); resize:vertical;
+  }
+  textarea:focus { outline:none; border-color:var(--pink); }
+  .actions { display:flex; gap:10px; margin-top:14px; align-items:center; }
+  .note { font:400 11px var(--mono); color:var(--cream-dim); }
+
+  .result { margin-top:14px; font:400 12px var(--mono); padding:9px 13px; border-radius:7px; border-left:2px solid var(--rule); background:var(--ink); }
+  .result.pass { border-left-color:var(--ok); color:var(--ok); }
+  .result.fail { border-left-color:var(--bad); color:var(--bad); }
+
+  table { width:100%; border-collapse:collapse; margin-top:18px; }
+  td, th { text-align:left; padding:9px 10px; border-bottom:1px solid var(--rule); font-size:13px; }
+  th { font:400 10px var(--mono); text-transform:uppercase; letter-spacing:.12em; color:var(--cream-dim); }
+  td.v { font:700 12px var(--mono); text-align:right; }
+  td.v.pass { color:var(--ok); } td.v.fail { color:var(--cream-dim); }
+  .hidden { display:none !important; }
+  .err { border-left:2px solid var(--pink); padding:9px 14px; margin-bottom:16px;
+         font:400 12px var(--mono); color:var(--pink); background:rgba(249,97,103,.07); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">SAHA<em>i</em></div>
+  <nav>
+    <a href="/">Tutor</a>
+    <a href="/progress.html">Record</a>
+    <a href="/progress.html?assess=1">Assessment</a>
+    <a href="/diagnostic.html" class="here">Diagnostic</a>
+    <label for="learner-id" style="color:var(--cream-dim);cursor:pointer">learner</label>
+    <input id="learner-id" placeholder="me" spellcheck="false"
+           style="background:var(--ink-2);border:1px solid var(--rule);color:var(--cream);border-radius:5px;padding:5px 9px;font:400 13px var(--mono);width:104px">
+  </nav>
+</header>
+
+<main>
+  <div id="err" class="err hidden"></div>
+
+  <section id="intro">
+    <p class="lede">
+      Four problems, <b>no tutor</b>. This is the one place the system finds out
+      what you can do unaided — the survey records what you say about yourself,
+      this records what you actually write.
+    </p>
+    <p class="sub">
+      Timed, but nothing cuts you off: the clock is information, not a limit.
+      Every answer is graded by running it against the real tests, and counts
+      as evidence — so it can move your mastery in either direction.
+    </p>
+    <button id="begin" class="cta">Begin diagnostic</button>
+  </section>
+
+  <section id="run" class="hidden">
+    <div class="bar">
+      <span class="pos" id="pos"></span>
+      <span id="clock">0:00</span>
+    </div>
+    <div class="card">
+      <h3 id="q-title"></h3>
+      <div id="q-chips"></div>
+      <textarea id="code" spellcheck="false"></textarea>
+      <div class="actions">
+        <button id="submit" class="cta">Run &amp; submit</button>
+        <button id="skip" class="cta ghost">Skip</button>
+        <span class="note" id="note"></span>
+      </div>
+      <div id="result" class="result hidden"></div>
+    </div>
+  </section>
+
+  <section id="done" class="hidden">
+    <p class="lede" id="summary"></p>
+    <p class="sub" id="summary-sub"></p>
+    <table id="breakdown"></table>
+    <div style="margin-top:22px; display:flex; gap:10px">
+      <a href="/progress.html" class="cta" style="text-decoration:none">See your record &rarr;</a>
+      <a href="/diagnostic.html" class="cta ghost" style="text-decoration:none">Retake</a>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const state = { problems: [], i: 0, answers: [], started: 0, tick: null };
+
+$('learner-id').value = localStorage.getItem('sahai_learner') || 'me';
+$('learner-id').addEventListener('change', e => {
+  localStorage.setItem('sahai_learner', e.target.value.trim() || 'me');
+});
+$('learner-id').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+});
+const learnerId = () => ($('learner-id').value.trim()) || 'me';
+
+async function api(path, opts = {}) {
+  const headers = Object.assign(
+    { 'x-learner-id': learnerId() },
+    opts.body ? { 'content-type': 'application/json' } : {},
+  );
+  const res = await fetch(path, Object.assign({}, opts, { headers }));
+  if (!res.ok) throw new Error(`${res.status} ${(await res.text()).slice(0, 160)}`);
+  return res.json();
+}
+
+function showErr(msg) { $('err').textContent = msg; $('err').classList.remove('hidden'); }
+
+function fmt(ms) {
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+// The clock counts up, never down. A countdown on a diagnostic pressures the
+// learner into abandoning it, and an abandoned diagnostic produces no evidence
+// at all — the opposite of the point.
+function startClock() {
+  state.started = Date.now();
+  state.tick = setInterval(() => {
+    const ms = Date.now() - state.started;
+    $('clock').textContent = fmt(ms);
+    $('clock').classList.toggle('over', ms > 15 * 60 * 1000);
+  }, 1000);
+}
+
+function renderQuestion() {
+  const p = state.problems[state.i];
+  $('pos').textContent = `Problem ${state.i + 1} of ${state.problems.length}`;
+  $('q-title').textContent = p.title;
+  // Lead with what this item is probing, so the set reads as a measurement
+  // rather than four arbitrary problems.
+  $('q-chips').innerHTML =
+    `<span class="chip" style="border:1px solid var(--pink-dim);color:var(--pink)">probing ${p.targets}</span>` +
+    p.skills.filter(s => s !== p.targets).map(s => `<span class="chip">${s}</span>`).join('') +
+    `<span class="chip">difficulty ${p.difficulty}</span>`;
+  $('code').value = p.function_signature ? `${p.function_signature}\n    ` : '';
+  $('result').classList.add('hidden');
+  $('note').textContent = '';
+  $('submit').disabled = false;
+  $('skip').disabled = false;
+  $('code').focus();
+}
+
+function next() {
+  state.i += 1;
+  if (state.i < state.problems.length) { renderQuestion(); return; }
+  clearInterval(state.tick);
+  finish();
+}
+
+async function grade(skipped) {
+  const p = state.problems[state.i];
+  $('submit').disabled = true;
+  $('skip').disabled = true;
+
+  if (skipped) {
+    state.answers.push({ problem: p, passed: false, skipped: true });
+    next();
+    return;
+  }
+
+  $('note').textContent = 'Running against the real tests…';
+  try {
+    const r = await api('/v1/diagnostic/grade', {
+      method: 'POST',
+      body: JSON.stringify({ problem_id: p.id, code: $('code').value }),
+    });
+    state.answers.push({ problem: p, passed: r.passed, rate: r.pass_rate });
+    const box = $('result');
+    box.className = 'result ' + (r.passed ? 'pass' : 'fail');
+    box.textContent = r.passed
+      ? 'All tests passed.'
+      : `${Math.round((r.pass_rate || 0) * 100)}% of tests passed.`;
+    box.classList.remove('hidden');
+    $('note').textContent = '';
+    setTimeout(next, 1200);
+  } catch (e) {
+    showErr(`Could not grade that — ${e.message}`);
+    $('submit').disabled = false;
+    $('skip').disabled = false;
+    $('note').textContent = '';
+  }
+}
+
+function finish() {
+  $('run').classList.add('hidden');
+  $('done').classList.remove('hidden');
+  const passed = state.answers.filter(a => a.passed).length;
+  const total = state.answers.length;
+  const elapsed = fmt(Date.now() - state.started);
+
+  $('summary').innerHTML = `You solved <b>${passed} of ${total}</b> unaided.`;
+  $('summary-sub').textContent =
+    `${elapsed} elapsed · every answer recorded against the skills it touches, ` +
+    `so your record now reflects work rather than a self-report.`;
+
+  $('breakdown').innerHTML =
+    '<tr><th>Problem</th><th>Skills</th><th style="text-align:right">Result</th></tr>' +
+    state.answers.map(a => `
+      <tr>
+        <td>${a.problem.title.slice(0, 62)}</td>
+        <td>${a.problem.skills.join(', ')}</td>
+        <td class="v ${a.passed ? 'pass' : 'fail'}">${
+          a.skipped ? 'skipped' : a.passed ? 'passed' : 'failed'}</td>
+      </tr>`).join('');
+}
+
+$('begin').addEventListener('click', async () => {
+  $('begin').disabled = true;
+  try {
+    const d = await api('/v1/diagnostic');
+    if (!d.problems.length) { showErr('No problems available for a diagnostic.'); return; }
+    state.problems = d.problems;
+    $('intro').classList.add('hidden');
+    $('run').classList.remove('hidden');
+    startClock();
+    renderQuestion();
+  } catch (e) {
+    showErr(`Could not start — ${e.message}`);
+    $('begin').disabled = false;
+  }
+});
+$('submit').addEventListener('click', () => grade(false));
+$('skip').addEventListener('click', () => grade(true));
+</script>
+</body>
+</html>
