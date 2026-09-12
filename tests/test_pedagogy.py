@@ -196,32 +196,48 @@ def test_violations_scored_per_turn_not_all_or_nothing():
     assert all_bad < score < all_good
 
 
-def test_every_question_is_rewarded_not_just_crossing_a_threshold():
-    """The question check must pay for partial progress.
+def test_threshold_does_not_pay_to_question_every_turn():
+    """The regression that cost a run, pinned at its actual mechanism.
 
-    It used to be `questions >= 30% of tutor turns` -> 1.0/0.0. In a 4-turn
-    dialogue the first question lands at 25%, still under the bar, so going
-    from zero questions to one earned nothing; only the second flipped it.
-    Measured on the v14 run's late epochs, 81% of dialogues had zero tutor
-    questions and the check's mean was 0.125 — a near-constant, and a constant
-    contributes nothing to a GRPO advantage (a within-group z-score).
+    The check was briefly the *fraction* of tutor turns containing a question,
+    to give it a gradient. Over the run that followed, mean r_ped climbed
+    0.717 -> 0.992 while held-out solve fell 16.3% -> 6.2%, the worst since the
+    original baseline.
 
-    This is the reward's only positive signal; the other four checks are all
-    "never do X", which a silent tutor satisfies perfectly.
+    The exploit is not that a short question scores well — a single
+    contentless question reaches r_ped 1.0 under *both* forms, because the
+    other four checks all pass vacuously on a short clean turn. The difference
+    is the pressure. In a four-turn dialogue:
+
+        questions   threshold   fraction
+            2          1.00       0.90
+            4          1.00       1.00
+
+    Under the threshold, converting the two remaining substantive turns into
+    questions gains nothing. Under the fraction it is worth 0.10 of r_ped, and
+    since reward carries `(r_ped - 1) * lambda`, closing that gap also cancels
+    the pedagogy penalty outright. Every teaching turn left un-questioned was
+    costing reward, so they stopped being teaching turns.
+
+    This does not make the threshold good — it is inert, which is why it was
+    changed. It makes it non-exploitable, which the fraction was not.
     """
     judge = RuleBasedJudge()
 
-    def dialogue_with(n_questions, n_turns=4):
+    def with_questions(n, total=4):
         d = Dialogue(problem_id="p")
-        for i in range(n_turns):
+        for i in range(total):
             d.add("student", "stuck")
             d.add(
                 "tutor",
-                "What structure would help here?" if i < n_questions else "Use a hash map.",
+                "What structure helps here?" if i < n
+                else "A hash map gives O(1) lookup on the key.",
             )
-        return d
+        return judge.evaluate(d)
 
-    scores = [judge.evaluate(dialogue_with(q)) for q in range(5)]
-    assert scores == sorted(scores), f"not monotonic: {scores}"
-    assert len(set(scores)) == 5, f"some questions earn nothing: {scores}"
-    assert scores[1] > scores[0], "the first question must already be rewarded"
+    assert with_questions(2) == with_questions(4), (
+        "questioning every turn must gain nothing over clearing the bar, or "
+        "substantive turns are worth converting into question marks"
+    )
+    # And the check still has to do something: no questions must score lower.
+    assert with_questions(0) < with_questions(2)
