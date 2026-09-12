@@ -15,6 +15,8 @@ never knows which backend is running.
 
 from __future__ import annotations
 
+import subprocess
+
 import io
 import os
 from abc import ABC, abstractmethod
@@ -83,6 +85,46 @@ _DEFAULT_VOICE_DESCRIPTION = _VOICE_DESCRIPTIONS["en"]
 _ASR_LANG_MAP = {"hi": "hi", "ta": "ta", "en": "en", "mixed": "hi", "unknown": "hi"}
 
 
+
+ASR_SAMPLE_RATE = 16000
+
+
+def _decode_pcm16(audio_bytes: bytes) -> "np.ndarray":
+    """Any browser recording -> mono float32 at 16 kHz.
+
+    `torchaudio.load` used to do this. In torchaudio 2.11 it dispatches to
+    TorchCodec, which is not installed, so every real-audio request failed with
+    "TorchCodec is required for load_with_torchcodec" — the voice path only
+    ever worked through the `transcript` text field, which is why the failure
+    went unnoticed.
+
+    ffmpeg rather than soundfile because the input is whatever MediaRecorder
+    produced: WebM/Opus on Chrome, MP4/AAC on Safari. libsndfile reads neither.
+    Decoding everything through ffmpeg is one path instead of a format guess,
+    and it resamples to the 16 kHz the conformer expects in the same pass.
+    """
+    import numpy as np
+
+    proc = subprocess.run(
+        [
+            "ffmpeg", "-hide_banner", "-loglevel", "error",
+            "-i", "pipe:0",           # container sniffed from the bytes
+            "-f", "s16le",            # raw PCM out
+            "-acodec", "pcm_s16le",
+            "-ac", "1",               # mono
+            "-ar", str(ASR_SAMPLE_RATE),
+            "pipe:1",
+        ],
+        input=audio_bytes, capture_output=True, timeout=60,
+    )
+    if proc.returncode != 0 or not proc.stdout:
+        detail = proc.stderr.decode(errors="replace").strip()[:200]
+        raise ValueError(f"could not decode audio: {detail or 'empty output'}")
+
+    # s16le -> float32 in [-1, 1], which is what the model expects.
+    return (np.frombuffer(proc.stdout, dtype=np.int16).astype("float32") / 32768.0)
+
+
 class IndicConformerASR(ASRBackend):
     def __init__(self, model_name: str, device: str = "cpu"):
         import torch
@@ -96,13 +138,7 @@ class IndicConformerASR(ASRBackend):
         self._model_name = model_name
 
     def transcribe(self, audio_bytes: bytes, language: str) -> Transcript:
-        import torchaudio
-
-        wav, sr = torchaudio.load(io.BytesIO(audio_bytes))
-        wav = self._torch.mean(wav, dim=0, keepdim=True)  # stereo -> mono
-        target_sr = 16000
-        if sr != target_sr:
-            wav = torchaudio.transforms.Resample(orig_freq=sr, new_freq=target_sr)(wav)
+        wav = self._torch.from_numpy(_decode_pcm16(audio_bytes)).unsqueeze(0)
         if self.device != "cpu":
             wav = wav.to(self.device)
 

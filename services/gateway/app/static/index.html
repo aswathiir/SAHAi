@@ -474,7 +474,8 @@ function openVoiceSocket() {
   const lang = document.getElementById('voice-lang').value;
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const url = `${proto}://${location.host}/v1/ws/voice/${state.sessionId}` +
-    `?learner_id=${encodeURIComponent(learnerId())}&lang=${lang}`;
+    `?learner_id=${encodeURIComponent(learnerId())}&lang=${lang}` +
+    `&problem_id=${encodeURIComponent(state.selected?.id || '')}`;
   const ws = new WebSocket(url);
   ws.onmessage = onVoiceMessage;
   ws.onerror = () => voiceStatus('Voice connection error.');
@@ -492,28 +493,66 @@ function closeVoiceSocket() {
 
 function onVoiceMessage(event) {
   const msg = JSON.parse(event.data);
+  const turnsBox = document.getElementById('turns');
+
   if (msg.error) {
+    // A pending "thinking" bubble would otherwise sit there forever.
+    document.getElementById('voice-thinking')?.remove();
     voiceStatus(`Voice error: ${msg.error}${msg.detail ? ' — ' + msg.detail : ''}`);
     return;
   }
+
+  // Stage events arrive as the pipeline progresses, so a learner who has just
+  // spoken sees they were heard immediately instead of waiting out generation.
+  if (msg.stage === 'transcribed') {
+    voiceStatus('Heard you.');
+    const studentDiv = document.createElement('div');
+    studentDiv.className = 'turn student';
+    studentDiv.textContent = msg.transcript;
+    turnsBox.appendChild(studentDiv);
+    turnsBox.scrollTop = turnsBox.scrollHeight;
+    return;
+  }
+  if (msg.stage === 'thinking') {
+    voiceStatus('Tutor is thinking…');
+    const pending = document.createElement('div');
+    pending.className = 'turn tutor';
+    pending.id = 'voice-thinking';
+    pending.textContent = '…';
+    turnsBox.appendChild(pending);
+    turnsBox.scrollTop = turnsBox.scrollHeight;
+    return;
+  }
+  if (msg.stage === 'speaking') {
+    // Show the words as soon as they exist; the audio follows separately.
+    const pending = document.getElementById('voice-thinking');
+    if (pending) pending.textContent = msg.tutor_reply;
+    voiceStatus('Speaking…');
+    return;
+  }
+
+  // Final frame.
   voiceStatus('');
-  // Same rendering path as typed turns: append what the mic heard, then the
-  // reply, rather than re-fetching the whole session.
-  const turnsBox = document.getElementById('turns');
-  const studentDiv = document.createElement('div');
-  studentDiv.className = 'turn student';
-  studentDiv.textContent = msg.transcript;
-  turnsBox.appendChild(studentDiv);
-  const tutorDiv = document.createElement('div');
-  tutorDiv.className = 'turn tutor';
-  tutorDiv.textContent = msg.tutor_reply;
-  turnsBox.appendChild(tutorDiv);
+  const pending = document.getElementById('voice-thinking');
+  if (pending) {
+    pending.textContent = msg.tutor_reply;
+    pending.removeAttribute('id');
+  } else {
+    const tutorDiv = document.createElement('div');
+    tutorDiv.className = 'turn tutor';
+    tutorDiv.textContent = msg.tutor_reply;
+    turnsBox.appendChild(tutorDiv);
+  }
   turnsBox.scrollTop = turnsBox.scrollHeight;
   setStatus(msg.status);
 
   if (msg.audio_b64) {
     const audio = new Audio(`data:audio/wav;base64,${msg.audio_b64}`);
-    audio.play().catch(() => {});  // autoplay can be blocked; not fatal
+    audio.play().catch(() => voiceStatus('Reply ready (autoplay blocked).'));
+  } else if (msg.speech === false) {
+    // Say so rather than leaving the learner waiting for a voice that is not
+    // coming. Synthesis is minutes per sentence on CPU and is capped.
+    voiceStatus('Replied in text — speech unavailable.');
   }
 }
 
