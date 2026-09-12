@@ -13,24 +13,17 @@ from typing import Literal
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
+from sahai_core import RULES
 from sahai_core.generation import strip_code
 
 from .backends import TutorBackend, build_backend
 
 logger = logging.getLogger(__name__)
 
-TUTOR_SYSTEM_PROMPT = (
-    "You are a tutor. You help students think, NOT give answers.\n\n"
-    "STRICT RULES:\n"
-    "- NEVER write code. No code blocks. No function definitions. No pseudocode.\n"
-    "- NEVER show the solution or any part of it.\n"
-    "- Ask ONE question per turn to guide the student's thinking.\n"
-    "- Keep responses to 2-3 sentences maximum.\n"
-    "- Never end a turn with a colon promising something you do not then say.\n"
-    "- Match the student's language style.\n\n"
-    "GOOD: 'What data structure lets you check if you have seen a character in O(1)?'\n"
-    "BAD:  'Here is the solution: def func(): ...'"
-)
+# The serving prompt lives in sahai_core.prompt — one definition, imported by
+# session (which assembles it) and echoed by /system_prompt below. It used to
+# be duplicated here, and this copy was the dead one: nothing called the
+# endpoint, so it read like documentation of behaviour the system lacked.
 
 _state: dict[str, TutorBackend] = {}
 
@@ -103,4 +96,4 @@ async def generate(req: GenerateRequest) -> GenerateResponse:
 
 @app.get("/system-prompt")
 async def system_prompt() -> dict[str, str]:
-    return {"prompt": TUTOR_SYSTEM_PROMPT}
+    return {"prompt": RULES}

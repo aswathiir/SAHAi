@@ -333,6 +333,9 @@ async def add_turn(
 
     payload = req.model_dump(exclude={"problem_id"})
     payload["learner_context"] = context
+    # The full statement, not the truncated title the session row stores.
+    if problem:
+        payload["problem_statement"] = problem.get("description") or problem.get("title", "")
 
     r = await app.state.http.post(
         f"{SESSION_URL}/sessions/{session_id}/turns",
@@ -654,8 +657,17 @@ async def list_problems() -> list[dict]:
     Trimmed to what a picker needs; full detail (test cases, function name)
     comes from /v1/problems/{id} once a student actually starts a session.
     """
+    # `title` is the exporter's 80-char truncation of the statement, so for 43
+    # of 89 problems it ends mid-word ("...inscribed in th"). The picker shows
+    # this text, so it must be the whole sentence — the learner is choosing
+    # what to work on and cannot choose what they cannot read.
     return [
-        {"id": p["id"], "title": p["title"], "difficulty": p["difficulty"], "skills": p["skills"]}
+        {
+            "id": p["id"],
+            "title": p.get("description") or p["title"],
+            "difficulty": p["difficulty"],
+            "skills": p["skills"],
+        }
         for p in PROBLEMS
     ]
 

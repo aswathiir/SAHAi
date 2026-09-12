@@ -62,3 +62,26 @@ def test_margins_are_wide_enough_to_absorb_a_hop():
 
     assert gateway - session >= 20
     assert session - generate >= 20
+
+
+def test_only_one_serving_prompt_definition():
+    """There were two: services/tutor defined a detailed prompt exposed on an
+    endpoint nothing called, while services/session built a shorter one inline
+    that was the one actually reaching the model. The dead copy carried the
+    rule that matters most for a code-mixed tutor — match the student's
+    language — so the live prompt never asked for it.
+    """
+    tutor = (ROOT / "services/tutor/app/main.py").read_text()
+    session = (ROOT / "services/session/app/main.py").read_text()
+    core = (ROOT / "libs/sahai-core/sahai_core/prompt.py").read_text()
+
+    assert "You are a tutor" in core, "the canonical prompt must live in sahai_core"
+    for path, src in (("tutor", tutor), ("session", session)):
+        assert "You are a tutor" not in src, f"{path} redefines the serving prompt"
+
+
+def test_serving_prompt_asks_the_tutor_to_match_language():
+    """SAHAi's premise is code-mixed tutoring. If the prompt does not ask for
+    it, nothing else in the serving path does."""
+    core = (ROOT / "libs/sahai-core/sahai_core/prompt.py").read_text()
+    assert "Hinglish" in core
