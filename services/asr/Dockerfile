@@ -4,7 +4,11 @@ WORKDIR /srv
 
 # git: needed for the parler-tts pip install below (it's not on PyPI, only
 # installable from its GitHub repo). python:3.11-slim doesn't ship it.
-RUN apt-get update && apt-get install -y --no-install-recommends git \
+# git: parler-tts is install-from-git only.
+# ffmpeg: browsers record WebM/Opus (Chrome) or MP4/AAC (Safari), and
+#   libsndfile reads neither. Decoding through ffmpeg means one code path
+#   for every container a MediaRecorder can produce, instead of guessing.
+RUN apt-get update && apt-get install -y --no-install-recommends git ffmpeg \
  && rm -rf /var/lib/apt/lists/*
 
 COPY libs/sahai-core /srv/libs/sahai-core

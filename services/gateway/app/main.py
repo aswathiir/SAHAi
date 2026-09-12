@@ -67,6 +67,13 @@ _hits: dict[str, deque[float]] = defaultdict(deque)
 # numbers live apart. `tests/test_deadline_ladder.py` asserts it.
 GATEWAY_TIMEOUT_S = 270.0
 SESSION_TIMEOUT_S = 240.0
+# Speech synthesis is a bonus on top of a reply the learner already has, so it
+# gets its own short budget rather than the request-path one. Measured on this
+# stack, indic-parler-tts needs many minutes for a single short sentence on
+# CPU — Docker Desktop passes no GPU through — and waiting that out would turn
+# a finished answer into a hung turn. Env-tunable so a GPU deployment, where
+# this is a second or two, can raise it.
+TTS_BUDGET_S = float(os.getenv("SAHAI_TTS_BUDGET_S", "45"))
 # Health and mastery are on the request path but must never dominate it: a slow
 # tracer should cost a tailored hint, not the turn.
 PROBE_TIMEOUT_S = 3.0
@@ -365,7 +372,11 @@ async def submit(
 
 @app.websocket("/v1/ws/voice/{session_id}")
 async def voice_turn(
-    websocket: WebSocket, session_id: str, learner_id: str = "me", lang: str = "hi"
+    websocket: WebSocket,
+    session_id: str,
+    learner_id: str = "me",
+    lang: str = "hi",
+    problem_id: str | None = None,
 ) -> None:
     """Voice front-end for an existing tutoring session.
 
@@ -377,7 +388,16 @@ async def voice_turn(
 
     Deliberately reuses the exact same /sessions/{id}/turns call the text
     chat path uses, so voice goes through identical tutor/reward logic — this
-    is a new front door onto the existing pipeline, not a parallel one.
+    is a new front door onto the existing pipeline, not a parallel one. That
+    includes the personalisation: `problem_id` is resolved to skills and
+    mastery here exactly as it is for a typed turn, because a voice turn that
+    quietly skipped it would be a second, worse tutor wearing the same face.
+
+    Each stage reports as it finishes rather than the client waiting out the
+    whole pipeline in silence. That matters most here: ASR takes seconds but
+    generation can take minutes on CPU, and a learner who has just spoken has
+    no idea whether they were heard. Sending the transcript the moment it
+    exists turns a blind wait into a conversation.
     """
     await websocket.accept()
     try:
@@ -401,9 +421,25 @@ async def voice_turn(
                     await websocket.send_json({"error": "empty_transcript"})
                     continue
 
+                # Heard you. Sent before generation starts, not after it ends.
+                await websocket.send_json(
+                    {"stage": "transcribed", "transcript": transcript}
+                )
+
+                problem = PROBLEMS_BY_ID.get(problem_id or "")
+                payload = {"content": transcript}
+                if problem:
+                    payload["learner_context"] = _learner_context(
+                        problem.get("skills", []), await _mastery_for(learner_id)
+                    )
+                    payload["problem_statement"] = (
+                        problem.get("description") or problem.get("title", "")
+                    )
+
+                await websocket.send_json({"stage": "thinking"})
                 turn_resp = await app.state.http.post(
                     f"{SESSION_URL}/sessions/{session_id}/turns",
-                    json={"content": transcript},
+                    json=payload,
                     headers=_trace(),
                 )
                 if turn_resp.status_code >= 400:
@@ -414,16 +450,24 @@ async def voice_turn(
                 turn_body = turn_resp.json()
                 tutor_reply = turn_body["tutor_reply"]
 
-                tts_resp = await app.state.http.post(
-                    f"{ASR_URL}/synthesize",
-                    json={"text": tutor_reply, "language": lang},
-                    headers=_trace(),
-                )
+                await websocket.send_json({"stage": "speaking", "tutor_reply": tutor_reply})
+
+                # Bounded, and never fatal. The learner already has the reply in
+                # text from the "speaking" frame above; audio that arrives late
+                # or not at all costs them nothing they were waiting on.
                 audio_b64 = None
-                if tts_resp.status_code < 400:
-                    audio_b64 = base64.b64encode(tts_resp.content).decode("ascii")
-                # TTS failing (e.g. still on the stub backend) shouldn't lose
-                # the turn — text-only is a legitimate degraded response.
+                try:
+                    tts_resp = await app.state.http.post(
+                        f"{ASR_URL}/synthesize",
+                        json={"text": tutor_reply, "language": lang},
+                        headers=_trace(),
+                        timeout=TTS_BUDGET_S,
+                    )
+                    if tts_resp.status_code < 400:
+                        audio_b64 = base64.b64encode(tts_resp.content).decode("ascii")
+                except httpx.HTTPError as exc:
+                    logger.warning("tts unavailable, replying text-only: %s",
+                                   type(exc).__name__)
 
                 await websocket.send_json(
                     {
@@ -431,6 +475,7 @@ async def voice_turn(
                         "tutor_reply": tutor_reply,
                         "status": turn_body["status"],
                         "audio_b64": audio_b64,
+                        "speech": audio_b64 is not None,
                     }
                 )
             except httpx.HTTPError as exc:

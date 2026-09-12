@@ -58,3 +58,33 @@ def test_audio_too_large_is_413():
             "/transcribe", files={"audio": ("clip.wav", big, "audio/wav")}
         )
     assert r.status_code == 413
+
+
+def test_audio_decode_does_not_use_torchaudio_load():
+    """torchaudio.load dispatches to TorchCodec in 2.11, which is not installed,
+    so every real-audio request failed with "TorchCodec is required for
+    load_with_torchcodec". The voice path only ever worked through the
+    `transcript` text field, which is why nothing caught it.
+    """
+    import pathlib
+
+    src = pathlib.Path(__file__).resolve().parent.parent / "app" / "backends.py"
+    text = src.read_text()
+    # The call, not the mention — the replacement's own comment explains what
+    # it replaced, and an earlier version of this test matched that comment.
+    assert "torchaudio.load(" not in text
+    assert "_decode_pcm16" in text
+
+
+def test_decode_runs_everything_through_ffmpeg():
+    """MediaRecorder emits WebM/Opus on Chrome and MP4/AAC on Safari, and
+    libsndfile reads neither. One decode path beats a format guess."""
+    import pathlib
+
+    src = pathlib.Path(__file__).resolve().parent.parent / "app" / "backends.py"
+    text = src.read_text()
+    assert '"ffmpeg"' in text
+    assert "s16le" in text and "16000" in text
+
+    dockerfile = (pathlib.Path(__file__).resolve().parent.parent / "Dockerfile").read_text()
+    assert "ffmpeg" in dockerfile, "the decoder must actually be in the image"
