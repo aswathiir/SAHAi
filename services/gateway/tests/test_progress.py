@@ -347,3 +347,21 @@ def test_diagnostic_pins_the_learner_for_the_whole_run():
     assert "runAs" in page
     assert "state.runAs ||" in page, "learnerId() must prefer the pinned value"
     assert "disabled = true" in page, "the box must not claim one learner while grading another"
+
+
+def test_gateway_forwards_the_learner_to_session():
+    """Session checks that the caller owns the session; without the header
+    forwarded, that check has nothing to compare against and every call 401s."""
+    import inspect
+
+    import app.main as m
+
+    for name in ("add_turn", "submit", "get_session", "voice_turn"):
+        src = inspect.getsource(getattr(m, name))
+        assert "_trace(learner" in src, f"{name} calls session without identity"
+        # Checking the call site is not enough: get_session forwarded
+        # `_trace(learner)` while the handler only did `await _learner(...)`
+        # without binding the result, so every read raised NameError at
+        # runtime while this assertion passed.
+        bound = "learner = await _learner(" in src or "learner_id: str" in src
+        assert bound, f"{name} references `learner` without binding it"

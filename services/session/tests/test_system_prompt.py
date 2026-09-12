@@ -94,3 +94,38 @@ def test_every_session_response_populates_it():
         assert "problem_id=row.problem_id" in block, (
             f"SessionOut built at line {line} without problem_id"
         )
+
+
+def test_session_endpoints_check_ownership():
+    """`add_turn`, `submit` and `get_session` took a session id and no identity
+    at all, so any learner id could read or write any session.
+
+    The UI never did that deliberately, but nothing downstream would have
+    refused it — which is what let a mid-conversation learner switch on the
+    tutor page append one learner's turns to another's transcript. Identity is
+    still the gateway's stub header rather than a verified token; checking
+    ownership against it is not authentication, but it closes the gap between
+    "the UI would not do that" and "the service would not allow it".
+    """
+    import inspect
+
+    import app.main as m
+
+    for name in ("add_turn", "submit", "get_session"):
+        src = inspect.getsource(getattr(m, name))
+        assert "_load_owned(" in src, f"{name} loads a session without checking the owner"
+        assert "x_learner_id" in src, f"{name} does not take an identity"
+
+
+def test_mismatched_owner_looks_like_a_missing_session():
+    """404 rather than 403: whether a session exists is not something a
+    non-owner should be able to probe."""
+    import inspect
+
+    from app.main import _load_owned
+
+    src = inspect.getsource(_load_owned)
+    # The raise, not the prose — the docstring explains the 404-over-403 choice
+    # and an earlier version of this test matched its own explanation.
+    assert "HTTPException(404" in src
+    assert "HTTPException(403" not in src

@@ -23,7 +23,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 from sahai_core import TERMINATION_PHRASES, Dialogue, RuleBasedJudge, Turn, system_prompt
 from sqlalchemy import ForeignKey, String, Text, select
@@ -239,6 +239,40 @@ async def _load(db: AsyncSession, session_id: str) -> SessionRow:
     return row
 
 
+LearnerHeader = Header(
+    default=None,
+    alias="x-learner-id",
+    description="Who is asking. Forwarded by the gateway from its own header.",
+)
+
+
+async def _load_owned(
+    db: AsyncSession, session_id: str, learner_id: str | None
+) -> SessionRow:
+    """Load a session and check the caller owns it.
+
+    `add_turn`, `submit` and `get_session` took a session id and no identity at
+    all, so any learner id could read or write any session. The UI never did
+    that on purpose, but nothing downstream would have refused it — which is
+    what made the mid-conversation learner switch on the tutor page able to
+    append one learner's turns to another's transcript.
+
+    Identity here is still the stub the gateway uses: a header, not a verified
+    token. Checking ownership against it is not authentication, but it does
+    close the gap between "the UI would not do that" and "the service would not
+    allow it".
+
+    404 rather than 403 on a mismatch: whether a session exists is not
+    something a non-owner should be able to probe.
+    """
+    if not learner_id:
+        raise HTTPException(401, "x-learner-id header required")
+    row = await _load(db, session_id)
+    if row.learner_id != learner_id:
+        raise HTTPException(404, "session not found")
+    return row
+
+
 @app.post("/sessions", response_model=SessionOut)
 async def start(req: StartRequest, db: AsyncSession = Depends(get_db)) -> SessionOut:
     row = SessionRow(
@@ -259,10 +293,13 @@ async def start(req: StartRequest, db: AsyncSession = Depends(get_db)) -> Sessio
 
 @app.post("/sessions/{session_id}/turns", response_model=SessionOut)
 async def add_turn(
-    session_id: str, req: TurnIn, db: AsyncSession = Depends(get_db)
+    session_id: str,
+    req: TurnIn,
+    x_learner_id: str | None = LearnerHeader,
+    db: AsyncSession = Depends(get_db),
 ) -> SessionOut:
     """Record the learner's turn and return the tutor's reply."""
-    row = await _load(db, session_id)
+    row = await _load_owned(db, session_id, x_learner_id)
     if row.status != "active":
         raise HTTPException(409, f"session is {row.status}")
     if len(row.turns) >= MAX_TURNS * 2:
@@ -325,7 +362,10 @@ async def add_turn(
 
 @app.post("/sessions/{session_id}/submit")
 async def submit(
-    session_id: str, req: SubmitRequest, db: AsyncSession = Depends(get_db)
+    session_id: str,
+    req: SubmitRequest,
+    x_learner_id: str | None = LearnerHeader,
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Run the learner's code, then advance their mastery on the outcome.
 
@@ -333,7 +373,7 @@ async def submit(
     measured by whether the learner can now solve it, verified by execution
     rather than by anyone's opinion.
     """
-    row = await _load(db, session_id)
+    row = await _load_owned(db, session_id, x_learner_id)
 
     result = await _call_executor(req.code, req.function_name, req.test_cases)
     solved = bool(result["fully_passed"])
@@ -357,8 +397,12 @@ async def submit(
 
 
 @app.get("/sessions/{session_id}", response_model=SessionOut)
-async def get_session(session_id: str, db: AsyncSession = Depends(get_db)) -> SessionOut:
-    row = await _load(db, session_id)
+async def get_session(
+    session_id: str,
+    x_learner_id: str | None = LearnerHeader,
+    db: AsyncSession = Depends(get_db),
+) -> SessionOut:
+    row = await _load_owned(db, session_id, x_learner_id)
     return SessionOut(
         session_id=row.id,
         status=row.status,

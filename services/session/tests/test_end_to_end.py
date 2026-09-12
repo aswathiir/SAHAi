@@ -73,6 +73,13 @@ async def stack():
     await session_app.state.http.aclose()
 
 
+def _as(learner: str) -> dict[str, str]:
+    """Session endpoints check that the caller owns the session, so every
+    session-scoped call needs the owner's identity — the same stub header the
+    gateway forwards."""
+    return {"x-learner-id": learner}
+
+
 async def test_full_loop_solved(stack):
     """Start a session, converse, submit a correct solution, mastery rises."""
     r = await stack.post("/sessions", json={
@@ -84,7 +91,7 @@ async def test_full_loop_solved(stack):
 
     # Two exchanges with the tutor.
     for msg in ["I don't understand how to start.", "Maybe I track what I've seen?"]:
-        r = await stack.post(f"/sessions/{sid}/turns", json={"content": msg})
+        r = await stack.post(f"/sessions/{sid}/turns", json={"content": msg}, headers=_as("e2e-user"))
         assert r.status_code == 200
         assert r.json()["tutor_reply"]
 
@@ -97,7 +104,7 @@ async def test_full_loop_solved(stack):
     r = await stack.post(f"/sessions/{sid}/submit", json={
         "code": SOLUTION, "function_name": "first_repeated_char",
         "test_cases": TESTS, "skills": ["strings", "hash_maps"],
-    })
+    }, headers=_as("e2e-user"))
     assert r.status_code == 200
     result = r.json()
     assert result["solved"] is True
@@ -118,12 +125,12 @@ async def test_full_loop_failed_submission(stack):
         "learner_id": "e2e-fail", "problem_id": "mbpp-11", "problem_title": "x",
     })
     sid = r.json()["session_id"]
-    await stack.post(f"/sessions/{sid}/turns", json={"content": "help"})
+    await stack.post(f"/sessions/{sid}/turns", json={"content": "help"}, headers=_as("e2e-fail"))
 
     r = await stack.post(f"/sessions/{sid}/submit", json={
         "code": WRONG, "function_name": "first_repeated_char",
         "test_cases": TESTS, "skills": ["strings"],
-    })
+    }, headers=_as("e2e-fail"))
     body = r.json()
     assert body["solved"] is False
     assert body["pass_rate"] < 1.0
@@ -136,12 +143,12 @@ async def test_tutor_never_leaks_code_through_the_session(stack):
     })
     sid = r.json()["session_id"]
     for _ in range(3):
-        await stack.post(f"/sessions/{sid}/turns", json={"content": "how do I do this?"})
+        await stack.post(f"/sessions/{sid}/turns", json={"content": "how do I do this?"}, headers=_as("e2e-ped"))
 
     r = await stack.post(f"/sessions/{sid}/submit", json={
         "code": SOLUTION, "function_name": "first_repeated_char",
         "test_cases": TESTS, "skills": ["strings"],
-    })
+    }, headers=_as("e2e-ped"))
     assert r.json()["pedagogy_score"] == 1.0
 
 
@@ -151,9 +158,9 @@ async def test_session_survives_reload(stack):
         "learner_id": "e2e-persist", "problem_id": "p", "problem_title": "t",
     })
     sid = r.json()["session_id"]
-    await stack.post(f"/sessions/{sid}/turns", json={"content": "first message"})
+    await stack.post(f"/sessions/{sid}/turns", json={"content": "first message"}, headers=_as("e2e-persist"))
 
-    fetched = (await stack.get(f"/sessions/{sid}")).json()
+    fetched = (await stack.get(f"/sessions/{sid}", headers=_as("e2e-persist"))).json()
     assert fetched["turns"][0]["content"] == "first message"
     assert len(fetched["turns"]) == 2
 
@@ -164,12 +171,32 @@ async def test_termination_phrase_moves_session_state(stack):
     })
     sid = r.json()["session_id"]
     r = await stack.post(f"/sessions/{sid}/turns",
-                         json={"content": "I think I can solve it now"})
+                         json={"content": "I think I can solve it now"}, headers=_as("e2e-term"))
     assert r.json()["status"] == "ready_to_submit"
 
 
 async def test_unknown_session_is_404(stack):
-    assert (await stack.get("/sessions/does-not-exist")).status_code == 404
+    assert (
+        await stack.get("/sessions/does-not-exist", headers=_as("e2e-user"))
+    ).status_code == 404
+
+
+async def test_session_requires_an_identity(stack):
+    """Session endpoints check the caller owns the session, so a request with
+    no identity cannot be answered at all."""
+    assert (await stack.get("/sessions/anything")).status_code == 401
+
+
+async def test_another_learner_cannot_read_your_session(stack):
+    """404, not 403 — whether a session exists is not something a non-owner
+    should be able to probe."""
+    r = await stack.post("/sessions", json={
+        "learner_id": "owner-a", "problem_id": "p", "problem_title": "t",
+    })
+    sid = r.json()["session_id"]
+    assert (await stack.get(f"/sessions/{sid}", headers=_as("owner-a"))).status_code == 200
+    # owner-b on purpose: this is the case the check exists for.
+    assert (await stack.get(f"/sessions/{sid}", headers=_as("owner-b"))).status_code == 404
 
 
 async def test_response_transcript_matches_database(stack):
@@ -187,8 +214,9 @@ async def test_response_transcript_matches_database(stack):
 
     for i in range(3):
         returned = (await stack.post(
-            f"/sessions/{sid}/turns", json={"content": f"message {i}"}
+            f"/sessions/{sid}/turns", json={"content": f"message {i}"},
+            headers=_as("e2e-stale"),
         )).json()["turns"]
-        persisted = (await stack.get(f"/sessions/{sid}")).json()["turns"]
+        persisted = (await stack.get(f"/sessions/{sid}", headers=_as("e2e-stale"))).json()["turns"]
         assert returned == persisted, f"exchange {i}: response lags the database"
         assert len(returned) == (i + 1) * 2
