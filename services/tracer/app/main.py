@@ -132,6 +132,25 @@ class ZPDRequest(BaseModel):
     n: int = Field(default=4, ge=1, le=64)
 
 
+# Self-reported confidence -> BKT prior. Deliberately compressed into [0.15,
+# 0.65]: a learner saying "I know this" is evidence, not proof, and anchoring
+# a prior at 0.9 would take several failures to walk back. The top of the range
+# sits just inside the ZPD band (0.3-0.7) so a confident learner is handed
+# work at the edge of what they claim rather than being skipped past it.
+PLACEMENT_PRIORS = {
+    "none": 0.15,
+    "seen": 0.30,
+    "practiced": 0.50,
+    "confident": 0.65,
+}
+
+
+class PlacementRequest(BaseModel):
+    learner_id: str = Field(max_length=64)
+    # skill -> one of PLACEMENT_PRIORS
+    responses: dict[str, str] = Field(max_length=64)
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok", "service": "sahai-tracer"}
@@ -215,6 +234,64 @@ async def observe(req: ObserveRequest, db: AsyncSession = Depends(get_db)) -> Ma
         learner_id=req.learner_id,
         skills=tracer.skills,
         ability=tracer.get_ability(),
+    )
+
+
+@app.post("/placement", response_model=MasteryOut)
+async def placement(
+    req: PlacementRequest, db: AsyncSession = Depends(get_db)
+) -> MasteryOut:
+    """Seed per-skill priors from a learner's self-assessment.
+
+    BKT starts every learner at one global `p_init` (0.3) for every skill, so a
+    first session picks problems as if the learner knew nothing about anything.
+    A placement survey replaces that flat prior with a per-skill one, which is
+    what makes the first assignment fit the person rather than the default.
+
+    **Only seeds skills with no observations.** A self-report is weaker evidence
+    than a graded attempt, so it must never overwrite what the learner has
+    actually demonstrated — otherwise retaking the survey would silently erase
+    real history. Skills already observed are returned unchanged.
+
+    Nothing is written to `observations`: this is a prior, not an attempt, and
+    logging it as one would corrupt the sequence a knowledge-tracing model
+    trains on.
+    """
+    unknown = sorted(set(req.responses.values()) - set(PLACEMENT_PRIORS))
+    if unknown:
+        raise HTTPException(
+            400, f"unknown confidence {unknown}; expected {sorted(PLACEMENT_PRIORS)}"
+        )
+
+    for skill, level in req.responses.items():
+        row = (
+            await db.execute(
+                select(SkillMastery).where(
+                    SkillMastery.learner_id == req.learner_id,
+                    SkillMastery.skill == skill,
+                )
+            )
+        ).scalar_one_or_none()
+
+        if row is None:
+            db.add(
+                SkillMastery(
+                    learner_id=req.learner_id,
+                    skill=skill,
+                    mastery=PLACEMENT_PRIORS[level],
+                    observations=0,
+                )
+            )
+        elif not row.observations:
+            # Seeded before but never attempted — a re-take may still move it.
+            row.mastery = PLACEMENT_PRIORS[level]
+
+    await db.commit()
+    skills = await _load(db, req.learner_id)
+    return MasteryOut(
+        learner_id=req.learner_id,
+        skills=skills,
+        ability=_tracer_from(skills).get_ability(),
     )
 
 

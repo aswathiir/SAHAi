@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SAHAi — Your Record</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,600;9..144,900&family=Archivo:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink:      #0d1030;
+    --ink-2:    #141845;
+    --ink-3:    #1c2158;
+    --cream:    #f2ece1;
+    --cream-dim:#9a99b8;
+    --pink:     #f96167;
+    --pink-dim: #7a2f41;
+    --rule:     #272c66;
+    --ok:       #4ec98a;
+
+    --display: "Fraunces", "Iowan Old Style", Georgia, serif;
+    --body: "Archivo", "Helvetica Neue", Helvetica, sans-serif;
+    --mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--cream);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.5;
+    /* Grain: keeps the large ink fields from reading as flat digital black. */
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(249,97,103,.13), transparent 70%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
+    min-height: 100vh;
+  }
+
+  a { color: inherit; }
+
+  /* ---- chrome ---- */
+  header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 20px; flex-wrap: wrap;
+    padding: 26px 40px 20px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .brand {
+    font-family: var(--display);
+    font-weight: 900; font-size: 25px; letter-spacing: -.02em;
+    font-variation-settings: "opsz" 100;
+  }
+  .brand em { color: var(--pink); font-style: normal; }
+  nav { display: flex; gap: 22px; align-items: center; font-size: 13px; }
+  nav a {
+    text-decoration: none; color: var(--cream-dim);
+    padding-bottom: 3px; border-bottom: 1px solid transparent;
+    transition: color .18s, border-color .18s;
+  }
+  nav a:hover { color: var(--cream); border-color: var(--pink); }
+  nav a.here { color: var(--cream); border-color: var(--pink); }
+  nav input {
+    background: var(--ink-2); border: 1px solid var(--rule); color: var(--cream);
+    border-radius: 5px; padding: 5px 9px; font: 400 13px var(--mono); width: 104px;
+  }
+  nav input:focus { outline: none; border-color: var(--pink); }
+
+  main { padding: 0 40px 72px; max-width: 1180px; margin: 0 auto; }
+
+  /* staggered load */
+  .reveal { opacity: 0; transform: translateY(14px); animation: rise .62s cubic-bezier(.2,.7,.3,1) forwards; }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { animation: none; opacity: 1; transform: none; }
+  }
+
+  section { margin-top: 46px; }
+  h2 {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    text-transform: uppercase; letter-spacing: .16em;
+    color: var(--cream-dim); margin: 0 0 18px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  h2::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
+
+  /* ---- the headline stat block ---- */
+  .ledger {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px; background: var(--rule);
+    border: 1px solid var(--rule); border-radius: 12px; overflow: hidden;
+    margin-top: 34px;
+  }
+  .cell { background: var(--ink-2); padding: 20px 22px 18px; }
+  .cell .n {
+    font-family: var(--display); font-variation-settings: "opsz" 144;
+    font-weight: 900; font-size: 46px; line-height: .95; letter-spacing: -.035em;
+    display: block;
+  }
+  .cell .n.accent { color: var(--pink); }
+  .cell .k {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .13em;
+    color: var(--cream-dim); margin-top: 9px; display: block;
+  }
+  .cell .sub { font: 400 11px var(--mono); color: var(--cream-dim); opacity: .75; margin-top: 3px; display: block; }
+
+  /* ---- activity grid ---- */
+  .grid-wrap { overflow-x: auto; padding-bottom: 6px; }
+  .heat { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 13px); gap: 3px; }
+  .heat i {
+    width: 13px; height: 13px; border-radius: 3px;
+    background: var(--ink-2); border: 1px solid rgba(255,255,255,.04);
+    display: block;
+  }
+  .heat i[data-l="1"] { background: var(--pink-dim); }
+  .heat i[data-l="2"] { background: #b0424f; }
+  .heat i[data-l="3"] { background: #dc5159; }
+  .heat i[data-l="4"] { background: var(--pink); box-shadow: 0 0 9px rgba(249,97,103,.45); }
+  .heat i:hover { outline: 1px solid var(--cream); outline-offset: 1px; }
+  .legend {
+    display: flex; align-items: center; gap: 7px; justify-content: flex-end;
+    font: 400 10.5px var(--mono); color: var(--cream-dim); margin-top: 12px;
+  }
+  .legend i { width: 11px; height: 11px; border-radius: 3px; display: block; }
+
+  /* ---- skills ---- */
+  .skills { display: grid; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); gap: 11px 30px; }
+  .skill { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: baseline; }
+  .skill .nm { font-size: 13.5px; }
+  .skill .pc { font: 700 12px var(--mono); color: var(--cream-dim); }
+  .skill .bar {
+    grid-column: 1 / -1; height: 5px; border-radius: 3px;
+    background: var(--ink-3); overflow: hidden;
+  }
+  .skill .bar span {
+    display: block; height: 100%; border-radius: 3px;
+    background: linear-gradient(90deg, var(--pink-dim), var(--pink));
+    width: 0; transition: width .85s cubic-bezier(.2,.7,.3,1);
+  }
+  .skill.mastered .pc { color: var(--ok); }
+  .skill.mastered .bar span { background: linear-gradient(90deg, #2f7d5a, var(--ok)); }
+
+  /* ---- tracks ---- */
+  .tracks { display: grid; grid-template-columns: repeat(auto-fit, minmax(285px, 1fr)); gap: 16px; }
+  .track {
+    background: var(--ink-2); border: 1px solid var(--rule);
+    border-radius: 12px; padding: 20px 21px 18px;
+    display: flex; flex-direction: column; gap: 11px;
+    transition: border-color .2s, transform .2s;
+  }
+  .track:hover { border-color: var(--pink); transform: translateY(-2px); }
+  .track h3 {
+    font-family: var(--display); font-weight: 600; font-size: 19px;
+    margin: 0; letter-spacing: -.01em;
+  }
+  .track p { margin: 0; font-size: 13px; color: var(--cream-dim); line-height: 1.45; }
+  .track .meta { display: flex; justify-content: space-between; align-items: baseline; font: 400 11px var(--mono); color: var(--cream-dim); }
+  .track .bar { height: 5px; border-radius: 3px; background: var(--ink-3); overflow: hidden; }
+  .track .bar span { display: block; height: 100%; background: var(--pink); width: 0; transition: width .85s cubic-bezier(.2,.7,.3,1); }
+  .track .tags { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tag {
+    font: 400 10px var(--mono); padding: 2px 7px; border-radius: 999px;
+    border: 1px solid var(--rule); color: var(--cream-dim);
+  }
+  .tag.on { border-color: var(--ok); color: var(--ok); }
+
+  /* ---- placement ---- */
+  #placement { border: 1px solid var(--rule); border-radius: 14px; background: var(--ink-2); padding: 28px 30px 26px; }
+  #placement h2 { margin-top: 0; }
+  .lede { font-family: var(--display); font-size: 21px; font-weight: 300; line-height: 1.38; margin: 0 0 22px; max-width: 60ch; }
+  .lede b { font-weight: 600; color: var(--pink); }
+  .q { display: grid; grid-template-columns: 160px 1fr; gap: 12px; align-items: center; padding: 9px 0; border-top: 1px solid var(--rule); }
+  .q:first-of-type { border-top: none; }
+  .q .nm { font-size: 14px; }
+  .opts { display: flex; gap: 6px; flex-wrap: wrap; }
+  .opts button {
+    font-family: var(--body); font-size: 12px; padding: 6px 13px;
+    border-radius: 999px; border: 1px solid var(--rule);
+    background: transparent; color: var(--cream-dim); cursor: pointer;
+    transition: all .15s;
+  }
+  .opts button:hover { border-color: var(--cream-dim); color: var(--cream); }
+  .opts button[aria-pressed="true"] {
+    background: var(--pink); border-color: var(--pink); color: #2a0a10; font-weight: 600;
+  }
+  .cta {
+    margin-top: 22px; font-family: var(--body); font-size: 14px; font-weight: 600;
+    padding: 11px 26px; border-radius: 8px; border: none;
+    background: var(--pink); color: #2a0a10; cursor: pointer;
+    transition: transform .15s, box-shadow .15s;
+  }
+  .cta:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(249,97,103,.3); }
+  .cta:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  .empty {
+    font-family: var(--display); font-size: 17px; font-weight: 300;
+    color: var(--cream-dim); padding: 26px 0; line-height: 1.5;
+  }
+  .empty a { color: var(--pink); }
+  .hidden { display: none !important; }
+  .err {
+    border-left: 2px solid var(--pink); padding: 9px 14px; margin-top: 18px;
+    font: 400 12px var(--mono); color: var(--pink); background: rgba(249,97,103,.07);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">SAHA<em>i</em></div>
+  <nav>
+    <a href="/">Tutor</a>
+    <a href="/progress.html" class="here">Record</a>
+    <label style="color:var(--cream-dim)">learner</label>
+    <input id="learner-id" placeholder="me" spellcheck="false">
+  </nav>
+</header>
+
+<main>
+  <div id="err" class="err hidden"></div>
+
+  <!-- Shown only until a placement exists. -->
+  <section id="placement" class="reveal hidden" style="animation-delay:.05s">
+    <h2>Placement</h2>
+    <p class="lede">
+      Before the tutor picks anything, tell it <b>where you actually are</b>.
+      Everyone otherwise starts from the same flat assumption — that you know
+      nothing about everything — and the first session is wasted finding out.
+    </p>
+    <div id="questions"></div>
+    <button id="save-placement" class="cta" disabled>Set my starting point</button>
+  </section>
+
+  <div id="record" class="hidden">
+    <section class="reveal" style="animation-delay:.05s">
+      <div class="ledger">
+        <div class="cell">
+          <span class="n accent" id="s-streak">0</span>
+          <span class="k">Day streak</span>
+          <span class="sub" id="s-streak-best">best 0</span>
+        </div>
+        <div class="cell">
+          <span class="n" id="s-solved">0</span>
+          <span class="k">Solved</span>
+          <span class="sub" id="s-of">of 0</span>
+        </div>
+        <div class="cell">
+          <span class="n" id="s-attempted">0</span>
+          <span class="k">Attempted</span>
+          <span class="sub" id="s-rate">—</span>
+        </div>
+        <div class="cell">
+          <span class="n" id="s-days">0</span>
+          <span class="k">Active days</span>
+          <span class="sub" id="s-mastered">0 skills mastered</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="reveal" style="animation-delay:.14s">
+      <h2>Activity</h2>
+      <div class="grid-wrap"><div class="heat" id="heat"></div></div>
+      <div class="legend">
+        less <i style="background:var(--ink-2);border:1px solid rgba(255,255,255,.06)"></i>
+        <i style="background:var(--pink-dim)"></i>
+        <i style="background:#b0424f"></i>
+        <i style="background:#dc5159"></i>
+        <i style="background:var(--pink)"></i> more
+      </div>
+    </section>
+
+    <section class="reveal" style="animation-delay:.23s">
+      <h2>Skills</h2>
+      <div class="skills" id="skills"></div>
+      <div class="empty hidden" id="skills-empty">
+        No skill history yet. <a href="/">Work a problem</a> and it lands here.
+      </div>
+    </section>
+
+    <section class="reveal" style="animation-delay:.32s">
+      <h2>Courses</h2>
+      <div class="tracks" id="tracks"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const SKILL_LABELS = {
+  general: "General logic", math: "Math", strings: "Strings", arrays: "Arrays",
+  hash_maps: "Hash maps", sorting: "Sorting", two_pointers: "Two pointers",
+  heaps: "Heaps", recursion: "Recursion", trees: "Trees",
+  bit_manipulation: "Bit manipulation",
+};
+const LEVELS = [
+  ["none", "New to it"],
+  ["seen", "Seen it"],
+  ["practiced", "Practised"],
+  ["confident", "Confident"],
+];
+const SKILLS = Object.keys(SKILL_LABELS);
+
+const $ = id => document.getElementById(id);
+
+function learnerId() {
+  return ($('learner-id').value.trim()) || 'me';
+}
+$('learner-id').value = localStorage.getItem('sahai_learner') || 'me';
+$('learner-id').addEventListener('change', e => {
+  localStorage.setItem('sahai_learner', e.target.value.trim() || 'me');
+  load();
+});
+
+async function api(path, opts = {}) {
+  const headers = Object.assign(
+    { 'x-learner-id': learnerId() },
+    opts.body ? { 'content-type': 'application/json' } : {},
+    opts.headers || {}
+  );
+  const res = await fetch(path, Object.assign({}, opts, { headers }));
+  if (!res.ok) throw new Error(`${res.status} ${(await res.text()).slice(0, 160)}`);
+  return res.json();
+}
+
+function showErr(msg) {
+  const el = $('err');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+/* ---------- placement ---------- */
+const answers = {};
+
+function renderPlacement() {
+  $('questions').innerHTML = SKILLS.map(s => `
+    <div class="q">
+      <span class="nm">${SKILL_LABELS[s]}</span>
+      <div class="opts" data-skill="${s}">
+        ${LEVELS.map(([v, label]) =>
+          `<button type="button" data-v="${v}" aria-pressed="false">${label}</button>`
+        ).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  $('questions').addEventListener('click', e => {
+    const btn = e.target.closest('button[data-v]');
+    if (!btn) return;
+    const group = btn.parentElement;
+    [...group.children].forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+    answers[group.dataset.skill] = btn.dataset.v;
+    $('save-placement').disabled = Object.keys(answers).length < SKILLS.length;
+  });
+}
+
+$('save-placement').addEventListener('click', async () => {
+  const btn = $('save-placement');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    await api('/v1/me/placement', {
+      method: 'POST',
+      body: JSON.stringify({ responses: answers }),
+    });
+    await load();
+  } catch (e) {
+    showErr(`Could not save placement — ${e.message}`);
+    btn.disabled = false;
+    btn.textContent = 'Set my starting point';
+  }
+});
+
+/* ---------- activity grid ---------- */
+const WEEKS = 26;
+
+function renderHeat(activity) {
+  const byDate = Object.fromEntries(activity.map(a => [a.date, a]));
+  const today = new Date();
+  // Start on the Sunday that keeps exactly WEEKS columns ending this week.
+  const start = new Date(today);
+  start.setDate(start.getDate() - (WEEKS * 7 - 1) - today.getDay());
+
+  const peak = Math.max(1, ...activity.map(a => a.total));
+  const cells = [];
+  for (let i = 0; i < WEEKS * 7 + today.getDay() + 1; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    if (d > today) break;
+    const iso = d.toISOString().slice(0, 10);
+    const day = byDate[iso];
+    const n = day ? day.total : 0;
+    // Quartiles of the learner's own peak — an absolute scale would leave a
+    // new learner's grid uniformly dark and tell them nothing.
+    const level = n === 0 ? 0 : Math.min(4, Math.ceil((n / peak) * 4));
+    const label = n === 0
+      ? `${iso} — nothing`
+      : `${iso} — ${n} attempt${n === 1 ? '' : 's'}, ${day.solved} solved`;
+    cells.push(`<i data-l="${level}" title="${label}"></i>`);
+  }
+  $('heat').innerHTML = cells.join('');
+}
+
+/* ---------- render ---------- */
+function render(p) {
+  $('s-streak').textContent = p.streak_current;
+  $('s-streak-best').textContent = `best ${p.streak_longest}`;
+  $('s-solved').textContent = p.solved;
+  $('s-of').textContent = `of ${p.total_problems}`;
+  $('s-attempted').textContent = p.attempted;
+  $('s-rate').textContent = p.attempted
+    ? `${Math.round((p.solved / p.attempted) * 100)}% solved`
+    : '—';
+  $('s-days').textContent = p.active_days;
+
+  const skills = Object.entries(p.skills).sort((a, b) => b[1] - a[1]);
+  const mastered = skills.filter(([, v]) => v >= 0.7).length;
+  $('s-mastered').textContent =
+    `${mastered} skill${mastered === 1 ? '' : 's'} mastered`;
+
+  $('skills').innerHTML = skills.map(([s, v]) => `
+    <div class="skill ${v >= 0.7 ? 'mastered' : ''}">
+      <span class="nm">${SKILL_LABELS[s] || s}</span>
+      <span class="pc">${Math.round(v * 100)}%</span>
+      <span class="bar"><span data-w="${(v * 100).toFixed(1)}"></span></span>
+    </div>
+  `).join('');
+  $('skills-empty').classList.toggle('hidden', skills.length > 0);
+
+  $('tracks').innerHTML = p.tracks.map(t => {
+    const pct = t.total ? (t.solved / t.total) * 100 : 0;
+    return `
+      <div class="track">
+        <h3>${t.title}</h3>
+        <p>${t.blurb}</p>
+        <div class="tags">
+          ${t.skills.map(s =>
+            `<span class="tag ${(p.skills[s] || 0) >= 0.7 ? 'on' : ''}">${SKILL_LABELS[s] || s}</span>`
+          ).join('')}
+        </div>
+        <div class="bar"><span data-w="${pct.toFixed(1)}"></span></div>
+        <div class="meta">
+          <span>${t.solved}/${t.total} solved</span>
+          <span>${Math.round(t.mastery * 100)}% mastery</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  renderHeat(p.activity);
+
+  // Deferred so the transition has a frame to animate from zero.
+  requestAnimationFrame(() => {
+    document.querySelectorAll('[data-w]').forEach(el => {
+      el.style.width = el.dataset.w + '%';
+    });
+  });
+}
+
+async function load() {
+  try {
+    const p = await api('/v1/me/progress');
+    $('err').classList.add('hidden');
+    // Placement is the gate: without priors the tutor has nothing to aim at.
+    $('placement').classList.toggle('hidden', p.placed);
+    $('record').classList.toggle('hidden', !p.placed);
+    if (p.placed) render(p);
+  } catch (e) {
+    showErr(`Could not load your record — ${e.message}`);
+  }
+}
+
+renderPlacement();
+load();
+</script>
+</body>
+</html>
