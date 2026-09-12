@@ -139,12 +139,38 @@ def test_next_up_never_recommends_the_fallback_tag():
 
 
 def test_next_up_picks_the_weakest_practisable_skill():
-    from app.main import _next_up
+    """Every bank skill needs a posterior for this to mean anything: an unseen
+    skill is 0.0 by design, so a partial mapping makes the *untouched* skills
+    win rather than the weak one. An earlier version of this test passed only
+    three and was surprised by binary_search."""
+    from app.main import PROBLEMS, UNTRACKED_SKILL, _next_up
 
-    picked = _next_up({"arrays": 0.9, "heaps": 0.1, "sorting": 0.5}, set())
+    bank_skills = {
+        s for p in PROBLEMS for s in p["skills"] if s != UNTRACKED_SKILL
+    }
+    mastery = dict.fromkeys(bank_skills, 0.8)
+    mastery["heaps"] = 0.1
+
+    picked = _next_up(mastery, set())
     assert picked["skill"] == "heaps"
     assert picked["unsolved"] > 0
     assert picked["href"] == "/?skill=heaps"
+
+
+def test_untouched_skill_outranks_a_weak_one():
+    """No posterior means never attempted, which is a better place to start
+    than something already practised badly — and it is why the test above has
+    to supply the whole map."""
+    from app.main import PROBLEMS, UNTRACKED_SKILL, _next_up
+
+    bank_skills = {
+        s for p in PROBLEMS for s in p["skills"] if s != UNTRACKED_SKILL
+    }
+    mastery = dict.fromkeys(bank_skills, 0.8)
+    mastery["heaps"] = 0.1
+    del mastery["trees"]          # never attempted
+
+    assert _next_up(mastery, set())["skill"] == "trees"
 
 
 def test_next_up_skips_a_skill_with_nothing_left_to_do():
