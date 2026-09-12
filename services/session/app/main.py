@@ -161,6 +161,11 @@ class SessionOut(BaseModel):
     status: str
     turns: list[TurnOut]
     tutor_reply: str | None = None
+    # Needed to resume: the page has to know which problem the conversation is
+    # about before it can reattach to it. Optional so the field can be absent
+    # on responses built before a row is loaded.
+    problem_id: str | None = None
+    problem_title: str = ""
 
 
 class SubmitRequest(BaseModel):
@@ -177,6 +182,16 @@ class DiagnosticGrade(BaseModel):
     function_name: str
     test_cases: list[dict]
     skills: list[str] = Field(default_factory=list)
+
+
+class ResumableOut(BaseModel):
+    session_id: str
+    problem_id: str
+    problem_title: str
+    status: str
+    created_at: str
+    turns: int
+    last_role: str
 
 
 @app.get("/health")
@@ -236,7 +251,10 @@ async def start(req: StartRequest, db: AsyncSession = Depends(get_db)) -> Sessio
     )
     db.add(row)
     await db.commit()
-    return SessionOut(session_id=row.id, status=row.status, turns=[])
+    return SessionOut(
+        session_id=row.id, status=row.status, turns=[],
+        problem_id=row.problem_id, problem_title=row.problem_title,
+    )
 
 
 @app.post("/sessions/{session_id}/turns", response_model=SessionOut)
@@ -300,6 +318,8 @@ async def add_turn(
         status=row.status,
         turns=[TurnOut(role=t.role, content=t.content) for t in row.turns],
         tutor_reply=reply["text"],
+        problem_id=row.problem_id,
+        problem_title=row.problem_title,
     )
 
 
@@ -343,6 +363,8 @@ async def get_session(session_id: str, db: AsyncSession = Depends(get_db)) -> Se
         session_id=row.id,
         status=row.status,
         turns=[TurnOut(role=t.role, content=t.content) for t in row.turns],
+        problem_id=row.problem_id,
+        problem_title=row.problem_title,
     )
 
 
@@ -421,3 +443,56 @@ async def diagnostic_grade(req: DiagnosticGrade) -> dict:
         "pass_rate": result.get("pass_rate", 0.0),
         "results": result.get("results", []),
     }
+
+
+RESUMABLE_STATUSES = ("active", "ready_to_submit")
+
+
+@app.get("/sessions", response_model=list[ResumableOut])
+async def list_resumable(
+    learner_id: str, limit: int = 5, db: AsyncSession = Depends(get_db)
+) -> list[ResumableOut]:
+    """A learner's unfinished sessions, newest first.
+
+    Conversations already survive a restart — they are rows in Postgres — but
+    nothing ever surfaced one, so walking away mid-dialogue meant losing it in
+    practice while the data sat there. This is the read that makes the
+    persistence worth having.
+
+    Sessions with no turns are excluded. Selecting a problem creates a row
+    before a word is exchanged, so most `active` rows are a click and nothing
+    more; offering those back as "unfinished work" would bury the real ones.
+    """
+    rows = (
+        await db.execute(
+            select(SessionRow)
+            .options(selectinload(SessionRow.turns))
+            .where(
+                SessionRow.learner_id == learner_id,
+                SessionRow.status.in_(RESUMABLE_STATUSES),
+            )
+            .order_by(SessionRow.created_at.desc())
+        )
+    ).scalars()
+
+    out: list[ResumableOut] = []
+    for row in rows:
+        if not row.turns:
+            continue
+        out.append(
+            ResumableOut(
+                session_id=row.id,
+                problem_id=row.problem_id,
+                problem_title=row.problem_title,
+                status=row.status,
+                created_at=row.created_at,
+                turns=len(row.turns),
+                # "student" means the previous request died before the tutor
+                # replied; the UI can say so instead of the learner discovering
+                # it by sending a turn and getting a 409.
+                last_role=row.turns[-1].role,
+            )
+        )
+        if len(out) >= limit:
+            break
+    return out

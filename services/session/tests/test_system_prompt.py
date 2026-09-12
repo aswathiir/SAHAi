@@ -61,3 +61,36 @@ def test_dangling_student_turn_is_rejected_not_compounded():
     src = inspect.getsource(add_turn)
     assert 'row.turns[-1].role == "student"' in src
     assert "409" in src
+
+
+def test_session_response_carries_the_problem_it_is_about():
+    """Resuming needs it: the page cannot reattach to a conversation without
+    knowing which problem it concerns. It was absent, so `session.problem_id`
+    read as undefined and the resume fell back to the first problem in the
+    bank — reattaching the learner to the wrong conversation."""
+    from app.main import SessionOut
+
+    assert "problem_id" in SessionOut.model_fields
+    assert "problem_title" in SessionOut.model_fields
+
+
+def test_every_session_response_populates_it():
+    """A field nothing fills is worse than no field — it reads as a valid
+    `None` rather than a missing feature."""
+    import inspect
+    import re
+
+    import app.main as m
+
+    src = inspect.getsource(m)
+    sites = list(re.finditer(r"return SessionOut\(", src))
+    assert sites, "no SessionOut constructions found"
+    for site in sites:
+        # Counting occurrences module-wide does not work: ResumableOut sets the
+        # same field, so an earlier version of this test compared 3 against 5
+        # and failed on correct code.
+        block = src[site.start() : site.start() + 300]
+        line = src[: site.start()].count("\n") + 1
+        assert "problem_id=row.problem_id" in block, (
+            f"SessionOut built at line {line} without problem_id"
+        )

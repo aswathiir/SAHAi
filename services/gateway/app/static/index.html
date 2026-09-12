@@ -697,8 +697,53 @@ async function toggleRecording() {
 }
 document.getElementById('mic-btn').addEventListener('click', toggleRecording);
 
-loadProblems();
-refreshMastery();
+// Resuming an unfinished conversation, linked from the record page. The
+// session already exists in Postgres; this reattaches the page to it rather
+// than starting a new one, which would leave the old dialogue orphaned and
+// the learner with two half-finished attempts at the same problem.
+async function resumeSession(sessionId) {
+  let session;
+  try {
+    session = await api(`/v1/sessions/${sessionId}`);
+  } catch (e) {
+    alert(`Could not resume that session — ${e.message}`);
+    return;
+  }
+
+  // Select the problem first: it sets up the panels and bumps the epoch, and
+  // it clears sessionId, so the reattach has to come after.
+  await selectProblem(session.problem_id ?? state.problems[0]?.id);
+
+  state.sessionId = sessionId;
+  setStatus(session.status);
+  renderTurns(session.turns);
+  document.getElementById('chat-card').style.display = '';
+  document.getElementById('submit-card').style.display = '';
+  document.getElementById('start-btn').disabled = true;
+  openVoiceSocket();
+
+  // A dialogue whose last turn is the student's is one whose tutor call died.
+  // Sending a new message returns 409 by design, so say so up front instead of
+  // letting the learner discover it.
+  const turns = session.turns || [];
+  if (turns.length && turns[turns.length - 1].role === 'student') {
+    const box = document.getElementById('turns');
+    const note = document.createElement('div');
+    note.className = 'turn tutor';
+    note.style.opacity = '.75';
+    note.textContent =
+      'Your last message never got a reply — the request failed. Send it again to continue.';
+    box.appendChild(note);
+    box.scrollTop = box.scrollHeight;
+  }
+}
+
+(async () => {
+  await loadProblems();
+  refreshMastery();
+  const resume = new URLSearchParams(location.search).get('session');
+  if (resume) await resumeSession(resume);
+})();
 </script>
 </body>
 </html>

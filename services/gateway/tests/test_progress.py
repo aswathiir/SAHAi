@@ -283,3 +283,40 @@ def test_activity_grid_days_can_be_opened():
     assert "data-date=" in page
     assert "day-detail" in page
     assert 'role="button"' in page, "an activated day needs to be reachable by keyboard"
+
+
+def test_resumable_list_requires_a_learner():
+    assert client.get("/v1/me/sessions").status_code == 401
+
+
+def test_resumable_list_fails_open():
+    """An unavailable session service should cost the learner this list, not
+    the whole record page."""
+    import inspect
+
+    from app.main import my_sessions
+
+    src = inspect.getsource(my_sessions)
+    assert "except Exception" in src
+    assert "return []" in src
+
+
+def test_tutor_page_can_reattach_to_a_session():
+    """Sessions always survived a restart — they are rows in Postgres — but
+    nothing surfaced one, so leaving mid-dialogue lost it in practice while the
+    data sat there untouched."""
+    page = _static("index.html")
+    assert "resumeSession" in page
+    assert "'session'" in page, "the page must read ?session= from the URL"
+    # Resuming must reattach, not start a second conversation about the problem.
+    assert "state.sessionId = sessionId" in page
+
+
+def test_resume_warns_when_the_last_turn_went_unanswered():
+    """A dialogue whose last turn is the student's is one whose tutor call
+    died; sending a new message returns 409 by design. Saying so on resume
+    beats the learner discovering it by being rejected."""
+    page = _static("index.html")
+    assert "never got a reply" in page
+    progress = _static("progress.html")
+    assert "last_role" in progress
