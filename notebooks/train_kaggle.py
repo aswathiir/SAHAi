@@ -402,7 +402,9 @@ evaluator = Evaluator(
 )
 
 # Evaluate on a subset of problems
-eval_problems = load_mbpp(split="test", max_problems=20)
+# Size comes from settings — 20 could not resolve the differences it was
+# being used to judge (sd 0.082 on a 20-problem mean). See settings.py.
+eval_problems = load_mbpp(split="test", max_problems=settings.eval_problems)
 print(f"Evaluating on {len(eval_problems.problems)} test problems...")
 
 student.tracer.reset()

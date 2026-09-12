@@ -46,3 +46,32 @@ def test_extract_function_name():
     assert _extract_function_name("def foo(x):\n    return x") == "foo"
     assert _extract_function_name("def bar(a, b):\n    pass") == "bar"
     assert _extract_function_name("no function here") == "solution"
+
+
+def test_eval_set_is_large_enough_to_resolve_a_run():
+    """20 held-out problems could not distinguish the runs it was judging.
+
+    Bootstrapping a 20-problem mean: a run whose true solve rate is 0.16
+    reports anywhere in [0.00, 0.35], sd 0.082. The entire spread across six
+    runs — 6.2% to 16.3% — is about 1.3 standard deviations, so every
+    comparison rested on roughly two problems. This pins the size so it cannot
+    drift back down without someone deciding to.
+    """
+    from sahai.settings import Settings
+
+    assert Settings().eval_problems >= 60
+    assert Settings.kaggle().eval_problems >= 60
+
+
+def test_eval_budget_still_fits_the_kaggle_cap():
+    """At the measured 89 s/problem, and 6.0 h of training for 10 epochs, the
+    whole run has to stay inside Kaggle's 12 h session limit."""
+    from sahai.settings import Settings
+
+    s = Settings.kaggle()
+    training_hours = 6.0                     # measured, 10 epochs
+    eval_hours = s.eval_problems * 89 / 3600
+    assert training_hours + eval_hours < 11.0, (
+        f"training {training_hours:.1f}h + eval {eval_hours:.1f}h leaves no margin "
+        "under the 12h cap"
+    )
