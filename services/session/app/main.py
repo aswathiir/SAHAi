@@ -85,6 +85,12 @@ engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
+# Must stay below the gateway's 270s and above the tutor's 200s generation
+# cap. See the ladder comment in services/gateway/app/main.py.
+SESSION_TIMEOUT_S = 240.0
+PROBE_TIMEOUT_S = 3.0
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
@@ -92,7 +98,10 @@ async def lifespan(app: FastAPI):
     # 60s was fine for the stub backend; CPU inference on the real "hf"
     # backend (no GPU passthrough into Docker) can take well over a minute
     # for ~200 tokens, so this needs headroom for that path too.
-    app.state.http = httpx.AsyncClient(timeout=240.0)
+    app.state.http = httpx.AsyncClient(
+        timeout=SESSION_TIMEOUT_S,
+        limits=httpx.Limits(max_connections=32, max_keepalive_connections=8),
+    )
     yield
     await app.state.http.aclose()
     await engine.dispose()
@@ -163,7 +172,7 @@ async def health() -> dict[str, str]:
     so it is the only one that can see the executor at all.
     """
     try:
-        r = await app.state.http.get(f"{EXECUTOR_URL}/health", timeout=3.0)
+        r = await app.state.http.get(f"{EXECUTOR_URL}/health", timeout=PROBE_TIMEOUT_S)
         executor = "ok" if r.status_code == 200 else f"http {r.status_code}"
     except Exception as exc:  # noqa: BLE001 - report, never raise
         executor = f"unreachable: {type(exc).__name__}"
@@ -228,19 +237,42 @@ async def add_turn(
         await db.commit()
         raise HTTPException(409, "turn limit reached")
 
-    db.add(TurnRow(session_id=row.id, idx=len(row.turns), role="student",
-                   content=req.content, complete=True))
-    await db.commit()
-    row = await _load(db, session_id)
+    # A turn is one exchange, so both halves commit together or neither does.
+    #
+    # The student's turn used to be committed before the tutor was called. When
+    # that call timed out — which it does on CPU, where generation can outlast
+    # the 240s client budget — the dialogue was left holding a student turn
+    # with no reply, status still "active". Retrying then appended a *second*
+    # student turn, because nothing checks who spoke last, and consecutive
+    # same-role turns break the alternation that prompt assembly, the pedagogy
+    # judge and the tutor's own chat template all assume.
+    #
+    # Losing the student's text on failure is the better trade: the client
+    # still has it and can retry, whereas a corrupted dialogue is unrecoverable
+    # and silently mis-scores every turn after it.
+    if row.turns and row.turns[-1].role == "student":
+        raise HTTPException(
+            409,
+            "last turn has no tutor reply — the previous request failed; retry it",
+        )
+
+    pending_student = TurnRow(
+        session_id=row.id, idx=len(row.turns), role="student",
+        content=req.content, complete=True,
+    )
 
     messages = [{"role": "system", "content": _system_prompt(row, req.learner_context)}]
     for t in row.turns:
         messages.append(
             {"role": "assistant" if t.role == "tutor" else "user", "content": t.content}
         )
+    messages.append({"role": "user", "content": req.content})
 
+    # Before any write: a failure here must leave the session exactly as it was.
     reply = await _call_tutor(messages)
-    db.add(TurnRow(session_id=row.id, idx=len(row.turns), role="tutor",
+
+    db.add(pending_student)
+    db.add(TurnRow(session_id=row.id, idx=len(row.turns) + 1, role="tutor",
                    content=reply["text"], complete=reply["complete"]))
 
     if any(p in req.content.lower() for p in TERMINATION_PHRASES):
