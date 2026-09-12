@@ -88,3 +88,18 @@ def test_decode_runs_everything_through_ffmpeg():
 
     dockerfile = (pathlib.Path(__file__).resolve().parent.parent / "Dockerfile").read_text()
     assert "ffmpeg" in dockerfile, "the decoder must actually be in the image"
+
+
+def test_synthesis_is_bounded_server_side_not_only_by_the_caller():
+    """A client timeout does not cancel server-side work.
+
+    The gateway abandoned a synthesis at 270s and this process kept generating
+    for another ten minutes at 400% CPU, starving the next /transcribe until
+    it timed out too — one abandoned request wedged the whole speech service.
+    Capping the caller alone cannot fix that; generation has to stop itself.
+    """
+    import pathlib
+
+    text = (pathlib.Path(__file__).resolve().parent.parent / "app" / "backends.py").read_text()
+    assert "TTS_MAX_SECONDS" in text
+    assert "max_time=TTS_MAX_SECONDS" in text
