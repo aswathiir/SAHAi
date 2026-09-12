@@ -152,6 +152,17 @@ class IndicConformerASR(ASRBackend):
         return f"hf:{self._model_name}"
 
 
+# Wall-clock cap on one synthesis. Should track the gateway's TTS budget
+# (SAHAI_TTS_BUDGET_S, 45s) so client and server give up together — the client
+# stops waiting, and this stops burning CPU that later requests need.
+#
+# Measured on this stack: indic-parler-tts did not finish a 16-character
+# sentence in 840s on CPU, so on CPU this cap always fires and speech is
+# effectively unavailable. That is the honest state, and it is better
+# expressed as a fast text-only reply than as a service that wedges itself.
+TTS_MAX_SECONDS = float(os.getenv("SAHAI_TTS_MAX_SECONDS", "45"))
+
+
 class IndicParlerTTS(TTSBackend):
     def __init__(self, model_name: str, device: str = "cpu"):
         import torch
@@ -189,6 +200,13 @@ class IndicParlerTTS(TTSBackend):
                 attention_mask=description_ids.attention_mask,
                 prompt_input_ids=prompt_ids.input_ids,
                 prompt_attention_mask=prompt_ids.attention_mask,
+                # Stop when the caller has stopped waiting. A client timeout
+                # does not cancel server-side work: the gateway gave up on a
+                # synthesis at 270s and this process kept generating for
+                # another ten minutes at 400% CPU, starving the very next
+                # /transcribe until it timed out too. One abandoned request
+                # took the whole speech service down with it.
+                max_time=TTS_MAX_SECONDS,
             )
         audio_arr = generation.cpu().numpy().squeeze()
 
