@@ -130,6 +130,10 @@ class StartRequest(BaseModel):
 
 class TurnIn(BaseModel):
     content: str = Field(max_length=8000)
+    # Pre-resolved by the gateway, which owns the problem bank and the tracer
+    # lookup. Optional so the session service stays usable on its own and so a
+    # tracer outage degrades the hint instead of failing the turn.
+    learner_context: str = Field(default="", max_length=2000)
 
 
 class TurnOut(BaseModel):
@@ -229,7 +233,7 @@ async def add_turn(
     await db.commit()
     row = await _load(db, session_id)
 
-    messages = [{"role": "system", "content": _system_prompt(row)}]
+    messages = [{"role": "system", "content": _system_prompt(row, req.learner_context)}]
     for t in row.turns:
         messages.append(
             {"role": "assistant" if t.role == "tutor" else "user", "content": t.content}
@@ -295,14 +299,28 @@ async def get_session(session_id: str, db: AsyncSession = Depends(get_db)) -> Se
     )
 
 
-def _system_prompt(row: SessionRow) -> str:
-    return (
+def _system_prompt(row: SessionRow, learner_context: str = "") -> str:
+    """Rules, then the problem, then who is being taught.
+
+    `learner_context` is what the tutor could not previously know: the same
+    BKT posteriors that decide which problems a learner is offered now also
+    decide how a hint is pitched. Without it every learner gets the same hint
+    for the same problem no matter what they have already demonstrated.
+
+    Appended last so it can never displace the never-give-the-answer rules —
+    those are the ones the whole design rests on, and a long context block
+    ahead of them would push them away from the generation point.
+    """
+    prompt = (
         "You are a tutor. You help students think, NOT give answers.\n"
         "- NEVER write code or reveal the solution.\n"
         "- Ask ONE guiding question per turn, 2-3 sentences maximum.\n"
         "- Never end a turn with a colon promising something you do not then say.\n\n"
         f"Problem: {row.problem_title}"
     )
+    if learner_context:
+        prompt += f"\n\n{learner_context}"
+    return prompt
 
 
 async def _call_tutor(messages: list[dict]) -> dict:

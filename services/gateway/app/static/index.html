@@ -316,7 +316,9 @@ async function sendTurn() {
   try {
     const session = await api(`/v1/sessions/${state.sessionId}/turns`, {
       method: 'POST',
-      body: JSON.stringify({ content }),
+      // The id only — the gateway resolves the skills itself, so the hint
+      // cannot be steered by claiming a different problem's skills.
+      body: JSON.stringify({ content, problem_id: state.selected?.id }),
     });
     setStatus(session.status);
     renderTurns(session.turns);

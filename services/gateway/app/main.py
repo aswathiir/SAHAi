@@ -159,6 +159,76 @@ class StartRequest(BaseModel):
 
 class TurnRequest(BaseModel):
     content: str = Field(max_length=8000)
+    # Which problem the learner is on, so the gateway can look up its skills.
+    # Only the id is trusted from the client: skills are resolved from the
+    # gateway's own bank, never taken from the request, or a caller could
+    # claim whatever skills produced the hint they wanted.
+    problem_id: str | None = Field(default=None, max_length=64)
+
+
+# Same cut points the ZPD sampler uses, so the tutor's idea of "knows this"
+# matches the selector's idea of "stop offering this".
+MASTERY_NEW = 0.3
+MASTERY_SOLID = 0.7
+
+
+def _learner_context(skills: list[str], mastery: dict[str, float]) -> str:
+    """Turn BKT posteriors into an instruction the model can act on.
+
+    Deliberately *not* the raw numbers. "arrays: 0.42" gives a language model
+    nothing to do — it has no calibration for what 0.42 should change about a
+    hint. Naming the pedagogical move instead ("build the idea" vs "assume it")
+    is the part that actually alters the next turn.
+
+    Only skills the current problem touches are mentioned. The learner's full
+    profile would be mostly irrelevant to any one problem and would crowd a
+    system prompt whose own rule is 2-3 sentences per reply.
+    """
+    if not skills:
+        return ""
+
+    new, solid = [], []
+    for skill in sorted(set(skills)):
+        # Unseen skills have no posterior yet; treat them as new rather than
+        # inventing a middling one.
+        value = mastery.get(skill, 0.0)
+        if value < MASTERY_NEW:
+            new.append(skill)
+        elif value >= MASTERY_SOLID:
+            solid.append(skill)
+
+    lines = []
+    if new:
+        lines.append(
+            f"- New to {', '.join(new)}. Build the idea before asking them to apply it."
+        )
+    if solid:
+        lines.append(
+            f"- Solid on {', '.join(solid)}. Do not re-explain it; push on what is new here."
+        )
+    # Everything in between is exactly where the tutor should already be
+    # pitching, so saying so would just spend tokens agreeing with itself.
+    if not lines:
+        return ""
+    return "WHAT THIS LEARNER ALREADY KNOWS:\n" + "\n".join(lines)
+
+
+async def _mastery_for(learner: str) -> dict[str, float]:
+    """Current posteriors, or {} if the tracer cannot answer.
+
+    Fails open on purpose: personalisation is an improvement to a turn, not a
+    precondition for one. A tracer outage should cost the learner a tailored
+    hint, not the ability to ask a question.
+    """
+    try:
+        r = await app.state.http.get(
+            f"{TRACER_URL}/mastery/{learner}", headers=_trace(), timeout=3.0
+        )
+        r.raise_for_status()
+        return r.json().get("skills", {})
+    except Exception as exc:  # noqa: BLE001 - degrade, never fail the turn
+        logger.warning("mastery lookup failed for %s: %s", learner, type(exc).__name__)
+        return {}
 
 
 class SubmitRequest(BaseModel):
@@ -221,9 +291,20 @@ async def add_turn(
 ) -> dict:
     learner = await _learner(x_learner_id)
     _rate_limit(learner)
+
+    # Resolve skills from the gateway's own bank rather than the request, so a
+    # caller cannot name skills to steer the hint they get.
+    problem = PROBLEMS_BY_ID.get(req.problem_id or "")
+    context = ""
+    if problem:
+        context = _learner_context(problem.get("skills", []), await _mastery_for(learner))
+
+    payload = req.model_dump(exclude={"problem_id"})
+    payload["learner_context"] = context
+
     r = await app.state.http.post(
         f"{SESSION_URL}/sessions/{session_id}/turns",
-        json=req.model_dump(),
+        json=payload,
         headers=_trace(),
     )
     if r.status_code >= 400:
