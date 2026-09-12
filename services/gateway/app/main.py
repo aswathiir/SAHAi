@@ -166,10 +166,21 @@ class TurnRequest(BaseModel):
     problem_id: str | None = Field(default=None, max_length=64)
 
 
-# Same cut points the ZPD sampler uses, so the tutor's idea of "knows this"
-# matches the selector's idea of "stop offering this".
-MASTERY_NEW = 0.3
-MASTERY_SOLID = 0.7
+# Deliberately *not* the ZPD cut points (0.3/0.7), despite the obvious appeal
+# of one set of numbers. Those govern which problems to offer; these govern how
+# to pitch a hint, and the two answer different questions.
+#
+# Tying them made the feature inert. Placement is capped inside [0.15, 0.65] so
+# that even a confident learner still gets offered work, and every level it
+# produces — 0.15 / 0.30 / 0.50 / 0.65 — then fell in the mid band except the
+# lowest. A learner who had just imported 320 solved problems got no guidance
+# at all, which is the exact case the feature exists for.
+#
+# These cuts make all four placement levels say something: "none" and "seen"
+# read as new, "confident" reads as solid, "practiced" stays quiet because
+# mid-band is where the tutor should already be pitching.
+MASTERY_NEW = 0.35
+MASTERY_SOLID = 0.65
 
 
 def _learner_context(skills: list[str], mastery: dict[str, float]) -> str:
