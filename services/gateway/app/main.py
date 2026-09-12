@@ -55,11 +55,32 @@ RATE_LIMIT_PER_MIN = int(os.getenv("SAHAI_RATE_LIMIT_PER_MIN", "60"))
 _hits: dict[str, deque[float]] = defaultdict(deque)
 
 
+# One deadline ladder for the whole request path, outermost first:
+#
+#   gateway  270s   ->  session  240s  ->  tutor generate  200s
+#
+# Each hop must outlast the one it calls. If that order ever inverts, the outer
+# caller gives up on a request the inner one is about to answer successfully —
+# the learner sees a 500, and the work is thrown away rather than returned.
+# Stated here as constants instead of three unrelated literals in three files,
+# because the invariant is the ordering, and ordering is invisible when the
+# numbers live apart. `tests/test_deadline_ladder.py` asserts it.
+GATEWAY_TIMEOUT_S = 270.0
+SESSION_TIMEOUT_S = 240.0
+# Health and mastery are on the request path but must never dominate it: a slow
+# tracer should cost a tailored hint, not the turn.
+PROBE_TIMEOUT_S = 3.0
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Must exceed session's own downstream timeout, or the gateway gives up
-    # first and hides the real (slower but successful) response.
-    app.state.http = httpx.AsyncClient(timeout=270.0)
+    app.state.http = httpx.AsyncClient(
+        timeout=GATEWAY_TIMEOUT_S,
+        # Bounded pool. The default is unbounded, so a burst opens a connection
+        # per in-flight request and the failure mode is file-descriptor
+        # exhaustion in the gateway rather than honest queueing.
+        limits=httpx.Limits(max_connections=64, max_keepalive_connections=16),
+    )
     yield
     await app.state.http.aclose()
 
@@ -233,7 +254,7 @@ async def _mastery_for(learner: str) -> dict[str, float]:
     """
     try:
         r = await app.state.http.get(
-            f"{TRACER_URL}/mastery/{learner}", headers=_trace(), timeout=3.0
+            f"{TRACER_URL}/mastery/{learner}", headers=_trace(), timeout=PROBE_TIMEOUT_S
         )
         r.raise_for_status()
         return r.json().get("skills", {})
@@ -265,7 +286,7 @@ async def health() -> JSONResponse:
         ("tracer", TRACER_URL), ("asr", ASR_URL),
     ):
         try:
-            r = await app.state.http.get(f"{url}/health", timeout=3.0)
+            r = await app.state.http.get(f"{url}/health", timeout=PROBE_TIMEOUT_S)
             body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
             checks[name] = "ok" if r.status_code == 200 else f"http {r.status_code}"
             # session reports the executor on our behalf.

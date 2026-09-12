@@ -66,6 +66,13 @@ class StubBackend(TutorBackend):
         return "stub"
 
 
+# Wall-clock cap on one generation, in seconds. Must stay below the session
+# service's HTTP budget (240s) or the caller times out first and discards a
+# reply the model did produce. Env-tunable so a GPU deployment, where this is
+# never the binding constraint, can raise it without a rebuild.
+GENERATE_MAX_SECONDS = float(os.getenv("SAHAI_GENERATE_MAX_SECONDS", "200"))
+
+
 class HFBackend(TutorBackend):
     """transformers + optional LoRA adapter produced by jobs/trainer."""
 
@@ -106,6 +113,14 @@ class HFBackend(TutorBackend):
                 temperature=temperature,
                 do_sample=temperature > 0,
                 pad_token_id=self.tokenizer.pad_token_id,
+                # Stop before the caller gives up. On CPU (~1.8 tok/s measured)
+                # 192 tokens can outrun session's 240s budget, and generation
+                # that finishes after the client has disconnected is work done
+                # for nobody: the learner saw a 500 and the tokens are dropped.
+                # `max_time` ends generation cleanly at the cap, so a partial
+                # reply still goes through trim_incomplete below and comes back
+                # as an honest `complete=False` instead of nothing at all.
+                max_time=GENERATE_MAX_SECONDS,
             )
         generated = out[0][inputs["input_ids"].shape[1] :]
         decoded = self.tokenizer.decode(generated, skip_special_tokens=True).strip()
