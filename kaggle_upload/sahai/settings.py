@@ -84,6 +84,19 @@ class Settings(BaseModel):
     dataset: str = "local"
     max_problems: int | None = None
 
+    # Held-out problems for the final evaluation.
+    #
+    # Was 20, which cannot resolve the differences it was being used to judge.
+    # Bootstrapping a 20-problem mean: a run whose true solve rate is 0.16
+    # reports anywhere in [0.00, 0.35] (sd 0.082) purely from which problems it
+    # draws. The entire spread across six runs — 6.2% to 16.3% — is about 1.3
+    # standard deviations, so every run-to-run comparison made so far rested on
+    # roughly two problems.
+    #
+    # 60 brings sd to ~0.047 and costs ~89 min at the measured 89s/problem.
+    # Training is 6.0 h of the 12 h cap, so that fits with headroom to spare.
+    eval_problems: int = 60
+
     @classmethod
     def kaggle(cls) -> Settings:
         return cls(

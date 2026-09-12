@@ -390,3 +390,43 @@ which costs GPU time in the rollout loop.
 carry little variance — that is expected, not a bug, and it means group
 variance now comes from `r_sol` and `leak`. The number to judge the run on is
 held-out solve rate against the 16.3% best.
+
+## 12. The held-out eval could not resolve the runs it was judging
+
+Every run-to-run conclusion in this document up to entry 11 was drawn from a
+20-problem held-out set. Bootstrapping that mean:
+
+| true solve rate | 20-problem estimate |
+|---|---|
+| 0.10 | sd 0.068, 95% of runs land in [0.00, 0.25] |
+| 0.16 | sd 0.082, 95% of runs land in [0.00, 0.35] |
+
+The entire spread across six runs — 6.2% to 16.3% — is about **1.3 standard
+deviations**. In problem terms: the best run solved ~3.26 problem-equivalents
+and the worst ~1.25. **Every comparison rested on roughly two problems.**
+
+This does not overturn entry 11: the reward-hacking *mechanism* was verified
+directly, by scoring the run's own turns (`"Hash maps? Kaise use kar sakta
+hu?"` -> r_ped 1.00) and by training r_ped saturating at 0.992. What it
+overturns is the *magnitude*. The claim that the change cost 10 points of
+held-out solve was not supportable, and was made anyway.
+
+**Fixed:** `Settings.eval_problems`, now 60. sd falls to ~0.047 and the cost is
+~89 min at the measured 89 s/problem. Training is 6.0 h of the 12 h cap, so it
+fits with headroom. A test pins both the size and the total budget.
+
+**The pattern this exposes.** Sorting the six runs by what kind of change they
+made:
+
+| kind of change | examples | outcome |
+|---|---|---|
+| removed a distortion | truncation cap, 1.5B student, leakage eval bug, rare-token filter, length bias | every gain came from here |
+| added an incentive | question fraction | the only clear regression |
+
+Worth carrying: gains have come from deleting things that bent the signal, not
+from adding things that point at good behaviour. The pedagogy narrowing in 11b
+is a deletion, which is the category that has worked.
+
+**Also worth not repeating:** v14 changed learning rate, batch size and
+pedagogy scoring in one run and came out net negative, so none of the three can
+be attributed. One variable per run.
