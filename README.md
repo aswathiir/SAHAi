@@ -38,8 +38,8 @@ things feel chaotic.
   "make the tutor better"               "let a person talk to the tutor"
 
   runs on:  Kaggle, one GPU             runs on:  your laptop, Docker
-  runs for: ~30 min, then stops         runs for: as long as you leave it up
-  student:  a 0.5B AI pretending        student:  a real human
+  runs for: ~8 h, then stops            runs for: as long as you leave it up
+  student:  a 1.5B AI pretending        student:  a real human
   output:   a trained adapter file      output:   HTTP responses
   code in:  sahai/  notebooks/          code in:  services/
   start it: kaggle kernels push         start it: make up
@@ -90,6 +90,9 @@ SAHAi/
 │   └── asr/                    speech→text (stubbed, not real yet)
 │
 ├── libs/sahai-core/          ← shared logic, no AI, no database, no network
+│     prompt.py              the tutor's serving prompt — ONE definition.
+│                            There were two, and the live one was missing
+│                            the code-mixing rule.
 │
 ├── scripts/
 │   ├── inspect_rollouts.py     reads training output, gives a verdict
@@ -142,18 +145,27 @@ One student message, traced through the services:
            │  forwards to session
            ▼
   ┌─ session ─────────┐  services/session/app/main.py  ← the orchestrator
-  │ 1 save student    │  writes a row to Postgres
-  │   turn to DB      │
-  │ 2 build message   │  system prompt + every previous turn
-  │   history         │
+  │ 1 reject if the   │  409 — a previous request died mid-exchange
+  │   last turn is    │
+  │   unanswered      │
+  │ 2 build message   │  system prompt + every previous turn + this one
+  │   history         │  (nothing written to the DB yet)
   │ 3 ask tutor  ─────┼──────────────► ┌─ tutor ────────┐
   │                   │                │ generate reply │ services/tutor/app/
-  │ 4 save tutor turn │ ◄──────────────┤ (stub or Qwen) │   backends.py
-  └────────┬──────────┘                └────────────────┘
+  │ 4 save BOTH turns │ ◄──────────────┤ (stub or Qwen) │   backends.py
+  │   in one commit   │                └────────────────┘
+  └────────┬──────────┘
            │  returns whole transcript
            ▼
   student sees the tutor's reply
 ```
+
+**A turn is atomic on purpose.** The student's turn used to be committed before
+the tutor was called; when that call timed out the dialogue was left holding a
+student turn with no reply, and retrying appended a *second* student turn.
+Consecutive same-role turns break the alternation that prompt assembly, the
+pedagogy judge and the chat template all assume — every later turn scored wrong
+with no error anywhere. Either both turns land or neither does.
 
 Later, when the student submits code:
 
@@ -169,7 +181,158 @@ That's on purpose: small services with one job each are far easier to debug.
 
 ---
 
-## 5. Debugging map — the part to keep open
+## 5. The learner-state layer
+
+Everything above describes one conversation. This is what makes the *next* one
+different from the last.
+
+```
+  who you are  ──►  what you are offered  ──►  how the hint is worded
+      │                     │                            │
+  placement or        zpd_sample picks             system prompt gains
+  a solved-repo       problems whose skill         "New to X / Solid on Y"
+  import seeds        mastery sits in [0.3,0.7]
+  BKT priors                │                            │
+      │                     ▼                            ▼
+      └──────────►  you solve or fail  ──►  BKT posterior moves  ──┘
+                             │
+                             ▼
+                    /progress.html — streak, activity grid,
+                    per-skill mastery, course tracks
+```
+
+**Placement** (`POST /v1/me/placement`). Without it every learner starts at one
+flat `p_init` (0.3) for every skill and the first session is spent discovering
+what they already knew. A self-assessment across the 15 skills seeds per-skill
+priors instead.
+
+Confidence maps into `[0.15, 0.65]`, not `[0, 1]`. A self-report is evidence,
+not proof, and a prior at 0.9 would take several failures to walk back. The top
+sits just inside the ZPD band so a confident learner gets work at the edge of
+what they claim rather than being skipped past the skill.
+
+Two rules it will not break, both pinned by tests, because both would corrupt
+data rather than merely look wrong:
+
+- it only seeds skills with **no observations**, so re-taking the survey can
+  never overwrite demonstrated mastery;
+- it writes **nothing** to `observations` — a prior is not an attempt, and
+  logging it as one would corrupt the sequence a knowledge-tracing model
+  trains on later.
+
+**Importing a solved-problem repo** (`scripts/import_neetcode.py`). Stronger
+evidence than a self-report, and no credentials needed — public repo, documented
+API, stable layout.
+
+```bash
+python scripts/import_neetcode.py --repo owner/name --learner me --dry-run
+```
+
+Paths and dates only. The solution *source* is deliberately not read: it is a
+far richer signal, but it is also the answer to a problem, and this project's
+whole reward function exists to stop answers reaching the learner. Three things
+the first real repo forced, each of which would otherwise have produced
+plausible-looking nonsense:
+
+| what | why it matters |
+|---|---|
+| bulk commits are discounted | a "Bulk sync: 266 submissions" commit dates 186 of 319 problems to the day the repo was created, not when they were solved |
+| NeetCode names get their own tag table | "house-robber" says nothing about dynamic programming; the generic tagger fell back to `general` for 121 of 319 slugs |
+| thresholds are absolute, not relative | a relative scale calls somebody's best skill "confident" on four solved problems |
+
+The tag table lives in the importer, **not** in `sahai.core.dataset.SKILL_KEYWORDS`
+— that table also tags the MBPP training bank, and re-tagging training data
+mid-experiment would change what the sampler offers for unrelated reasons.
+
+**Progress** (`GET /v1/me/progress`). Streak, activity grid, per-skill mastery
+and per-track completion, all projected from the append-only observation log
+rather than new tables. The log already carries timestamp, skill, correctness
+and item; anything stored alongside it would be a second source of truth free
+to drift.
+
+---
+
+## 6. Voice — a second front door, not a second tutor
+
+```
+  mic ──► WebSocket ──► ffmpeg ──► IndicConformer ──► same /turns call
+                                        │                    │
+                                   transcript           tutor reply
+                                        │                    │
+                                        ▼                    ▼
+                              sent to the client      Parler TTS (capped)
+                              immediately                    │
+                                                             ▼
+                                                    audio, or speech:false
+```
+
+The websocket calls the **exact same** `/sessions/{id}/turns` endpoint the text
+box does, and resolves the same learner context and full problem statement. A
+voice turn that skipped either would be a second, worse tutor wearing the same
+face.
+
+**Stages are reported as they finish**, not batched at the end. ASR takes
+seconds but generation can take minutes on CPU, and a learner who has just
+spoken has no idea whether they were heard. The transcript goes out *before*
+generation starts — that single ordering choice is what turns a blind wait into
+a conversation.
+
+| stage | what the learner sees |
+|---|---|
+| `transcribed` | their own words, immediately |
+| `thinking` | a pending tutor bubble |
+| `speaking` | the reply text, before any audio |
+| final | audio plays, or `speech: false` |
+
+Switching problems mid-turn **closes the socket**, so the remaining frames never
+arrive — that, not the epoch check in `onVoiceMessage`, is the real protection.
+The epoch check is defence in depth for a frame already in transit when the
+close lands, and is verified directly rather than through the UI, because the
+socket close makes it unreachable by the normal path.
+
+**Measured honestly on this hardware:** IndicConformer transcribes in 13–34s and
+is genuinely usable. `indic-parler-tts` did **not** finish a 16-character
+sentence in 840s on CPU — Docker Desktop passes no GPU to containers — so
+synthesis is capped and degrades to text-only. Both caps are env-tunable
+(`SAHAI_TTS_BUDGET_S`, `SAHAI_TTS_MAX_SECONDS`) and never fire on a GPU host.
+
+---
+
+## 7. Three invariants that hold the serving path together
+
+These are the ones worth knowing before changing anything, because each was
+learned from a failure that looked like something else.
+
+**Every hop outlasts the one it calls.**
+
+```
+  gateway 270s  >  session 240s  >  tutor generate 200s
+                                    TTS 45s (its own budget)
+```
+
+Invert that order and the outer caller abandons a request the inner one is about
+to answer successfully: the learner sees a 500 and the work is thrown away. A
+real turn was lost this way at exactly 240s because the tutor had no generation
+cap at all. `tests/test_deadline_ladder.py` asserts the ordering.
+
+**Any model call reachable from a request needs its own deadline.** A client
+timeout does not cancel server-side work. The gateway once gave up on a
+synthesis at 270s while the ASR process kept generating for ten more minutes at
+400% CPU — starving the next request until it timed out too. One abandoned
+request took the whole speech service down. Capping the caller cannot fix that;
+generation has to stop itself.
+
+**A response for a conversation the learner has left is discarded, not
+rendered.** A turn can be in flight for minutes and the learner is free to move
+on. Both pages take a token at request time and compare it on arrival: an
+`epoch` on the tutor page, bumped whenever the active session changes, and a
+counter on the record page's load. Without it, the old problem's transcript
+paints into the new problem's conversation, and switching learners can show the
+placement survey to someone who already has priors.
+
+---
+
+## 8. Debugging map — the part to keep open
 
 ### First move, always
 
@@ -235,7 +398,7 @@ Each service also has interactive API docs when running:
 
 ---
 
-## 6. Where errors actually surface
+## 9. Where errors actually surface
 
 Knowing *where a traceback appears* saves the most time:
 
@@ -254,7 +417,7 @@ work, not the one that called it.
 
 ---
 
-## 7. Suggested path from here
+## 10. Suggested path from here
 
 You said you want to pave the path — here is what I'd sequence, easiest first:
 
