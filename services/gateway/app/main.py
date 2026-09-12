@@ -10,6 +10,7 @@ without pretending to be a real identity provider.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import contextvars
 import json
@@ -18,6 +19,7 @@ import os
 import time
 import uuid
 from collections import defaultdict, deque
+from datetime import date, datetime, timezone
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -344,6 +346,186 @@ async def mastery(x_learner_id: str | None = LearnerHeader) -> dict:
     )
     r.raise_for_status()
     return r.json()
+
+
+class PlacementIn(BaseModel):
+    responses: dict[str, str] = Field(max_length=64)
+
+
+# Curated tracks over the skills the problem bank actually contains. Ordered
+# so each track opens with work that stands alone and ends with work that
+# leans on the earlier entries — the sequence is the pedagogy, not decoration.
+COURSE_TRACKS = [
+    {
+        "id": "foundations",
+        "title": "Foundations",
+        "blurb": "Loops, conditionals and the shapes data comes in.",
+        "skills": ["general", "math", "strings"],
+    },
+    {
+        "id": "collections",
+        "title": "Collections",
+        "blurb": "Arrays and hash maps — the two structures most interviews lean on.",
+        "skills": ["arrays", "hash_maps"],
+    },
+    {
+        "id": "ordering",
+        "title": "Ordering & Search",
+        "blurb": "Sorting, two-pointer scans and the heap.",
+        "skills": ["sorting", "two_pointers", "heaps"],
+    },
+    {
+        "id": "recursive",
+        "title": "Recursive Thinking",
+        "blurb": "Trees, recursion and problems that fold into themselves.",
+        "skills": ["recursion", "trees"],
+    },
+    {
+        "id": "bits",
+        "title": "Bit Manipulation",
+        "blurb": "Working one bit at a time.",
+        "skills": ["bit_manipulation"],
+    },
+]
+
+
+def _streak(days: list[str]) -> tuple[int, int]:
+    """(current, longest) run of consecutive active days.
+
+    `days` is a sorted list of ISO dates. The current streak counts back from
+    today and tolerates today being empty — a learner mid-morning has not
+    broken a streak they may still extend, and showing it as 0 until they
+    practise reads as punishment for the time of day.
+    """
+    if not days:
+        return 0, 0
+
+    as_dates = sorted({date.fromisoformat(d) for d in days})
+
+    longest = run = 1
+    for prev, cur in zip(as_dates, as_dates[1:]):
+        run = run + 1 if (cur - prev).days == 1 else 1
+        longest = max(longest, run)
+
+    today = datetime.now(timezone.utc).date()
+    gap = (today - as_dates[-1]).days
+    if gap > 1:
+        return 0, longest
+
+    current = 1
+    for prev, cur in zip(reversed(as_dates[:-1]), reversed(as_dates[1:])):
+        if (cur - prev).days != 1:
+            break
+        current += 1
+    return current, longest
+
+
+@app.post("/v1/me/placement", responses=AUTH_RESPONSES)
+async def set_placement(
+    body: PlacementIn, x_learner_id: str | None = LearnerHeader
+) -> dict:
+    """Record a self-assessment so the first assignment fits the learner.
+
+    Without this every learner starts at BKT's flat `p_init` for every skill,
+    and the opening session picks problems as if they knew nothing about
+    anything.
+    """
+    learner = await _learner(x_learner_id)
+    r = await app.state.http.post(
+        f"{TRACER_URL}/placement",
+        json={"learner_id": learner, "responses": body.responses},
+        headers=_trace(),
+    )
+    if r.status_code >= 400:
+        raise HTTPException(r.status_code, r.text[:200])
+    return r.json()
+
+
+@app.get("/v1/me/progress", responses=AUTH_RESPONSES)
+async def progress(x_learner_id: str | None = LearnerHeader) -> dict:
+    """Everything the progress view needs, in one round trip.
+
+    Derived entirely from the append-only observation log rather than new
+    tables: the log already carries timestamp, skill, correctness and item, so
+    streaks and activity are a projection of it. Anything stored separately
+    would be a second source of truth that could drift from the history.
+    """
+    learner = await _learner(x_learner_id)
+
+    obs_resp, mastery_resp = await asyncio.gather(
+        app.state.http.get(
+            f"{TRACER_URL}/observations/{learner}", params={"limit": 5000},
+            headers=_trace(),
+        ),
+        app.state.http.get(f"{TRACER_URL}/mastery/{learner}", headers=_trace()),
+    )
+    obs_resp.raise_for_status()
+    mastery_resp.raise_for_status()
+    observations = obs_resp.json()
+    skills = mastery_resp.json().get("skills", {})
+
+    by_day: dict[str, dict[str, int]] = defaultdict(lambda: {"total": 0, "solved": 0})
+    solved_problems: set[str] = set()
+    attempted_problems: set[str] = set()
+
+    for o in observations:
+        day = (o.get("observed_at") or "")[:10]
+        if day:
+            by_day[day]["total"] += 1
+            by_day[day]["solved"] += int(bool(o.get("correct")))
+        pid = o.get("problem_id")
+        if pid:
+            attempted_problems.add(pid)
+            if o.get("correct"):
+                solved_problems.add(pid)
+
+    current, longest = _streak(sorted(by_day))
+
+    # A skill counts as covered once its posterior clears the top of the ZPD
+    # band — the same threshold the sampler uses to stop offering it.
+    tracks = []
+    for track in COURSE_TRACKS:
+        problems = [p for p in PROBLEMS if set(p["skills"]) & set(track["skills"])]
+        done = [p for p in problems if p["id"] in solved_problems]
+        covered = [s for s in track["skills"] if skills.get(s, 0.0) >= 0.7]
+        tracks.append(
+            {
+                **track,
+                "total": len(problems),
+                "solved": len(done),
+                "skills_covered": len(covered),
+                "mastery": (
+                    sum(skills.get(s, 0.0) for s in track["skills"]) / len(track["skills"])
+                    if track["skills"] else 0.0
+                ),
+            }
+        )
+
+    return {
+        "learner_id": learner,
+        "solved": len(solved_problems),
+        "attempted": len(attempted_problems),
+        "total_problems": len(PROBLEMS),
+        "streak_current": current,
+        "streak_longest": longest,
+        "active_days": len(by_day),
+        "activity": [{"date": d, **v} for d, v in sorted(by_day.items())],
+        "skills": skills,
+        "tracks": tracks,
+        "placed": bool(skills),
+    }
+
+
+@app.get("/v1/courses")
+async def courses() -> list[dict]:
+    """Track catalogue with problem counts. No auth — browsing is harmless."""
+    return [
+        {
+            **t,
+            "total": len([p for p in PROBLEMS if set(p["skills"]) & set(t["skills"])]),
+        }
+        for t in COURSE_TRACKS
+    ]
 
 
 @app.get("/v1/problems")
