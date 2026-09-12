@@ -39,6 +39,12 @@ RUN mkdir -p /home/sahai/.cache/huggingface && chown -R sahai:sahai /home/sahai/
 USER sahai
 
 EXPOSE 8000
-HEALTHCHECK --interval=15s --timeout=3s --retries=5 \
-  CMD python -c "import httpx,sys; sys.exit(0 if httpx.get('http://localhost:8000/health',timeout=2).status_code<500 else 1)"
+# urllib, not httpx: the probe runs every 15s in every container, and importing
+# httpx drags in anyio and pydantic each time. Stdlib keeps the probe cheap.
+# 10s rather than 3s because the old budget measured the interpreter start as
+# much as the service — with other containers competing for the same Docker VM
+# the probe timed out while /health was still answering 200, and compose then
+# refused to start anything that depended on it.
+HEALTHCHECK --interval=15s --timeout=10s --retries=5 \
+  CMD python -c "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=8).status<500 else 1)"
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -360,10 +360,20 @@ $('save-placement').addEventListener('click', async () => {
   btn.disabled = true;
   btn.textContent = 'Saving…';
   try {
+    const submittedAs = learnerId();
     await api('/v1/me/placement', {
       method: 'POST',
       body: JSON.stringify({ responses: answers }),
     });
+    // If the learner id changed while the POST was in flight, the priors went
+    // to the old learner; reloading would show the new one's record as though
+    // the survey had been for them.
+    if (learnerId() !== submittedAs) {
+      showErr(`Placement saved for "${submittedAs}", not the learner now shown.`);
+      btn.disabled = false;
+      btn.textContent = 'Set my starting point';
+      return;
+    }
     await load();
   } catch (e) {
     showErr(`Could not save placement — ${e.message}`);
@@ -457,15 +467,26 @@ function render(p) {
   });
 }
 
+// Bumped on every load. Switching learners fires a new request without
+// cancelling the old one, and the two can land out of order — a slow response
+// for the previous learner arriving last would repaint the page with their
+// data under the current learner's name. Observed directly: typing a new
+// learner and then switching back showed the placement survey for a learner
+// who already had priors.
+let loadEpoch = 0;
+
 async function load() {
+  const epoch = ++loadEpoch;
   try {
     const p = await api('/v1/me/progress');
+    if (epoch !== loadEpoch) return;   // a newer load supersedes this one
     $('err').classList.add('hidden');
     // Placement is the gate: without priors the tutor has nothing to aim at.
     $('placement').classList.toggle('hidden', p.placed);
     $('record').classList.toggle('hidden', !p.placed);
     if (p.placed) render(p);
   } catch (e) {
+    if (epoch !== loadEpoch) return;
     showErr(`Could not load your record — ${e.message}`);
   }
 }
