@@ -87,6 +87,29 @@
   }
   h2::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
 
+  /* ---- what to do now ---- */
+  #next-up {
+    display: flex; align-items: center; justify-content: space-between; gap: 20px;
+    text-decoration: none; color: inherit; margin-top: 34px;
+    border: 1px solid var(--pink-dim); border-radius: 12px;
+    padding: 20px 24px; background: rgba(249,97,103,.09);
+    transition: border-color .2s, transform .2s;
+  }
+  #next-up:hover { border-color: var(--pink); transform: translateY(-2px); }
+  #next-up .lead {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .14em;
+    color: var(--cream-dim); display: block; margin-bottom: 7px;
+  }
+  #next-up .what {
+    font-family: var(--display); font-weight: 600; font-size: 23px;
+    letter-spacing: -.01em; display: block;
+  }
+  #next-up .why { font: 400 12px var(--mono); color: var(--cream-dim); display: block; margin-top: 6px; }
+  #next-up .go {
+    font-family: var(--body); font-size: 13px; font-weight: 600; flex: none;
+    background: var(--pink); color: #2a0a10; padding: 10px 20px; border-radius: 8px;
+  }
+
   /* ---- the headline stat block ---- */
   .ledger {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -222,6 +245,7 @@
   <nav>
     <a href="/">Tutor</a>
     <a href="/progress.html" class="here">Record</a>
+    <a href="/progress.html?assess=1" id="nav-assess">Assessment</a>
     <label style="color:var(--cream-dim)">learner</label>
     <input id="learner-id" placeholder="me" spellcheck="false">
   </nav>
@@ -238,11 +262,17 @@
       Everyone otherwise starts from the same flat assumption — that you know
       nothing about everything — and the first session is wasted finding out.
     </p>
+    <p id="retake-note" class="hidden" style="font:400 12px var(--mono);color:var(--cream-dim);border-left:2px solid var(--pink-dim);padding:8px 14px;margin:0 0 20px">
+      Re-taking this only changes skills you have not attempted yet. Anything
+      you have actually been graded on keeps the mastery you earned.
+    </p>
     <div id="questions"></div>
     <button id="save-placement" class="cta" disabled>Set my starting point</button>
   </section>
 
   <div id="record" class="hidden">
+    <a id="next-up" class="reveal hidden" style="animation-delay:.02s"></a>
+
     <section class="reveal" style="animation-delay:.05s">
       <div class="ledger">
         <div class="cell">
@@ -421,7 +451,23 @@ function renderHeat(activity) {
 }
 
 /* ---------- render ---------- */
+function renderNextUp(n) {
+  const el = $('next-up');
+  if (!n) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  el.href = n.href;
+  const pct = Math.round(n.mastery * 100);
+  el.innerHTML = `
+    <span>
+      <span class="lead">Start here</span>
+      <span class="what">${SKILL_LABELS[n.skill] || n.skill}</span>
+      <span class="why">${pct}% mastery · ${n.unsolved} problem${n.unsolved === 1 ? '' : 's'} left</span>
+    </span>
+    <span class="go">Practise &rarr;</span>`;
+}
+
 function render(p) {
+  renderNextUp(p.next_up);
   $('s-streak').textContent = p.streak_current;
   $('s-streak-best').textContent = `best ${p.streak_longest}`;
   $('s-solved').textContent = p.solved;
@@ -493,10 +539,19 @@ async function load() {
     const p = await api('/v1/me/progress');
     if (epoch !== loadEpoch) return;   // a newer load supersedes this one
     $('err').classList.add('hidden');
-    // Placement is the gate: without priors the tutor has nothing to aim at.
-    $('placement').classList.toggle('hidden', p.placed);
+    // Placement gates a learner who has no priors, but it must also stay
+    // reachable afterwards: it used to vanish the moment it was completed,
+    // with nothing linking to it, so there was no "assessment page" to go to —
+    // only a hidden state of this one.
+    const wantsAssessment = new URLSearchParams(location.search).has('assess');
+    const showPlacement = !p.placed || wantsAssessment;
+    $('placement').classList.toggle('hidden', !showPlacement);
     $('record').classList.toggle('hidden', !p.placed);
     if (p.placed) render(p);
+    if (p.placed && wantsAssessment) {
+      $('retake-note').classList.remove('hidden');
+      $('placement').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   } catch (e) {
     if (epoch !== loadEpoch) return;
     showErr(`Could not load your record — ${e.message}`);
