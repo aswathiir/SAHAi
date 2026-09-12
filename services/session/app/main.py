@@ -170,6 +170,15 @@ class SubmitRequest(BaseModel):
     skills: list[str] = Field(default_factory=list)
 
 
+class DiagnosticGrade(BaseModel):
+    learner_id: str = Field(max_length=64)
+    problem_id: str = Field(max_length=64)
+    code: str = Field(max_length=100_000)
+    function_name: str
+    test_cases: list[dict]
+    skills: list[str] = Field(default_factory=list)
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     """Reports the executor on the gateway's behalf.
@@ -383,3 +392,32 @@ async def _call_tracer(
     )
     r.raise_for_status()
     return r.json()
+
+
+@app.post("/diagnostic/grade")
+async def diagnostic_grade(req: DiagnosticGrade) -> dict:
+    """Grade one diagnostic answer — no tutor, no conversation.
+
+    Deliberately not a tutoring session. A diagnostic is the learner working
+    unaided, so there is no transcript to keep and nothing for the pedagogy
+    judge to score; creating a session row for it would put dialogues with no
+    dialogue in the table.
+
+    It does record a real observation, which is the whole point. Placement
+    seeds a *prior* from what someone says about themselves; this produces
+    evidence from what they actually wrote, so it outranks the survey rather
+    than duplicating it — and unlike a prior it can move mastery in either
+    direction.
+    """
+    result = await _call_executor(req.code, req.function_name, req.test_cases)
+    passed = bool(result.get("fully_passed"))
+
+    if req.skills:
+        await _call_tracer(req.learner_id, req.skills, passed, req.problem_id)
+
+    return {
+        "problem_id": req.problem_id,
+        "passed": passed,
+        "pass_rate": result.get("pass_rate", 0.0),
+        "results": result.get("results", []),
+    }

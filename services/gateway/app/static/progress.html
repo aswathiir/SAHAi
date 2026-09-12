@@ -243,11 +243,13 @@
 <header>
   <div class="brand">SAHA<em>i</em></div>
   <nav>
-    <a href="/">Tutor</a>
-    <a href="/progress.html" class="here">Record</a>
+    <a href="/" id="nav-tutor">Tutor</a>
+    <a href="/progress.html" id="nav-record">Record</a>
     <a href="/progress.html?assess=1" id="nav-assess">Assessment</a>
-    <label style="color:var(--cream-dim)">learner</label>
-    <input id="learner-id" placeholder="me" spellcheck="false">
+    <a href="/diagnostic.html">Diagnostic</a>
+    <label for="learner-id" style="color:var(--cream-dim);cursor:pointer">learner</label>
+    <input id="learner-id" placeholder="me" spellcheck="false"
+           title="Type a learner id and press Enter">
   </nav>
 </header>
 
@@ -268,6 +270,12 @@
     </p>
     <div id="questions"></div>
     <button id="save-placement" class="cta" disabled>Set my starting point</button>
+    <p style="font:400 12px var(--mono);color:var(--cream-dim);margin:18px 0 0">
+      Rather show than tell? The
+      <a href="/diagnostic.html" style="color:var(--pink)">diagnostic</a>
+      grades four problems you write yourself — stronger evidence than anything
+      you can claim here, and it can move mastery in either direction.
+    </p>
   </section>
 
   <div id="record" class="hidden">
@@ -346,9 +354,35 @@ function learnerId() {
   return ($('learner-id').value.trim()) || 'me';
 }
 $('learner-id').value = localStorage.getItem('sahai_learner') || 'me';
-$('learner-id').addEventListener('change', e => {
+
+function switchLearner(e) {
   localStorage.setItem('sahai_learner', e.target.value.trim() || 'me');
   load();
+}
+// `change` alone only fires on blur, so typing a learner and pressing Enter
+// appeared to do nothing at all.
+$('learner-id').addEventListener('change', switchLearner);
+$('learner-id').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); switchLearner(e); }
+});
+
+// The active link was hardcoded to Record, so opening ?assess=1 left the nav
+// insisting you were still on the record — the page changed and nothing said
+// so, which reads as a link that goes nowhere.
+function markCurrentNav() {
+  const onAssess = new URLSearchParams(location.search).has('assess');
+  $('nav-record').classList.toggle('here', !onAssess);
+  $('nav-assess').classList.toggle('here', onAssess);
+}
+markCurrentNav();
+
+// Clicking Assessment while already on it would otherwise be a no-op: same
+// URL, no reload, no movement.
+$('nav-assess').addEventListener('click', e => {
+  if (new URLSearchParams(location.search).has('assess')) {
+    e.preventDefault();
+    $('placement').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 });
 
 async function api(path, opts = {}) {

@@ -186,3 +186,60 @@ def test_next_up_is_none_when_everything_is_solved():
     from app.main import PROBLEMS, _next_up
 
     assert _next_up({"arrays": 0.5}, {p["id"] for p in PROBLEMS}) is None
+
+
+def test_diagnostic_spans_different_skills():
+    """Four problems on arrays measures arrays four times and leaves the other
+    fourteen skills exactly as unknown as before."""
+    r = client.get("/v1/diagnostic", headers={"x-learner-id": "t"})
+    assert r.status_code == 200
+    problems = r.json()["problems"]
+    assert len(problems) > 1
+    # The skill each item was *picked for*, not its first tag: a problem tagged
+    # ["arrays", "sorting", "heaps"] chosen for heaps still lists arrays first,
+    # which is what an earlier version of this test wrongly measured.
+    targets = [p["targets"] for p in problems]
+    assert len(set(targets)) == len(targets), f"repeated target: {targets}"
+
+
+def test_diagnostic_is_not_all_hardest_problems():
+    """An item only discriminates near the learner's ability. Four difficulty-5
+    problems produce four failures, which says "not expert" and nothing else."""
+    problems = client.get("/v1/diagnostic", headers={"x-learner-id": "t"}).json()["problems"]
+    assert not all(p["difficulty"] >= 5 for p in problems)
+    assert len({p["difficulty"] for p in problems}) > 1, "no difficulty spread"
+
+
+def test_diagnostic_never_ships_the_answer():
+    """Same rule as the problem catalogue: this is served straight to a browser."""
+    body = client.get("/v1/diagnostic", headers={"x-learner-id": "t"}).text
+    assert "solution" not in body
+    for p in client.get("/v1/diagnostic", headers={"x-learner-id": "t"}).json()["problems"]:
+        assert "test_cases" not in p, "tests are the grading criteria, not a hint"
+
+
+def test_diagnostic_requires_a_learner():
+    assert client.get("/v1/diagnostic").status_code == 401
+    r = client.post("/v1/diagnostic/grade", json={"problem_id": "x", "code": "pass"})
+    assert r.status_code == 401
+
+
+def test_diagnostic_grade_rejects_an_unknown_problem():
+    r = client.post(
+        "/v1/diagnostic/grade",
+        json={"problem_id": "not_a_real_id", "code": "pass"},
+        headers={"x-learner-id": "t"},
+    )
+    assert r.status_code == 404
+
+
+def test_diagnostic_grades_against_the_bank_not_the_request():
+    """Test cases are the grading criteria. Taking them from the client would
+    let a caller mark their own work."""
+    import inspect
+
+    from app.main import diagnostic_grade
+
+    src = inspect.getsource(diagnostic_grade)
+    assert "PROBLEMS_BY_ID" in src
+    assert 'problem["test_cases"]' in src

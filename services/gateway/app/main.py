@@ -744,6 +744,115 @@ async def courses() -> list[dict]:
     ]
 
 
+class DiagnosticAnswer(BaseModel):
+    problem_id: str = Field(max_length=64)
+    code: str = Field(max_length=100_000)
+
+
+# How many problems a diagnostic asks. Small on purpose: this is meant to be
+# finished in one sitting, and an abandoned diagnostic produces no evidence at
+# all. Four spans the skill groups without becoming an exam.
+DIAGNOSTIC_SIZE = 4
+
+
+@app.get("/v1/diagnostic", responses=AUTH_RESPONSES)
+async def diagnostic(x_learner_id: str | None = LearnerHeader) -> dict:
+    """Pick a short set of problems that will actually tell us something.
+
+    Spread across *different* skills, because four problems on arrays measures
+    arrays four times and leaves the other fourteen skills exactly as unknown
+    as before. Weakest-known skills first, for the same reason the "start here"
+    card uses them: that is where the current estimate is least trustworthy.
+
+    Mid-difficulty within each skill, not hardest. An item only discriminates
+    near the learner's ability: four difficulty-5 problems mostly produce four
+    failures, which says "not expert" and nothing else. Picking the middle of
+    each skill's range is the best default when the ability is exactly what is
+    being measured.
+    """
+    learner = await _learner(x_learner_id)
+    mastery = await _mastery_for(learner)
+
+    by_skill: dict[str, list[dict]] = defaultdict(list)
+    for problem in PROBLEMS:
+        for skill in problem["skills"]:
+            if skill != UNTRACKED_SKILL:
+                by_skill[skill].append(problem)
+    if not by_skill:
+        return {"problems": [], "size": 0}
+
+    # Least-known first; an unseen skill is 0.0, which is where a diagnostic is
+    # worth the most.
+    order = sorted(by_skill, key=lambda s: (mastery.get(s, 0.0), s))
+
+    chosen: list[tuple[str, dict]] = []
+    seen: set[str] = set()
+    for skill in order:
+        if len(chosen) >= DIAGNOSTIC_SIZE:
+            break
+        pool = [p for p in by_skill[skill] if p["id"] not in seen]
+        if not pool:
+            continue
+        pool.sort(key=lambda p: p["difficulty"])
+        problem = pool[len(pool) // 2]
+        # Carry the skill this item was picked to probe. A problem tagged
+        # ["arrays", "sorting", "heaps"] chosen *for* heaps still lists arrays
+        # first, so the tags alone do not say what is being measured — and the
+        # learner deserves to know which gap each question is aimed at.
+        chosen.append((skill, problem))
+        seen.add(problem["id"])
+
+    return {
+        "size": len(chosen),
+        "problems": [
+            {
+                "id": p["id"],
+                "title": p.get("description") or p["title"],
+                "difficulty": p["difficulty"],
+                "skills": p["skills"],
+                "targets": target,
+                "function_name": p["function_name"],
+                "function_signature": p.get("function_signature", ""),
+            }
+            for target, p in chosen
+        ],
+    }
+
+
+@app.post("/v1/diagnostic/grade", responses=AUTH_RESPONSES)
+async def diagnostic_grade(
+    body: DiagnosticAnswer, x_learner_id: str | None = LearnerHeader
+) -> dict:
+    """Grade one diagnostic answer and record it as a real observation.
+
+    Test cases come from the gateway's own bank rather than the request. They
+    are the grading criteria — accepting them from the client would let a
+    caller mark their own work.
+    """
+    learner = await _learner(x_learner_id)
+    _rate_limit(learner)
+
+    problem = PROBLEMS_BY_ID.get(body.problem_id)
+    if problem is None:
+        raise HTTPException(404, "problem not found")
+
+    r = await app.state.http.post(
+        f"{SESSION_URL}/diagnostic/grade",
+        json={
+            "learner_id": learner,
+            "problem_id": problem["id"],
+            "code": body.code,
+            "function_name": problem["function_name"],
+            "test_cases": problem["test_cases"],
+            "skills": problem["skills"],
+        },
+        headers=_trace(),
+    )
+    if r.status_code >= 400:
+        raise HTTPException(r.status_code, r.text[:200])
+    return r.json()
+
+
 @app.get("/v1/problems")
 async def list_problems() -> list[dict]:
     """Catalogue for the assessment interface. No auth — browsing is harmless.
