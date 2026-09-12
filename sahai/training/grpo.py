@@ -196,9 +196,20 @@ class GRPOTrainer:
         step = 0
 
         for epoch in range(self.settings.training.epochs):
-            problems = self.problem_bank.zpd_sample(
-                self.student.tracer, self.settings.training.batch_size
-            )
+            batch_size = self.settings.training.batch_size
+            in_band = len(self.problem_bank.zpd_candidates(self.student.tracer))
+            problems = self.problem_bank.zpd_sample(self.student.tracer, batch_size)
+
+            # A thin band used to shrink the batch instead of being reported:
+            # epoch 5 of three separate runs trained on 2 problems rather than
+            # 4 and said so only as a number in a routine log line. The batch
+            # is topped up now, so the band size has to be stated explicitly or
+            # the fact that the epoch was padded disappears entirely.
+            if in_band < batch_size:
+                logger.warning(
+                    f"Only {in_band} problems in the ZPD band (need {batch_size}); "
+                    f"topped up with the nearest {batch_size - in_band} outside it"
+                )
 
             logger.info(f"Epoch {epoch}: rollout on {len(problems)} problems x G={self.settings.training.group_size}")
             rollouts = self._rollout_batch(problems)
