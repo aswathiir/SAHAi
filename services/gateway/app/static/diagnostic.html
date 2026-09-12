@@ -145,7 +145,14 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const state = { problems: [], i: 0, answers: [], started: 0, tick: null };
+const state = {
+  problems: [], i: 0, answers: [], started: 0, tick: null,
+  // Pinned when the run begins. Reading the box at submit time meant switching
+  // learner mid-diagnostic split one sitting across two permanent records —
+  // and unlike a stale render, graded answers are durable evidence that then
+  // moves the wrong learner's mastery.
+  runAs: null,
+};
 
 $('learner-id').value = localStorage.getItem('sahai_learner') || 'me';
 $('learner-id').addEventListener('change', e => {
@@ -154,7 +161,7 @@ $('learner-id').addEventListener('change', e => {
 $('learner-id').addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
 });
-const learnerId = () => ($('learner-id').value.trim()) || 'me';
+const learnerId = () => state.runAs || ($('learner-id').value.trim()) || 'me';
 
 async function api(path, opts = {}) {
   const headers = Object.assign(
@@ -247,6 +254,8 @@ async function grade(skipped) {
 function finish() {
   $('run').classList.add('hidden');
   $('done').classList.remove('hidden');
+  $('learner-id').disabled = false;
+  $('learner-id').title = 'Type a learner id and press Enter';
   const passed = state.answers.filter(a => a.passed).length;
   const total = state.answers.length;
   const elapsed = fmt(Date.now() - state.started);
@@ -273,6 +282,11 @@ $('begin').addEventListener('click', async () => {
     const d = await api('/v1/diagnostic');
     if (!d.problems.length) { showErr('No problems available for a diagnostic.'); return; }
     state.problems = d.problems;
+    state.runAs = ($('learner-id').value.trim()) || 'me';
+    // Locked rather than merely ignored, so the box cannot say one thing while
+    // the answers are recorded against another.
+    $('learner-id').disabled = true;
+    $('learner-id').title = 'Locked for the duration of this diagnostic';
     $('intro').classList.add('hidden');
     $('run').classList.remove('hidden');
     startClock();
