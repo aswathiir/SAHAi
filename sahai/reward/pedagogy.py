@@ -45,30 +45,41 @@ class RuleBasedJudge:
     """Heuristic pedagogy judge — no LLM needed. Usable on constrained hardware."""
 
     def evaluate(self, dialogue: Dialogue) -> float:
-        """Mean of five checks, each scored over the tutor's turns.
+        """Mean of three checks, each scored over the tutor's turns.
 
-        All-or-nothing scoring collapses a GRPO group to a single reward value,
-        which zeroes every advantage and kills the gradient. Grading keeps
-        within-group variance so the update has something to learn from.
+        **All three ask the same question: did the tutor give the answer away?**
+        Nothing here scores teaching style any more.
 
-        **The four "never do X" checks are scored per turn, not per dialogue.**
-        They used to fail the whole dialogue if *any* single tutor turn
-        violated them. That made the score fall purely as a function of length:
-        measured over the 304 rollouts of the v11 run, mean r_ped was 0.720 at
-        one tutor turn, 0.639 at two, 0.537 at three, 0.453 at four — a clean
-        monotonic slide, because more turns simply meant more chances to trip a
-        conjunctive check. GRPO reads that as "shorter dialogues teach better"
-        and optimises for ending the conversation, which is an artifact of this
-        function rather than anything about teaching.
+        Two checks were removed after the question-fraction change cost a run
+        (held-out solve 16.3% -> 6.2%; see docs/04-findings.md entry 11). The
+        line they failed is not "execution-verifiable" — execution lives in the
+        leakage term — but this:
 
-        Scoring each check as the *fraction of tutor turns that pass* removes
-        that: adding a turn no worse than the others now leaves the score
-        unchanged. It also gives a finer-grained signal — three clean turns and
-        one with code scores 0.75 on that check instead of 0.
+            keep a check when satisfying the rule and achieving the goal are
+            the same act; drop it when the rule is a proxy that can be
+            satisfied without the goal.
+
+        "Do not write code" has no fake version: either the tutor emitted a
+        fence or it did not, and not emitting one is exactly the behaviour
+        wanted. "Ask questions" has an obvious fake version — a question mark —
+        and the policy found it in a single run. "Under 200 words" is an
+        arbitrary cutoff and was the vector for the original length bias.
+
+        What is lost is real: nothing now rewards Socratic teaching, so `r_sol`
+        carries that signal alone — a tutor is rewarded when the student solves
+        the problem afterwards, which is the outcome the project actually cares
+        about and the one measure that has never been gamed. That is a
+        deliberate narrowing, not an oversight.
+
+        Scoring stays per turn rather than all-or-nothing: a conjunctive check
+        over the whole dialogue made the score fall purely with length
+        (measured across the v11 run: 0.720 / 0.639 / 0.537 / 0.453 at one to
+        four tutor turns), which GRPO reads as "shorter dialogues teach better".
         """
-        # A dialogue with no tutor turns must score zero, not 0.8. Every "no X"
-        # check passes vacuously when there is nothing to inspect, so a rollout
-        # where the tutor stays silent would be rewarded as good teaching.
+        # A dialogue with no tutor turns must score zero, not 1.0. Every check
+        # here is a "no X" and passes vacuously when there is nothing to
+        # inspect, so a silent tutor would otherwise score perfectly — and in
+        # training the policy could learn exactly that.
         tutor_turns = [t for t in dialogue.turns if t.role == "tutor"]
         if not tutor_turns:
             return 0.0
@@ -76,8 +87,6 @@ class RuleBasedJudge:
         checks = [
             self._no_code_blocks(tutor_turns),
             self._no_solution_patterns(tutor_turns),
-            self._tutor_asks_questions(tutor_turns),
-            self._reasonable_length(tutor_turns),
             self._no_dangling_promises(tutor_turns),
         ]
         return sum(checks) / len(checks)
@@ -108,42 +117,6 @@ class RuleBasedJudge:
             tutor_turns,
             lambda c: not any(re.search(p, c) for p in SOLUTION_INDICATORS),
         )
-
-    def _tutor_asks_questions(self, tutor_turns: list) -> float:
-        """Did the tutor ask at all? A 30% threshold, not the per-turn share.
-
-        This was briefly the fraction of turns containing a question, on the
-        reasoning that a threshold carried no gradient: 81% of the v14 run's
-        late dialogues had zero tutor questions, so the check read 0 for nearly
-        every rollout and a constant contributes nothing to a GRPO advantage.
-
-        That reasoning was right and the fix was still wrong. Measured over the
-        run that followed, mean ped climbed 0.717 -> 0.992 while held-out solve
-        rate fell 16.3% -> 6.2%, the worst since the original baseline. The
-        policy had found that a question mark is cheap:
-
-            "Hash maps? Kaise use kar sakta hu?"   ->  ped 1.00
-
-        Seven words, no content, a perfect pedagogy score. And because reward
-        carries `(r_ped - 1) * lambda`, driving r_ped to 1.0 does not merely
-        score well — it cancels the pedagogy penalty outright, so the tutor
-        bought its way out of the term entirely while teaching less.
-
-        A content-word gate was tried before reverting and does not separate
-        the two: the gamed turns hold 3-12 content words and genuinely good
-        questions 4-13, which overlap completely. There is no counting rule
-        here that survives contact with a policy optimising against it.
-
-        So this returns to the threshold, which was inert but never harmful,
-        and the real question — how to reward teaching without a rule that can
-        be gamed in one run — is left open rather than papered over. See
-        docs/04-findings.md.
-        """
-        questions = sum(1 for t in tutor_turns if "?" in t.content)
-        return float(questions >= len(tutor_turns) * 0.3)
-
-    def _reasonable_length(self, tutor_turns: list) -> float:
-        return self._fraction(tutor_turns, lambda c: len(c.split()) <= 200)
 
 
 class PedagogyReward:

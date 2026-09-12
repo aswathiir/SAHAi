@@ -244,13 +244,15 @@ Five checks, all applied only to the *tutor's* turns:
 
 ```python
 checks = [
-    self._no_code_blocks(dialogue),        # no ```code``` blocks
-    self._no_solution_patterns(dialogue),  # no "def f(", "return [", etc.
-    self._tutor_asks_questions(dialogue),  # >=30% of tutor turns contain "?"
-    self._reasonable_length(dialogue),     # no tutor turn over 200 words
-    self._no_dangling_promises(dialogue),  # no tutor turn ending in ":"
+    self._no_code_blocks(tutor_turns),        # no ```code``` blocks
+    self._no_solution_patterns(tutor_turns),  # no "def f(", "return [", etc.
+    self._no_dangling_promises(tutor_turns),  # no tutor turn ending in ":"
 ]
 return sum(checks) / len(checks)
+
+# A question check and a 200-word length check used to sit here. Both were
+# removed: they scored teaching *style*, and every style rule tried so far was
+# gamed within one run. See docs/04-findings.md entry 11.
 ```
 
 (The `:` check exists because a turn like *"Here is the implementation:"*

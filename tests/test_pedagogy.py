@@ -35,8 +35,8 @@ def test_code_block_penalized():
         ],
         student_msgs=["Help me."],
     )
-    # Fails code-block, solution-pattern and asks-question of 5 checks.
-    assert judge.evaluate(d) == 2 / 5
+    # Fails code-block and solution-pattern of the 3 remaining checks.
+    assert judge.evaluate(d) == 1 / 3
 
 
 def test_unclosed_code_block_penalized():
@@ -59,42 +59,56 @@ def test_solution_pattern_penalized():
         ],
         student_msgs=["How do I solve this?"],
     )
-    assert judge.evaluate(d) == 3 / 5
+    assert judge.evaluate(d) == 2 / 3
 
 
-def test_no_questions_penalized():
+def test_style_is_no_longer_scored():
+    """Questions and length were dropped after the question-fraction change
+    cost a run (held-out solve 16.3% -> 6.2%, docs/04-findings.md entry 11).
+
+    A turn that teaches plainly and one that asks a question now score the
+    same, because the reward has no opinion about which is better teaching —
+    and every opinion it did have was gamed within one run. `r_sol` decides,
+    by whether the student solves the problem afterwards.
+    """
     judge = RuleBasedJudge()
-    d = _make_dialogue(
-        tutor_msgs=[
-            "Use a hash map.",
-            "Store the values.",
-            "Then look them up.",
-        ],
-        student_msgs=[
-            "How do I start.",
-            "Ok.",
-            "Ok.",
-        ],
+    asks = _make_dialogue(
+        tutor_msgs=["What structure gives you O(1) lookup?"], student_msgs=["Help."]
     )
-    assert judge.evaluate(d) == 4 / 5
+    tells = _make_dialogue(
+        tutor_msgs=["A hash map gives O(1) lookup on the key."], student_msgs=["Help."]
+    )
+    exploit = _make_dialogue(
+        tutor_msgs=["Hash maps? Kaise use kar sakta hu?"], student_msgs=["Help."]
+    )
+    assert judge.evaluate(asks) == judge.evaluate(tells) == judge.evaluate(exploit)
+
+
+def test_length_is_no_longer_scored():
+    """The 200-word cutoff was arbitrary and was the vector for the original
+    length bias. A long substantive turn is not a pedagogy failure."""
+    judge = RuleBasedJudge()
+    long_turn = _make_dialogue(tutor_msgs=["word " * 250], student_msgs=["Help."])
+    assert judge.evaluate(long_turn) == 1.0
 
 
 def test_grading_separates_dialogues():
-    """Partial credit is what keeps a GRPO group from collapsing to one value."""
+    """Partial credit is what keeps a GRPO group from collapsing to one value.
+
+    The separation is now between *giving the answer away* and not, rather than
+    between teaching styles: asking and telling score identically on purpose.
+    """
     judge = RuleBasedJudge()
-    good = _make_dialogue(
-        tutor_msgs=["What structure gives O(1) lookup?"],
-        student_msgs=["Help me."],
+    clean = _make_dialogue(
+        tutor_msgs=["What structure gives O(1) lookup?"], student_msgs=["Help me."]
     )
-    mediocre = _make_dialogue(
-        tutor_msgs=["Use a hash map."],
-        student_msgs=["Help me."],
+    partial = _make_dialogue(
+        tutor_msgs=["Here is how you would structure it:"], student_msgs=["Help me."]
     )
-    bad = _make_dialogue(
-        tutor_msgs=["```python\ndef f(): return 1\n```"],
-        student_msgs=["Help me."],
+    gives_it_away = _make_dialogue(
+        tutor_msgs=["```python\ndef f(): return 1\n```"], student_msgs=["Help me."]
     )
-    assert judge.evaluate(good) > judge.evaluate(mediocre) > judge.evaluate(bad)
+    assert judge.evaluate(clean) > judge.evaluate(partial) > judge.evaluate(gives_it_away)
 
 
 def test_dangling_promise_penalized():
@@ -196,31 +210,15 @@ def test_violations_scored_per_turn_not_all_or_nothing():
     assert all_bad < score < all_good
 
 
-def test_threshold_does_not_pay_to_question_every_turn():
-    """The regression that cost a run, pinned at its actual mechanism.
+def test_questions_are_not_scored_at_all():
+    """Stronger than the threshold this replaced: there is no question check,
+    so no amount of question-shaping moves the score.
 
-    The check was briefly the *fraction* of tutor turns containing a question,
-    to give it a gradient. Over the run that followed, mean r_ped climbed
-    0.717 -> 0.992 while held-out solve fell 16.3% -> 6.2%, the worst since the
-    original baseline.
-
-    The exploit is not that a short question scores well — a single
-    contentless question reaches r_ped 1.0 under *both* forms, because the
-    other four checks all pass vacuously on a short clean turn. The difference
-    is the pressure. In a four-turn dialogue:
-
-        questions   threshold   fraction
-            2          1.00       0.90
-            4          1.00       1.00
-
-    Under the threshold, converting the two remaining substantive turns into
-    questions gains nothing. Under the fraction it is worth 0.10 of r_ped, and
-    since reward carries `(r_ped - 1) * lambda`, closing that gap also cancels
-    the pedagogy penalty outright. Every teaching turn left un-questioned was
-    costing reward, so they stopped being teaching turns.
-
-    This does not make the threshold good — it is inert, which is why it was
-    changed. It makes it non-exploitable, which the fraction was not.
+    The per-turn fraction of questions cost a run — mean r_ped climbed
+    0.717 -> 0.992 while held-out solve fell 16.3% -> 6.2%, because reward
+    carries `(r_ped - 1) * lambda` and driving r_ped to 1.0 cancels the
+    pedagogy penalty outright. Reverting to the threshold removed the pressure
+    but left the exploit reachable; removing the check removes both.
     """
     judge = RuleBasedJudge()
 
@@ -235,9 +233,6 @@ def test_threshold_does_not_pay_to_question_every_turn():
             )
         return judge.evaluate(d)
 
-    assert with_questions(2) == with_questions(4), (
-        "questioning every turn must gain nothing over clearing the bar, or "
-        "substantive turns are worth converting into question marks"
+    assert len({with_questions(n) for n in range(5)}) == 1, (
+        "question count must not move the score at all"
     )
-    # And the check still has to do something: no questions must score lower.
-    assert with_questions(0) < with_questions(2)
