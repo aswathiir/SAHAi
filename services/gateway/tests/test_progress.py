@@ -243,3 +243,43 @@ def test_diagnostic_grades_against_the_bank_not_the_request():
     src = inspect.getsource(diagnostic_grade)
     assert "PROBLEMS_BY_ID" in src
     assert 'problem["test_cases"]' in src
+
+
+def test_skills_covered_uses_the_same_threshold_as_everything_else():
+    """It was a hardcoded 0.7 while MASTERY_SOLID is 0.65, and placement caps
+    confidence at exactly 0.65 — so a learner the tutor already treats as solid
+    on a skill still read as "0 skills covered" on the same response. Two
+    answers to the same question."""
+    import inspect
+
+    from app.main import MASTERY_SOLID, progress
+
+    src = inspect.getsource(progress)
+    assert ">= MASTERY_SOLID" in src
+    assert ">= 0.7" not in src
+    # And the threshold has to stay reachable by a placement.
+    assert MASTERY_SOLID <= 0.65
+
+
+def test_track_marks_a_mastery_that_is_only_an_estimate():
+    """"0/31 solved, 60% mastery" reads as broken. `solved` is work done in
+    this bank; `mastery` can come entirely from a placement survey or an
+    imported repo. The card has to be able to say which."""
+    import inspect
+
+    from app.main import progress
+
+    assert "estimate_only" in inspect.getsource(progress)
+    page = _static("progress.html")
+    assert "solved here" in page, "the two numbers must be labelled distinctly"
+    assert "est. " in page
+
+
+def test_activity_grid_days_can_be_opened():
+    """The grid was the last inert element on the page — every square hovered a
+    tooltip and nothing more. A tooltip is invisible on touch and gone as soon
+    as the pointer moves."""
+    page = _static("progress.html")
+    assert "data-date=" in page
+    assert "day-detail" in page
+    assert 'role="button"' in page, "an activated day needs to be reachable by keyboard"

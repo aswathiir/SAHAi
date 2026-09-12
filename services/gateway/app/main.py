@@ -689,13 +689,22 @@ async def progress(x_learner_id: str | None = LearnerHeader) -> dict:
 
     current, longest = _streak(sorted(by_day))
 
-    # A skill counts as covered once its posterior clears the top of the ZPD
-    # band — the same threshold the sampler uses to stop offering it.
     tracks = []
     for track in COURSE_TRACKS:
         problems = [p for p in PROBLEMS if set(p["skills"]) & set(track["skills"])]
         done = [p for p in problems if p["id"] in solved_problems]
-        covered = [s for s in track["skills"] if skills.get(s, 0.0) >= 0.7]
+        # MASTERY_SOLID, not a separate 0.7. Placement caps confidence at
+        # exactly 0.65, so a hardcoded 0.7 meant a learner the tutor already
+        # treats as solid on a skill still read as "0 skills covered" here —
+        # two answers to the same question in one response.
+        covered = [s for s in track["skills"] if skills.get(s, 0.0) >= MASTERY_SOLID]
+        # `solved` and `mastery` answer different questions and a card that
+        # shows them side by side reads as a contradiction: "0/31 solved, 60%
+        # mastery" looks broken. `solved` is work done in this bank; `mastery`
+        # is the current belief about the skill, which can come from a
+        # placement survey or an imported solved-problem repo without a single
+        # problem having been worked here. `estimate_only` says which case this
+        # is so the page can label it instead of implying progress.
         tracks.append(
             {
                 **track,
@@ -706,6 +715,7 @@ async def progress(x_learner_id: str | None = LearnerHeader) -> dict:
                     sum(skills.get(s, 0.0) for s in track["skills"]) / len(track["skills"])
                     if track["skills"] else 0.0
                 ),
+                "estimate_only": not done,
             }
         )
 
