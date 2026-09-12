@@ -127,9 +127,18 @@ async def request_context(request: Request, call_next):
     return response
 
 
-def _trace() -> dict[str, str]:
-    """Headers that carry the request id to the next service."""
-    return {"x-request-id": _request_id.get()}
+def _trace(learner: str | None = None) -> dict[str, str]:
+    """Headers passed to the next service: the request id, and who is asking.
+
+    The learner is forwarded because session now checks that the caller owns
+    the session before reading or writing it. Identity is still the stub the
+    gateway uses — a header, not a verified token — but without forwarding it
+    the check has nothing to compare against.
+    """
+    headers = {"x-request-id": _request_id.get()}
+    if learner:
+        headers["x-learner-id"] = learner
+    return headers
 
 
 def _rate_limit(learner_id: str) -> None:
@@ -349,7 +358,7 @@ async def add_turn(
     r = await app.state.http.post(
         f"{SESSION_URL}/sessions/{session_id}/turns",
         json=payload,
-        headers=_trace(),
+        headers=_trace(learner),
     )
     if r.status_code >= 400:
         raise HTTPException(r.status_code, r.json().get("detail", "session error"))
@@ -365,7 +374,7 @@ async def submit(
     r = await app.state.http.post(
         f"{SESSION_URL}/sessions/{session_id}/submit",
         json=req.model_dump(),
-        headers=_trace(),
+        headers=_trace(learner),
     )
     if r.status_code >= 400:
         raise HTTPException(r.status_code, r.json().get("detail", "submit error"))
@@ -442,7 +451,7 @@ async def voice_turn(
                 turn_resp = await app.state.http.post(
                     f"{SESSION_URL}/sessions/{session_id}/turns",
                     json=payload,
-                    headers=_trace(),
+                    headers=_trace(learner_id),
                 )
                 if turn_resp.status_code >= 400:
                     await websocket.send_json(
@@ -492,9 +501,9 @@ async def voice_turn(
 async def get_session(
     session_id: str, x_learner_id: str | None = LearnerHeader
 ) -> dict:
-    await _learner(x_learner_id)
+    learner = await _learner(x_learner_id)
     r = await app.state.http.get(
-        f"{SESSION_URL}/sessions/{session_id}", headers=_trace()
+        f"{SESSION_URL}/sessions/{session_id}", headers=_trace(learner)
     )
     if r.status_code >= 400:
         raise HTTPException(r.status_code, "session not found")
