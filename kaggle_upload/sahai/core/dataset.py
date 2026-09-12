@@ -81,16 +81,86 @@ def _extract_function_signature(code: str) -> str:
 
 
 def _estimate_difficulty(code: str, text: str) -> int:
-    indicators = 0
-    if len(code.split("\n")) > 15:
-        indicators += 1
-    if any(kw in text.lower() for kw in ["dynamic programming", "graph", "tree", "backtrack"]):
-        indicators += 1
-    if any(kw in code for kw in ["for", "while"]):
-        nested = code.count("    for ") + code.count("    while ")
-        if nested > 1:
-            indicators += 1
-    return min(max(indicators, 1), 5)
+    """Structural complexity of the reference solution, 1-5.
+
+    The previous version counted three coarse indicators — >15 lines, a topic
+    keyword, more than one indented loop — and MBPP solutions are mostly 3-8
+    lines with a single loop, so it returned 1 for almost everything: measured
+    over the 296 usable train problems it gave 292 x difficulty-1 and 4 x
+    difficulty-2. A field with one value carries no information, so the
+    interface could not show range and eval's per-difficulty buckets were
+    degenerate.
+
+    Parsing the solution instead spreads the same 296 problems across
+    1:186 2:59 3:36 4:9 5:6, and the ordering is legible — reversing words in
+    a string lands at 1, median-of-two-sorted-arrays at 4.
+
+    Note this does **not** affect problem selection: `BKTTracer.in_zpd` takes
+    `difficulty` as an argument and ignores it, choosing purely on skill
+    mastery. So this changes what is displayed and how eval buckets, not what
+    any learner or training run is offered.
+    """
+    source = "\n".join(
+        line for line in code.splitlines() if not line.strip().startswith("#")
+    )
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return 1
+
+    nodes = list(ast.walk(tree))
+    loops = sum(isinstance(n, (ast.For, ast.While)) for n in nodes)
+    branches = sum(isinstance(n, (ast.If, ast.IfExp)) for n in nodes)
+    comprehensions = sum(
+        isinstance(n, (ast.ListComp, ast.DictComp, ast.SetComp, ast.GeneratorExp))
+        for n in nodes
+    )
+    functions = [n for n in nodes if isinstance(n, ast.FunctionDef)]
+
+    modules = {
+        alias.name.split(".")[0]
+        for n in nodes
+        if isinstance(n, ast.Import)
+        for alias in n.names
+    } | {
+        n.module.split(".")[0]
+        for n in nodes
+        if isinstance(n, ast.ImportFrom) and n.module
+    }
+
+    def max_nesting(node: ast.AST, depth: int = 0) -> int:
+        deepest = depth
+        for child in ast.iter_child_nodes(node):
+            step = isinstance(child, (ast.For, ast.While, ast.If))
+            deepest = max(deepest, max_nesting(child, depth + step))
+        return deepest
+
+    defined = {f.name for f in functions}
+    recursive = any(
+        isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in defined
+        for n in nodes
+    )
+
+    score = (
+        min(loops, 3) * 0.8
+        + min(branches, 3) * 0.5
+        + comprehensions * 0.4
+        + max(max_nesting(tree) - 1, 0) * 1.0
+        + (len(functions) - 1) * 0.8
+        + (1.5 if recursive else 0.0)
+        # Reaching for these means the problem needed a real data structure.
+        + (1.0 if modules & {"heapq", "bisect", "itertools", "functools", "collections"} else 0.0)
+        + len([line for line in source.splitlines() if line.strip()]) / 14.0
+        + (
+            1.0
+            if any(
+                kw in text.lower()
+                for kw in ("dynamic programming", "graph", "tree", "backtrack", "matrix")
+            )
+            else 0.0
+        )
+    )
+    return max(1, min(5, round(score / 1.6)))
 
 
 def load_mbpp(split: str = "train", max_problems: int | None = None) -> ProblemBank:

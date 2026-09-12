@@ -446,20 +446,26 @@ COURSE_TRACKS = [
     {
         "id": "collections",
         "title": "Collections",
-        "blurb": "Arrays and hash maps — the two structures most interviews lean on.",
-        "skills": ["arrays", "hash_maps"],
+        "blurb": "Arrays, hash maps and stacks — the structures interviews lean on most.",
+        "skills": ["arrays", "hash_maps", "stacks"],
     },
     {
         "id": "ordering",
         "title": "Ordering & Search",
-        "blurb": "Sorting, two-pointer scans and the heap.",
-        "skills": ["sorting", "two_pointers", "heaps"],
+        "blurb": "Sorting, binary search, two-pointer scans and the heap.",
+        "skills": ["sorting", "binary_search", "two_pointers", "heaps"],
     },
     {
         "id": "recursive",
         "title": "Recursive Thinking",
-        "blurb": "Trees, recursion and problems that fold into themselves.",
-        "skills": ["recursion", "trees"],
+        "blurb": "Trees, graphs and problems that fold into themselves.",
+        "skills": ["recursion", "trees", "graphs"],
+    },
+    {
+        "id": "optimisation",
+        "title": "Optimisation",
+        "blurb": "Overlapping subproblems, and paying for each one only once.",
+        "skills": ["dynamic_programming"],
     },
     {
         "id": "bits",
