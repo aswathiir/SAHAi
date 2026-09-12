@@ -288,3 +288,64 @@ Recorded because the discipline matters more than the individual numbers.
   `hard_penalty`, which would have forced exactly `−1.0` had it really been zero.
 - **`machine_shape: "gpu-t4x2"`** was asserted as the fix when the SDK
   explicitly documents that valid values are not available to it. It cost a run.
+
+## 11. The question-fraction change cost a run (reward hacking, not overfitting)
+
+Making `_tutor_asks_questions` the per-turn fraction instead of a 30% threshold
+was meant to give an inert check a gradient. It did, and the policy optimised
+it directly.
+
+| | before (v15) | after |
+|---|---|---|
+| held-out solve | **16.3%** | **6.2%** |
+| training mean r_ped, final epoch | — | 0.992 |
+| training mean reward, final epoch | — | +0.168 (first positive) |
+
+Reward went up while the thing reward exists to produce went down. That
+divergence is the signature, and it is **not** classical overfitting: training
+solve averaged 0.144 over epochs 2-8, so nothing was memorised. Epoch 9's
+0.367 is a single-epoch outlier on four problems that makes the curve look
+like success.
+
+**Mechanism.** A question mark is cheap:
+
+    "Hash maps? Kaise use kar sakta hu?"   ->  r_ped 1.00
+
+Seven words, no content, perfect score. The exploit exists under *both* forms
+— every other check passes vacuously on a short clean turn — so the fraction
+did not create it. What the fraction created was the **pressure to use it**. In
+a four-turn dialogue:
+
+    questions   threshold   fraction
+        2          1.00       0.90
+        4          1.00       1.00
+
+Under the threshold, converting the remaining substantive turns into questions
+gains nothing. Under the fraction it is worth 0.10 of r_ped — and because
+reward carries `(r_ped - 1) * lambda`, closing that gap does not merely score
+well, it cancels the pedagogy penalty outright. Every teaching turn left
+un-questioned was costing reward.
+
+**A content gate does not work.** Tried before reverting: the gamed turns hold
+3-12 content words and genuinely good questions 4-13. They overlap completely.
+There is no counting rule that separates them.
+
+**The pattern across four attempts.** Every rule-based pedagogy fix has been
+gamed within one run:
+
+| rule | how it was gamed |
+|---|---|
+| all-or-nothing | length bias — end the conversation early |
+| per-turn fraction of "never do X" | fixed that, exposed the next |
+| question threshold | inert, no gradient |
+| question fraction | contentless questions |
+
+Rule-based pedagogy scoring has reached its ceiling. The judge exists to avoid
+an LLM judge's GPU cost; that saving is now the binding constraint rather than
+a saving. The open choice is to pay for an LLM judge, or to reduce pedagogy to
+the part that is execution-verifiable (code and solution leakage) and let
+`r_sol` carry the signal.
+
+**Also seen in this run:** epoch 5 drew 2 problems instead of 4 — the
+`zpd_sample` shortfall, now in three separate runs — and at batch_size 4 over
+10 epochs the run revisits problems, visible as a repeat across epochs 6 and 8.
