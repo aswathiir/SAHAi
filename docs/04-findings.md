@@ -430,3 +430,36 @@ is a deletion, which is the category that has worked.
 **Also worth not repeating:** v14 changed learning rate, batch size and
 pedagogy scoring in one run and came out net negative, so none of the three can
 be attributed. One variable per run.
+
+## 13. `zpd_sample` shrank the batch instead of topping it up
+
+Seen in three separate runs and dismissed each time as a curiosity in the log:
+
+    Epoch 5: rollout on 2 problems x G=8
+
+`batch_size` is 4. That epoch trained on half the rollouts and contributed half
+the gradient, and nothing said so beyond a number in a routine INFO line.
+
+The cause:
+
+```python
+candidates = [p for p in self.problems if tracer.in_zpd(...)]
+if not candidates:            # only fires when the band is COMPLETELY empty
+    candidates = self.problems
+return random.sample(candidates, min(n, len(candidates)))   # <- silently short
+```
+
+With one to three problems inside [0.3, 0.7] and `n=4`, the fallback never
+fired and `min()` returned a short batch. The band thins naturally as mastery
+moves — every skill the learner masters leaves the band — so this gets *more*
+likely as a run progresses, which is exactly when the gradient matters most.
+
+**Fixed** by topping the batch up to `n` with the problems nearest the band,
+rather than random ones: "just outside the ZPD" is the best available
+substitute for "inside it", where the alternative is padding a thin epoch with
+work the learner has either mastered or cannot touch. Ties are broken randomly
+so a short epoch does not always draw the same problems.
+
+The trainer now logs a WARNING naming the band size whenever it tops up. The
+batch no longer shrinks, so without that line the padding would be invisible —
+which is how the original went unnoticed for three runs.

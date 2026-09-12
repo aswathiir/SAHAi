@@ -66,8 +66,51 @@ class ProblemBank:
     def filter_skills(self, skills: set[str]) -> list[Problem]:
         return [p for p in self.problems if skills & set(p.skills)]
 
+    def zpd_candidates(self, tracer) -> list[Problem]:
+        """Problems whose average skill mastery sits inside the ZPD band.
+
+        Exposed separately so a caller can log how many there were. The band
+        running short is the interesting event, and `zpd_sample` deliberately
+        hides it by topping the batch up.
+        """
+        return [p for p in self.problems if tracer.in_zpd(p.difficulty, p.skills)]
+
     def zpd_sample(self, tracer, n: int) -> list[Problem]:
-        candidates = [p for p in self.problems if tracer.in_zpd(p.difficulty, p.skills)]
-        if not candidates:
-            candidates = self.problems
-        return random.sample(candidates, min(n, len(candidates)))
+        """`n` problems, preferring the ZPD band, topped up when it is short.
+
+        This used to return `min(n, len(candidates))`, and the "band is empty"
+        fallback only fired when it was *completely* empty. With one to three
+        problems in the band and n=4 it returned a short batch, silently: epoch
+        5 of three separate runs drew 2 problems instead of 4, which is half
+        that epoch's rollouts and half its gradient, with nothing in the logs
+        saying so beyond a line nobody reads as an error.
+
+        The top-up takes the problems nearest the band rather than random ones,
+        because "just outside the ZPD" is the best available substitute for
+        "inside it" — the alternative is padding a thin epoch with work the
+        learner has either mastered or cannot touch.
+        """
+        in_band = self.zpd_candidates(tracer)
+        if len(in_band) >= n:
+            return random.sample(in_band, n)
+
+        chosen = list(in_band)
+        rest = [p for p in self.problems if p not in chosen]
+        if not rest:
+            return chosen
+
+        def distance_from_band(problem: Problem) -> float:
+            if not problem.skills:
+                return 0.0
+            avg = sum(tracer.get_mastery(s) for s in problem.skills) / len(problem.skills)
+            if avg < tracer.settings.zpd_low:
+                return tracer.settings.zpd_low - avg
+            if avg > tracer.settings.zpd_high:
+                return avg - tracer.settings.zpd_high
+            return 0.0
+
+        # Shuffle first so ties are broken randomly rather than by bank order,
+        # which would hand every short epoch the same problems.
+        random.shuffle(rest)
+        rest.sort(key=distance_from_band)
+        return chosen + rest[: n - len(chosen)]

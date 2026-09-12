@@ -75,3 +75,61 @@ def test_eval_budget_still_fits_the_kaggle_cap():
         f"training {training_hours:.1f}h + eval {eval_hours:.1f}h leaves no margin "
         "under the 12h cap"
     )
+
+
+def _bank_with_mastery(mastery_by_skill):
+    """A bank plus a tracer whose mastery we control, to drive the ZPD band."""
+    from sahai.agents.tracer import BKTTracer
+    from sahai.core.data import Problem, ProblemBank, TestCase
+
+    problems = [
+        Problem(
+            id=f"p{i}", title=f"t{i}", description="d", difficulty=1,
+            skills=[skill], function_name="f", function_signature="def f():",
+            test_cases=[TestCase(input={}, expected=1)], solution="pass",
+        )
+        for i, skill in enumerate(mastery_by_skill)
+    ]
+    tracer = BKTTracer()
+    for skill, value in mastery_by_skill.items():
+        tracer.skills[skill] = value
+    return ProblemBank(problems=problems), tracer
+
+
+def test_zpd_sample_tops_up_a_short_band():
+    """A thin band used to shrink the batch instead of being topped up.
+
+    `min(n, len(candidates))` returned a short list, and the "band is empty"
+    fallback only fired when it was *completely* empty. Epoch 5 of three
+    separate runs trained on 2 problems instead of 4 — half that epoch's
+    rollouts and half its gradient, reported only as a number in a routine log
+    line.
+    """
+    # One problem inside [0.3, 0.7]; the rest far outside it.
+    bank, tracer = _bank_with_mastery(
+        {"in_band": 0.5, "mastered_a": 0.98, "mastered_b": 0.97, "unknown_a": 0.02}
+    )
+    picked = bank.zpd_sample(tracer, 4)
+    assert len(picked) == 4, f"short batch: got {len(picked)}"
+    assert len(bank.zpd_candidates(tracer)) == 1, "fixture no longer exercises a thin band"
+
+
+def test_zpd_sample_prefers_the_band_then_the_nearest_to_it():
+    """The top-up is nearest-to-band, not random: just outside the ZPD is the
+    best substitute for inside it."""
+    bank, tracer = _bank_with_mastery(
+        {"in_band": 0.5, "near": 0.75, "far": 0.999}
+    )
+    picked = {p.skills[0] for p in bank.zpd_sample(tracer, 2)}
+    assert picked == {"in_band", "near"}, picked
+
+
+def test_zpd_sample_still_returns_n_when_the_band_is_full():
+    bank, tracer = _bank_with_mastery({f"s{i}": 0.5 for i in range(8)})
+    assert len(bank.zpd_sample(tracer, 4)) == 4
+    assert len(bank.zpd_candidates(tracer)) == 8
+
+
+def test_zpd_sample_cannot_exceed_the_bank():
+    bank, tracer = _bank_with_mastery({"only": 0.99})
+    assert len(bank.zpd_sample(tracer, 4)) == 1
