@@ -225,8 +225,19 @@
 <script>
 const state = {
   problems: [], selected: null, sessionId: null, status: null, sending: false,
-  voiceSocket: null, mediaRecorder: null, recording: false,
+  voiceSocket: null, mediaRecorder: null, recording: false, voiceEpoch: 0,
+  // Bumped every time the active session changes. A turn can be in flight for
+  // minutes against a real model, and the learner is free to pick a different
+  // problem while it runs — without this, the old session's reply lands and
+  // renders its transcript into the new problem's conversation.
+  epoch: 0,
 };
+
+// Capture at request time, compare on arrival: false means the user moved on
+// and this response belongs to a conversation that is no longer on screen.
+function stillCurrent(epoch) {
+  return epoch === state.epoch;
+}
 
 function learnerId() {
   let v = document.getElementById('learner-id').value.trim();
@@ -283,6 +294,7 @@ async function selectProblem(id) {
   const problem = await api(`/v1/problems/${id}`);
   state.selected = problem;
   state.sessionId = null;
+  state.epoch += 1;   // invalidate anything already in flight
   state.status = null;
   closeVoiceSocket();
 
@@ -324,6 +336,7 @@ document.getElementById('start-btn').addEventListener('click', async () => {
   const p = state.selected;
   const btn = document.getElementById('start-btn');
   btn.disabled = true;
+  const epoch = state.epoch;
   try {
     const session = await api('/v1/sessions', {
       method: 'POST',
@@ -331,6 +344,9 @@ document.getElementById('start-btn').addEventListener('click', async () => {
         problem_id: p.id, problem_title: p.title, problem_description: p.description,
       }),
     });
+    // The user can pick another problem while this is in flight; a session
+    // created for the one they left must not install itself as the active one.
+    if (!stillCurrent(epoch)) return;
     state.sessionId = session.session_id;
     setStatus(session.status);
     renderTurns(session.turns);
@@ -379,6 +395,7 @@ async function sendTurn() {
   turnsBox.appendChild(thinkingDiv);
   turnsBox.scrollTop = turnsBox.scrollHeight;
 
+  const epoch = state.epoch;
   try {
     const session = await api(`/v1/sessions/${state.sessionId}/turns`, {
       method: 'POST',
@@ -386,17 +403,25 @@ async function sendTurn() {
       // cannot be steered by claiming a different problem's skills.
       body: JSON.stringify({ content, problem_id: state.selected?.id }),
     });
+    if (!stillCurrent(epoch)) return;   // user switched problems mid-flight
     setStatus(session.status);
     renderTurns(session.turns);
   } catch (e) {
+    if (!stillCurrent(epoch)) return;
     thinkingDiv.remove();
     thinkingDiv.textContent = '';
     alert('Message failed: ' + e.message);
   } finally {
+    // The flag always resets — it guards this function, not the view. The DOM
+    // writes do not: re-enabling and focusing the composer for a conversation
+    // the learner has navigated away from steals focus from the one they are
+    // actually looking at.
     state.sending = false;
-    box.disabled = false;
-    sendBtn.disabled = false;
-    box.focus();
+    if (stillCurrent(epoch)) {
+      box.disabled = false;
+      sendBtn.disabled = false;
+      box.focus();
+    }
   }
 }
 
@@ -477,6 +502,7 @@ function openVoiceSocket() {
     `?learner_id=${encodeURIComponent(learnerId())}&lang=${lang}` +
     `&problem_id=${encodeURIComponent(state.selected?.id || '')}`;
   const ws = new WebSocket(url);
+  state.voiceEpoch = state.epoch;
   ws.onmessage = onVoiceMessage;
   ws.onerror = () => voiceStatus('Voice connection error.');
   ws.onclose = () => { if (state.voiceSocket === ws) state.voiceSocket = null; };
@@ -493,6 +519,9 @@ function closeVoiceSocket() {
 
 function onVoiceMessage(event) {
   const msg = JSON.parse(event.data);
+  // The socket is closed on problem switch, but a frame already in flight can
+  // still arrive afterwards and would paint into the new conversation.
+  if (!stillCurrent(state.voiceEpoch)) return;
   const turnsBox = document.getElementById('turns');
 
   if (msg.error) {
