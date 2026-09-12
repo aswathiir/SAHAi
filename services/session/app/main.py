@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
-from sahai_core import TERMINATION_PHRASES, Dialogue, RuleBasedJudge, Turn
+from sahai_core import TERMINATION_PHRASES, Dialogue, RuleBasedJudge, Turn, system_prompt
 from sqlalchemy import ForeignKey, String, Text, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import (
@@ -143,6 +143,12 @@ class TurnIn(BaseModel):
     # lookup. Optional so the session service stays usable on its own and so a
     # tracer outage degrades the hint instead of failing the turn.
     learner_context: str = Field(default="", max_length=2000)
+    # The full problem statement. `problem_title` on the row is truncated to
+    # 80 chars by the exporter, which left 43 of the bank's 89 problems
+    # reaching the model cut mid-word. Sent per turn rather than stored,
+    # because `sessions` is created by create_all with no migration story and
+    # a new column would never reach the existing table.
+    problem_statement: str = Field(default="", max_length=4000)
 
 
 class TurnOut(BaseModel):
@@ -261,7 +267,7 @@ async def add_turn(
         content=req.content, complete=True,
     )
 
-    messages = [{"role": "system", "content": _system_prompt(row, req.learner_context)}]
+    messages = [{"role": "system", "content": _system_prompt(row, req.learner_context, req.problem_statement)}]
     for t in row.turns:
         messages.append(
             {"role": "assistant" if t.role == "tutor" else "user", "content": t.content}
@@ -331,28 +337,14 @@ async def get_session(session_id: str, db: AsyncSession = Depends(get_db)) -> Se
     )
 
 
-def _system_prompt(row: SessionRow, learner_context: str = "") -> str:
-    """Rules, then the problem, then who is being taught.
+def _system_prompt(row: SessionRow, learner_context: str = "", statement: str = "") -> str:
+    """Delegates to the shared prompt; falls back to the stored title.
 
-    `learner_context` is what the tutor could not previously know: the same
-    BKT posteriors that decide which problems a learner is offered now also
-    decide how a hint is pitched. Without it every learner gets the same hint
-    for the same problem no matter what they have already demonstrated.
-
-    Appended last so it can never displace the never-give-the-answer rules —
-    those are the ones the whole design rests on, and a long context block
-    ahead of them would push them away from the generation point.
+    The title is a truncated statement, so it is the degraded path — used only
+    when a caller sends no statement, which keeps this service usable on its
+    own without silently pretending the truncation is fine.
     """
-    prompt = (
-        "You are a tutor. You help students think, NOT give answers.\n"
-        "- NEVER write code or reveal the solution.\n"
-        "- Ask ONE guiding question per turn, 2-3 sentences maximum.\n"
-        "- Never end a turn with a colon promising something you do not then say.\n\n"
-        f"Problem: {row.problem_title}"
-    )
-    if learner_context:
-        prompt += f"\n\n{learner_context}"
-    return prompt
+    return system_prompt(statement or row.problem_title, learner_context)
 
 
 async def _call_tutor(messages: list[dict]) -> dict:

@@ -48,3 +48,16 @@ def test_index_page_served():
     assert r.status_code == 200
     assert "text/html" in r.headers["content-type"]
     assert "SAHAi" in r.text
+
+
+def test_picker_shows_the_whole_statement_not_the_truncated_title():
+    """`title` in the data file is an 80-char truncation that ends mid-word for
+    43 of the 89 problems. The learner picks what to work on from this list."""
+    body = client.get("/v1/problems").json()
+    for item in body:
+        assert not item["title"].endswith(("in th", "natural ", "numb")), item["title"]
+    truncated = [p for p in PROBLEMS if p["title"].strip() != p["description"].strip()]
+    assert truncated, "fixture no longer exercises the truncation case"
+    shown = {p["id"]: p["title"] for p in body}
+    for p in truncated:
+        assert shown[p["id"]] == p["description"]
