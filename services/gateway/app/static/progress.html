@@ -143,6 +143,16 @@
   .heat i[data-l="3"] { background: #dc5159; }
   .heat i[data-l="4"] { background: var(--pink); box-shadow: 0 0 9px rgba(249,97,103,.45); }
   .heat i:hover { outline: 1px solid var(--cream); outline-offset: 1px; }
+  .heat i[tabindex] { cursor: pointer; }
+  .heat i[tabindex]:focus-visible { outline: 2px solid var(--cream); outline-offset: 1px; }
+  .heat i.on { outline: 2px solid var(--cream); outline-offset: 1px; }
+  #day-detail {
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    margin-top: 14px; padding: 11px 15px; border-radius: 9px;
+    border: 1px solid var(--rule); background: var(--ink-2);
+  }
+  #day-detail .d { font-family: var(--display); font-size: 16px; font-weight: 600; }
+  #day-detail .s { font: 400 12px var(--mono); color: var(--cream-dim); }
   .legend {
     display: flex; align-items: center; gap: 7px; justify-content: flex-end;
     font: 400 10.5px var(--mono); color: var(--cream-dim); margin-top: 12px;
@@ -189,7 +199,11 @@
   }
   .track p { margin: 0; font-size: 13px; color: var(--cream-dim); line-height: 1.45; }
   .track .meta { display: flex; justify-content: space-between; align-items: baseline; font: 400 11px var(--mono); color: var(--cream-dim); }
+  /* The bar tracks problems solved in this bank, not the skill estimate —
+     those are different questions and showing one bar for both read as a
+     contradiction ("0/31 solved, 60% mastery"). */
   .track .bar { height: 5px; border-radius: 3px; background: var(--ink-3); overflow: hidden; }
+  .track .meta span:last-child { opacity: .8; }
   .track .bar span { display: block; height: 100%; background: var(--pink); width: 0; transition: width .85s cubic-bezier(.2,.7,.3,1); }
   .track .tags { display: flex; flex-wrap: wrap; gap: 5px; }
   .tag {
@@ -309,6 +323,7 @@
     <section class="reveal" style="animation-delay:.14s">
       <h2>Activity</h2>
       <div class="grid-wrap"><div class="heat" id="heat"></div></div>
+      <div id="day-detail" class="hidden"></div>
       <div class="legend">
         less <i style="background:var(--ink-2);border:1px solid rgba(255,255,255,.06)"></i>
         <i style="background:var(--pink-dim)"></i>
@@ -459,6 +474,7 @@ const WEEKS = 26;
 
 function renderHeat(activity) {
   const byDate = Object.fromEntries(activity.map(a => [a.date, a]));
+  activityByDate = byDate;
   const today = new Date();
   // Start on the Sunday that keeps exactly WEEKS columns ending this week.
   const start = new Date(today);
@@ -479,10 +495,46 @@ function renderHeat(activity) {
     const label = n === 0
       ? `${iso} — nothing`
       : `${iso} — ${n} attempt${n === 1 ? '' : 's'}, ${day.solved} solved`;
-    cells.push(`<i data-l="${level}" title="${label}"></i>`);
+    cells.push(
+      `<i data-l="${level}" title="${label}" data-date="${iso}"` +
+      `${n ? ' tabindex="0" role="button"' : ''}></i>`
+    );
   }
   $('heat').innerHTML = cells.join('');
 }
+
+/* ---------- a day in the grid ---------- */
+// The grid was the last inert thing on the page: every square hovered a
+// tooltip and nothing more. A tooltip is invisible on touch and gone the
+// moment the pointer moves, so the day a learner is curious about could not
+// actually be opened.
+let activityByDate = {};
+
+function showDay(iso) {
+  const day = activityByDate[iso];
+  const panel = $('day-detail');
+  if (!day) { panel.classList.add('hidden'); return; }
+  const rate = day.total ? Math.round((day.solved / day.total) * 100) : 0;
+  panel.classList.remove('hidden');
+  panel.innerHTML =
+    `<span class="d">${new Date(iso + 'T00:00:00Z').toLocaleDateString(undefined,
+      { weekday: 'long', day: 'numeric', month: 'long' })}</span>` +
+    `<span class="s">${day.total} attempt${day.total === 1 ? '' : 's'} · ` +
+    `${day.solved} solved · ${rate}%</span>`;
+  document.querySelectorAll('.heat i.on').forEach(el => el.classList.remove('on'));
+  document.querySelector(`.heat i[data-date="${iso}"]`)?.classList.add('on');
+}
+
+$('heat').addEventListener('click', e => {
+  const cell = e.target.closest('i[data-date]');
+  if (cell) showDay(cell.dataset.date);
+});
+$('heat').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    const cell = e.target.closest('i[data-date]');
+    if (cell) { e.preventDefault(); showDay(cell.dataset.date); }
+  }
+});
 
 /* ---------- render ---------- */
 function renderNextUp(n) {
@@ -543,8 +595,11 @@ function render(p) {
         </div>
         <div class="bar"><span data-w="${pct.toFixed(1)}"></span></div>
         <div class="meta">
-          <span>${t.solved}/${t.total} solved</span>
-          <span>${Math.round(t.mastery * 100)}% mastery</span>
+          <span>${t.solved}/${t.total} solved here</span>
+          <span title="${t.estimate_only
+            ? 'Estimated from your placement or imported history — nothing solved in this bank yet'
+            : 'Current belief about these skills, from placement plus what you have solved'}">${
+            t.estimate_only ? 'est. ' : ''}${Math.round(t.mastery * 100)}% skill</span>
         </div>
       </a>`;
   }).join('');
