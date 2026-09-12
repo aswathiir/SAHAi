@@ -320,3 +320,30 @@ def test_resume_warns_when_the_last_turn_went_unanswered():
     assert "never got a reply" in page
     progress = _static("progress.html")
     assert "last_role" in progress
+
+
+def test_changing_learner_drops_the_open_conversation():
+    """Switching learner is a context switch, not a label change.
+
+    The handler used to only write localStorage, so an open conversation kept
+    running: further turns went out under the new learner's header, were
+    appended to the previous learner's session, and were personalised against
+    the wrong mastery while the panel still showed the old learner's skills.
+    """
+    page = _static("index.html")
+    handler = page[page.index("learner-id').addEventListener('change'"):]
+    handler = handler[: handler.index("});")]
+    assert "state.sessionId = null" in handler
+    assert "state.epoch += 1" in handler, "in-flight replies must be invalidated too"
+    assert "refreshMastery()" in handler
+
+
+def test_diagnostic_pins_the_learner_for_the_whole_run():
+    """Reading the box at submit time meant switching learner mid-diagnostic
+    split one sitting across two permanent records. Unlike a stale render,
+    graded answers are durable evidence that moves the wrong learner's
+    mastery."""
+    page = _static("diagnostic.html")
+    assert "runAs" in page
+    assert "state.runAs ||" in page, "learnerId() must prefer the pinned value"
+    assert "disabled = true" in page, "the box must not claim one learner while grading another"
