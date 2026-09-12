@@ -69,6 +69,16 @@
   }
   .card h2::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
 
+  #filter-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    font: 400 11px var(--mono); color: var(--cream-dim);
+    border: 1px solid var(--pink-dim); border-radius: 7px;
+    padding: 6px 10px; margin-bottom: 10px; background: rgba(249,97,103,.07);
+  }
+  #filter-bar a { color: var(--pink); text-decoration: none; border-bottom: 1px solid currentColor; }
+  a.mastery-row { display: block; text-decoration: none; color: inherit; border-radius: 6px; padding: 2px 4px; margin-left: -4px; margin-right: -4px; }
+  a.mastery-row:hover { background: rgba(249,97,103,.08); }
+  a.mastery-row:hover .label span:first-child { color: var(--pink); }
   #problem-list { display: flex; flex-direction: column; gap: 6px; max-height: 72vh; overflow-y: auto; }
   .problem-item {
     border: 1px solid var(--rule); border-radius: 8px; padding: 9px 11px;
@@ -140,8 +150,28 @@
   .result-row.fail { border-left-color: var(--bad); color: var(--bad); }
   #pedagogy { margin-top: 10px; font-size: 12.5px; color: var(--cream-dim); }
 
-  .mastery-row { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; margin-bottom: 9px; align-items: baseline; }
-  .mastery-row .label { font-size: 12.5px; }
+  /* The row renders as <div.label><span>name</span><span>pct</span></div> plus a
+     bar, so the name/value split lives on .label — styling .mastery-row as a
+     two-column grid instead ran them together as "arrays65%". */
+  .mastery-row { margin-bottom: 11px; }
+  .mastery-row .label {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 10px; font-size: 12.5px; margin-bottom: 4px;
+  }
+  .mastery-row .label span:last-child {
+    font: 700 11px var(--mono); color: var(--cream-dim); flex: none;
+  }
+  /* "overall ability" is a summary, not a skill: no bar, so give it a rule of
+     its own rather than leaving it floating above the list. */
+  .mastery-row:first-child .label {
+    padding-bottom: 9px; margin-bottom: 11px; border-bottom: 1px solid var(--rule);
+  }
+  .mastery-row:first-child .label span:first-child {
+    text-transform: uppercase; letter-spacing: .1em; font-size: 10px; color: var(--cream-dim);
+  }
+  .mastery-row:first-child .label span:last-child {
+    font: 700 15px var(--mono); color: var(--pink);
+  }
   .bar-bg { grid-column: 1 / -1; height: 5px; border-radius: 3px; background: var(--ink-3); overflow: hidden; }
   .bar-fill {
     height: 100%; border-radius: 3px;
@@ -171,6 +201,7 @@
 <div class="layout">
   <div class="card">
     <h2>Problems</h2>
+    <div id="filter-bar" style="display:none"></div>
     <div id="problem-list" class="empty">Loading…</div>
   </div>
 
@@ -261,6 +292,23 @@ async function api(path, opts = {}) {
   return res.json();
 }
 
+// Skills to filter by, from ?skill=arrays or ?skill=recursion,trees. The record
+// page links here that way: a course or a weak skill is only useful if it can
+// hand you the problems it is about.
+function activeFilter() {
+  const raw = new URLSearchParams(location.search).get('skill');
+  return raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : [];
+}
+
+function renderFilterBanner(skills, shown, total) {
+  const bar = document.getElementById('filter-bar');
+  if (!skills.length) { bar.style.display = 'none'; return; }
+  bar.style.display = '';
+  bar.innerHTML =
+    `<span>${shown} of ${total} · ${skills.join(', ')}</span>` +
+    `<a href="/" title="Show every problem">clear</a>`;
+}
+
 async function loadProblems() {
   const list = document.getElementById('problem-list');
   try {
@@ -273,9 +321,21 @@ async function loadProblems() {
     list.textContent = 'No problems available.';
     return;
   }
+
+  const skills = activeFilter();
+  const shown = skills.length
+    ? state.problems.filter(p => p.skills.some(s => skills.includes(s)))
+    : state.problems;
+  renderFilterBanner(skills, shown.length, state.problems.length);
+
   list.className = '';
   list.innerHTML = '';
-  for (const p of state.problems) {
+  if (!shown.length) {
+    list.className = 'empty';
+    list.textContent = `Nothing in the bank for ${skills.join(', ')} yet.`;
+    return;
+  }
+  for (const p of shown) {
     const div = document.createElement('div');
     div.className = 'problem-item';
     div.dataset.id = p.id;
@@ -470,8 +530,12 @@ async function refreshMastery() {
       `<span>${(m.ability * 100).toFixed(0)}%</span></div></div>`;
     for (const [skill, val] of skills.sort()) {
       const pct = Math.round(val * 100);
-      const row = document.createElement('div');
+      // Clicking a skill shows the problems that practise it. A mastery bar you
+      // cannot act on only tells you that you are weak at something.
+      const row = document.createElement('a');
       row.className = 'mastery-row';
+      row.href = `/?skill=${encodeURIComponent(skill)}`;
+      row.title = `Show ${skill} problems`;
       row.innerHTML = `<div class="label"><span>${skill}</span><span>${pct}%</span></div>` +
         `<div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>`;
       box.appendChild(row);
