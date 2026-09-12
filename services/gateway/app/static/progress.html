@@ -87,6 +87,21 @@
   }
   h2::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
 
+  /* ---- unfinished work ---- */
+  #resume { margin-top: 34px; }
+  #resume h2 { margin-bottom: 12px; }
+  .resume-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 18px;
+    text-decoration: none; color: inherit; margin-bottom: 9px;
+    border: 1px solid var(--rule); border-radius: 10px; padding: 14px 17px;
+    background: var(--ink-2); transition: border-color .2s, transform .2s;
+  }
+  .resume-item:hover { border-color: var(--pink); transform: translateY(-1px); }
+  .resume-item .t { font-size: 13.5px; }
+  .resume-item .m { font: 400 11px var(--mono); color: var(--cream-dim); display: block; margin-top: 5px; }
+  .resume-item .m.warn { color: var(--pink); }
+  .resume-item .go { font: 600 12px var(--body); color: var(--pink); flex: none; }
+
   /* ---- what to do now ---- */
   #next-up {
     display: flex; align-items: center; justify-content: space-between; gap: 20px;
@@ -293,6 +308,7 @@
   </section>
 
   <div id="record" class="hidden">
+    <section id="resume" class="reveal hidden" style="animation-delay:.01s"></section>
     <a id="next-up" class="reveal hidden" style="animation-delay:.02s"></a>
 
     <section class="reveal" style="animation-delay:.05s">
@@ -552,7 +568,35 @@ function renderNextUp(n) {
     <span class="go">Practise &rarr;</span>`;
 }
 
-function render(p) {
+function renderResume(sessions) {
+  const el = $('resume');
+  if (!sessions || !sessions.length) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  el.innerHTML = '<h2>Unfinished</h2>' + sessions.map(s => {
+    // "student" last means the previous request died before the tutor replied.
+    // Saying so here beats the learner finding out by sending a turn and
+    // getting a 409 back.
+    const stalled = s.last_role === 'student';
+    const when = new Date(s.created_at).toLocaleDateString(undefined,
+      { day: 'numeric', month: 'short' });
+    return `
+      <a class="resume-item" href="/?session=${encodeURIComponent(s.session_id)}">
+        <span>
+          <span class="t">${s.problem_title}</span>
+          <span class="m${stalled ? ' warn' : ''}">${
+            stalled
+              ? `${when} · your last message never got a reply — send it again`
+              : `${when} · ${s.turns} turn${s.turns === 1 ? '' : 's'}${
+                  s.status === 'ready_to_submit' ? ' · ready to submit' : ''}`
+          }</span>
+        </span>
+        <span class="go">Resume &rarr;</span>
+      </a>`;
+  }).join('');
+}
+
+function render(p, sessions) {
+  renderResume(sessions);
   renderNextUp(p.next_up);
   $('s-streak').textContent = p.streak_current;
   $('s-streak-best').textContent = `best ${p.streak_longest}`;
@@ -625,7 +669,12 @@ let loadEpoch = 0;
 async function load() {
   const epoch = ++loadEpoch;
   try {
-    const p = await api('/v1/me/progress');
+    // Both in flight together: the record should not wait on a list that is
+    // allowed to come back empty.
+    const [p, sessions] = await Promise.all([
+      api('/v1/me/progress'),
+      api('/v1/me/sessions').catch(() => []),
+    ]);
     if (epoch !== loadEpoch) return;   // a newer load supersedes this one
     $('err').classList.add('hidden');
     // Placement gates a learner who has no priors, but it must also stay
@@ -636,7 +685,7 @@ async function load() {
     const showPlacement = !p.placed || wantsAssessment;
     $('placement').classList.toggle('hidden', !showPlacement);
     $('record').classList.toggle('hidden', !p.placed);
-    if (p.placed) render(p);
+    if (p.placed) render(p, sessions);
     if (p.placed && wantsAssessment) {
       $('retake-note').classList.remove('hidden');
       $('placement').scrollIntoView({ behavior: 'smooth', block: 'start' });

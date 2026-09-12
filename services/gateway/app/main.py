@@ -765,6 +765,32 @@ class DiagnosticAnswer(BaseModel):
 DIAGNOSTIC_SIZE = 4
 
 
+@app.get("/v1/me/sessions", responses=AUTH_RESPONSES)
+async def my_sessions(x_learner_id: str | None = LearnerHeader) -> list[dict]:
+    """Unfinished conversations, newest first.
+
+    Sessions have always survived a restart — they are rows in Postgres — but
+    nothing surfaced one, so leaving mid-dialogue lost it in practice while the
+    data sat there untouched.
+
+    Fails open like the mastery lookup: an unavailable session service should
+    cost the learner this list, not the page.
+    """
+    learner = await _learner(x_learner_id)
+    try:
+        r = await app.state.http.get(
+            f"{SESSION_URL}/sessions",
+            params={"learner_id": learner, "limit": 5},
+            headers=_trace(),
+            timeout=PROBE_TIMEOUT_S,
+        )
+        r.raise_for_status()
+        return r.json()
+    except Exception as exc:  # noqa: BLE001 - degrade, never fail the page
+        logger.warning("resumable lookup failed for %s: %s", learner, type(exc).__name__)
+        return []
+
+
 @app.get("/v1/diagnostic", responses=AUTH_RESPONSES)
 async def diagnostic(x_learner_id: str | None = LearnerHeader) -> dict:
     """Pick a short set of problems that will actually tell us something.
