@@ -151,7 +151,15 @@
     display: flex; flex-direction: column; gap: 11px;
     transition: border-color .2s, transform .2s;
   }
+  .track { text-decoration: none; color: inherit; cursor: pointer; }
   .track:hover { border-color: var(--pink); transform: translateY(-2px); }
+  .track:hover h3 { color: var(--pink); }
+  /* The lift on .track used to promise a click that did nothing. Both these
+     are real links now. */
+  a.skill { text-decoration: none; color: inherit; cursor: pointer;
+            padding: 3px 5px; margin: -3px -5px; border-radius: 6px; }
+  a.skill:hover { background: rgba(249,97,103,.08); }
+  a.skill:hover .nm { color: var(--pink); }
   .track h3 {
     font-family: var(--display); font-weight: 600; font-size: 19px;
     margin: 0; letter-spacing: -.01em;
@@ -429,19 +437,23 @@ function render(p) {
   $('s-mastered').textContent =
     `${mastered} skill${mastered === 1 ? '' : 's'} mastered`;
 
+  // Every row goes somewhere. A skill bar you cannot act on only tells you that
+  // you are weak at something; this hands you the problems that practise it.
   $('skills').innerHTML = skills.map(([s, v]) => `
-    <div class="skill ${v >= 0.7 ? 'mastered' : ''}">
+    <a class="skill ${v >= 0.7 ? 'mastered' : ''}" href="/?skill=${encodeURIComponent(s)}"
+       title="Practise ${SKILL_LABELS[s] || s}">
       <span class="nm">${SKILL_LABELS[s] || s}</span>
       <span class="pc">${Math.round(v * 100)}%</span>
       <span class="bar"><span data-w="${(v * 100).toFixed(1)}"></span></span>
-    </div>
+    </a>
   `).join('');
   $('skills-empty').classList.toggle('hidden', skills.length > 0);
 
   $('tracks').innerHTML = p.tracks.map(t => {
     const pct = t.total ? (t.solved / t.total) * 100 : 0;
+    const href = `/?skill=${encodeURIComponent(t.skills.join(','))}`;
     return `
-      <div class="track">
+      <a class="track" href="${href}" title="Start ${t.title}">
         <h3>${t.title}</h3>
         <p>${t.blurb}</p>
         <div class="tags">
@@ -454,7 +466,7 @@ function render(p) {
           <span>${t.solved}/${t.total} solved</span>
           <span>${Math.round(t.mastery * 100)}% mastery</span>
         </div>
-      </div>`;
+      </a>`;
   }).join('');
 
   renderHeat(p.activity);

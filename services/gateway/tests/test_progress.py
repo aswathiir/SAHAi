@@ -82,3 +82,44 @@ def test_progress_requires_a_learner():
 def test_placement_requires_a_learner():
     r = client.post("/v1/me/placement", json={"responses": {"arrays": "none"}})
     assert r.status_code == 401
+
+
+def _static(name):
+    from pathlib import Path
+
+    import app.main as m
+
+    return (Path(m.__file__).parent / "static" / name).read_text()
+
+
+def test_every_track_and_skill_links_somewhere():
+    """The track cards had a hover lift that promised a click and delivered
+    nothing, and the skill bars were inert. A mastery bar you cannot act on
+    only tells the learner they are weak at something."""
+    page = _static("progress.html")
+    assert 'class="track" href=' in page or "a class=\"track\" href=" in page
+    assert "a class=\"skill" in page
+    assert "/?skill=" in page
+
+
+def test_tutor_page_honours_the_skill_filter():
+    """Those links are only useful if the tutor page reads the parameter."""
+    page = _static("index.html")
+    assert "activeFilter" in page
+    assert "URLSearchParams" in page and "'skill'" in page
+    assert "filter-bar" in page, "a filtered list must say so and offer a way out"
+
+
+def test_mastery_rows_are_not_a_dead_end():
+    page = _static("index.html")
+    assert "a.mastery-row" in page, "rows render as links"
+    assert "/?skill=${encodeURIComponent(skill)}" in page
+
+
+def test_mastery_label_splits_name_from_value():
+    """Both spans live inside .label, so the split has to be on .label. Styling
+    .mastery-row as the two-column grid ran them together as "arrays65%"."""
+    page = _static("index.html")
+    block = page[page.index(".mastery-row .label {"):]
+    block = block[: block.index("}")]
+    assert "flex" in block and "space-between" in block
