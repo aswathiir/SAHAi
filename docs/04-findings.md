@@ -349,3 +349,44 @@ the part that is execution-verifiable (code and solution leakage) and let
 **Also seen in this run:** epoch 5 drew 2 problems instead of 4 — the
 `zpd_sample` shortfall, now in three separate runs — and at batch_size 4 over
 10 epochs the run revisits problems, visible as a repeat across epochs 6 and 8.
+
+### 11b. What replaced it: pedagogy cut to answer-giving only
+
+`r_ped` now averages three checks — no code blocks, no solution patterns, no
+dangling `:` — and scores nothing about teaching style. The question and
+length checks are gone.
+
+The line applied, since "execution-verifiable" is imprecise (execution lives in
+the leakage term):
+
+> keep a check when satisfying the rule and achieving the goal are the same
+> act; drop it when the rule is a proxy that can be satisfied without the goal.
+
+"Do not write code" has no fake version. "Ask questions" does, and the policy
+found it in one run. "Under 200 words" was arbitrary and was the vector for the
+original length bias.
+
+After the change, these all score `r_ped` 1.0:
+
+| turn | before | now |
+|---|---|---|
+| `"Hash maps? Kaise use kar sakta hu?"` (the exploit) | 1.00 | 1.00 |
+| `"What structure gives you O(1) lookup?"` | 1.00 | 1.00 |
+| `"A hash map gives O(1) lookup on the key."` | 0.80 | 1.00 |
+| a 250-word substantive turn | 0.80 | 1.00 |
+
+The exploit and a real question are now indistinguishable **on purpose**. The
+reward has no opinion about which is better teaching, because every opinion it
+held was gamed. `r_sol` decides, by whether the student solves the problem
+afterwards.
+
+**What this gives up.** Nothing rewards Socratic behaviour any more. If the
+tutor drifts back to lecturing, `r_ped` will not object — only a fall in solve
+rate will. That is the trade: a weaker but honest signal instead of a strong
+one pointing the wrong way. The alternative on the table remains an LLM judge,
+which costs GPU time in the rollout loop.
+
+**What to watch next run.** `r_ped` should sit near 1.0 for most rollouts and
+carry little variance — that is expected, not a bug, and it means group
+variance now comes from `r_sol` and `leak`. The number to judge the run on is
+held-out solve rate against the 16.3% best.

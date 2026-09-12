@@ -18,7 +18,7 @@ r_SAHAI(a_T | s_T, α) = (r_sol − α) + (r_ped − 1)·λ − γ·L
 |---|---|---|
 | `r_sol` | fraction of `K` post-dialogue student attempts that pass **every** unit test | [0,1] |
 | `α` | the student's traced ability, from BKT | [0,1] |
-| `r_ped` | mean of 5 pedagogy checks, four scored per tutor turn | [0,1] |
+| `r_ped` | mean of 3 answer-giving checks, scored per tutor turn | [0,1] |
 | `L` | leakage | [0,1] |
 
 **Why `r_sol − α`.** A tutor should get no credit for a student who could
@@ -51,15 +51,33 @@ is currently ~0 because the 0.5B student cannot solve MBPP, so extra samples
 measure noise more precisely at 50% of total runtime. Raise `K` once the student
 can actually solve.
 
-### 1.2 `r_ped` — five graded checks
+### 1.2 `r_ped` — three answer-giving checks
 
 `sahai/reward/pedagogy.py`. Applied to tutor turns only:
 
 1. no code blocks (bare ``` counts, to catch fences truncated at the token cap)
 2. no solution patterns (`def f(`, `return [`, `for x in range`, `while x <`)
-3. at least 30% of tutor turns contain `?`
-4. no tutor turn exceeds 200 words
-5. no tutor turn ends on `:` — a promise it never delivers
+3. no tutor turn ends on `:` — a truncated answer the student then completes
+
+All three ask one question: did the tutor give the answer away? **Nothing here
+scores teaching style.**
+
+Two checks were removed after the question-fraction change cost a run (held-out
+solve 16.3% -> 6.2%, findings entry 11). The line they failed:
+
+> keep a check when satisfying the rule and achieving the goal are the same
+> act; drop it when the rule is a proxy that can be satisfied without the goal.
+
+"Do not write code" has no fake version — either a fence was emitted or it was
+not, and not emitting one is exactly the wanted behaviour. "Ask questions" has
+an obvious fake version, and the policy found it in one run: a seven-word
+contentless question scored a perfect `r_ped`. "Under 200 words" was an
+arbitrary cutoff and the vector for the original length bias.
+
+What is lost is real: nothing rewards Socratic teaching now, so `r_sol` carries
+that alone — the tutor is rewarded when the student solves the problem
+afterwards, which is the outcome the project cares about and the one measure
+that has never been gamed.
 
 Score = fraction passed. **A dialogue with no tutor turns scores 0.0**, not 0.8:
 every "no X" check passes vacuously when there is nothing to inspect, which

@@ -55,13 +55,38 @@ def test_solve_score_empty_is_zero():
 
 def test_pedagogy_is_graded_not_binary():
     """The change that made GRPO learn at all: partial credit keeps a group's
-    reward variance non-zero."""
+    reward variance non-zero.
+
+    Anchored on how much of the answer was given away, not on teaching style.
+    This test used to compare a question against a plain statement and expect
+    the question to win; those now score identically on purpose, because every
+    style rule the judge held was gamed within one run (docs/04-findings.md
+    entry 11). The grading itself is unchanged — per-turn fractions, so a score
+    can land anywhere in [0, 1].
+    """
     judge = RuleBasedJudge()
-    good = Dialogue("p"); good.add("student", "help"); good.add("tutor", "What structure gives O(1) lookup?")
-    mid = Dialogue("p"); mid.add("student", "help"); mid.add("tutor", "Use a hash map.")
-    bad = Dialogue("p"); bad.add("student", "help"); bad.add("tutor", "```python\ndef f(): return 1\n```")
-    scores = {judge.evaluate(d) for d in (good, mid, bad)}
-    assert len(scores) == 3, f"expected three distinct scores, got {scores}"
+
+    def dialogue(*tutor_turns):
+        d = Dialogue("p")
+        for t in tutor_turns:
+            d.add("student", "help")
+            d.add("tutor", t)
+        return d
+
+    clean = dialogue("What structure gives O(1) lookup?")
+    dangling = dialogue("Here is how you would structure it:")
+    code = dialogue("```python\ndef f(): return 1\n```")
+    # Partial credit across turns: three clean, one with code.
+    mixed = dialogue(
+        "What structure gives O(1) lookup?",
+        "And what would you store as the key?",
+        "Good — what happens on a collision?",
+        "```python\ndef f(): return 1\n```",
+    )
+
+    scores = [judge.evaluate(d) for d in (clean, dangling, code, mixed)]
+    assert len(set(scores)) == 4, f"expected four distinct scores, got {scores}"
+    assert judge.evaluate(clean) > judge.evaluate(mixed) > judge.evaluate(code)
 
 
 def test_tracer_mastery_moves_with_evidence():
