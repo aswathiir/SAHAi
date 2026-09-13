@@ -158,6 +158,26 @@ class StudentSimulator:
         return drop_dangling_promise(text) or text
 
     def attempt_solution(self, dialogue: Dialogue, problem: Problem) -> str:
+        """The student's post-tutoring solution attempt — decoded **greedily**.
+
+        This is a measurement, not part of the environment. The dialogue above
+        it is sampled, and that sampling is where the tutor's behaviour varies;
+        sampling *here* as well only adds the student's dice to the tutor's
+        reward.
+
+        It used to sample at temperature 0.3 and `SolveReward` averaged four
+        draws. That made `r_sol` a 4-sample Bernoulli estimate: at a true pass
+        probability of 0.15 the sampling sd alone is 0.18, larger than any
+        plausible tutor-induced difference. Measured over the rollouts of three
+        runs, mean within-group variance was 0.0098 for `r_sol` against 0.0482
+        for the deterministic pedagogy term — so GRPO's advantage, which is a
+        z-score of exactly that within-group spread, was mostly reading noise
+        on the one term the project cares about. See docs/04-findings.md #14.
+
+        Greedy makes `r_sol` a deterministic function of the dialogue: all of
+        its within-group variance now comes from what the tutor said. It is
+        also ~4x cheaper, because one 512-token generation replaces four.
+        """
         system = (
             f"You are a student who just received tutoring on: {problem.title}.\n"
             f"Your ability level is {self.persona.ability_level}/5.\n"
@@ -177,8 +197,7 @@ class StudentSimulator:
             output = self.model.generate(
                 **inputs,
                 max_new_tokens=512,
-                temperature=0.3,
-                do_sample=True,
+                do_sample=False,
                 pad_token_id=self.tokenizer.pad_token_id,
             )
         generated = output[0][inputs["input_ids"].shape[1] :]

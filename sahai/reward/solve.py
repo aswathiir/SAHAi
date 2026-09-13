@@ -31,6 +31,11 @@ class ExecutionResult:
 # cannot interfere with (or forge) the result.
 _SENTINEL = "__SAHAI_RESULT__"
 
+# `StudentSimulator.attempt_solution` decodes greedily, so every draw for a
+# given dialogue is the same string. Flip this with that decoder, not on its
+# own — they have to agree or `num_samples` silently pays for duplicates.
+_SAMPLES_VARY = False
+
 
 class CodeVerifier:
     def __init__(self, timeout: int = 10, memory_mb: int = 256):
@@ -90,24 +95,83 @@ class CodeVerifier:
         return passed / len(problem.test_cases)
 
 
+class SolveOutcome(float):
+    """Two readings of the same attempt, kept apart on purpose.
+
+    `score` is the reward signal and `solved` is the headline number.
+    Conflating them would either blunt the gradient or break comparability
+    with every run recorded so far.
+
+    It is a `float` subclass, not a dataclass, and that is load-bearing. The
+    Kaggle kernel and the `sahai/` package are separate uploads and only the
+    package is pushed before a run (see docs/07-operations-kaggle.md §2b), so
+    the notebook that will execute this code is whatever was last pushed — and
+    a cell in it does:
+
+        r_sol = solve_rw.compute(student, dialogue, test_problem)
+        print(f"r_sol={r_sol:.2f} ...")
+
+    A dataclass would raise `unsupported format string` there and kill the run
+    in the smoke-check cell, before training starts. Behaving as its own score
+    means every existing caller keeps working while `.solved` is available to
+    the ones that know to ask.
+    """
+
+    solved: float
+
+    def __new__(cls, score: float, solved: float) -> SolveOutcome:
+        outcome = super().__new__(cls, score)
+        outcome.solved = solved
+        return outcome
+
+    @property
+    def score(self) -> float:
+        """Mean fraction of test cases passed — continuous, and what GRPO sees."""
+        return float(self)
+
+    def __repr__(self) -> str:
+        return f"SolveOutcome(score={float(self):.4f}, solved={self.solved:.4f})"
+
+
+
 class SolveReward:
     def __init__(self, verifier: CodeVerifier, num_samples: int = 8):
         self.verifier = verifier
-        self.num_samples = num_samples
+        # `attempt_solution` decodes greedily, so repeated draws are identical
+        # and any n > 1 buys nothing but wall-clock. Clamped rather than
+        # removed so `settings.reward.num_solve_samples` keeps its meaning if
+        # sampling is ever restored.
+        self.num_samples = max(1, num_samples) if _SAMPLES_VARY else 1
+        self.requested_samples = num_samples
 
     def compute(
         self,
         student,
         dialogue,
         problem: Problem,
-    ) -> float:
-        passed = 0
+    ) -> SolveOutcome:
+        """Score the student's post-tutoring attempt on `problem`.
+
+        Partial credit is the change that matters here. This used to count a
+        sample only when `verify()` returned exactly 1.0, so an attempt passing
+        4 of 5 tests scored the same zero as one that did not parse — the
+        verifier already returns the fraction and the reward discarded it. On
+        the term that most needs resolution, that was the largest avoidable
+        loss of it: 22 of 24 rollouts in the dumps on disk scored exactly 0.00.
+
+        The all-or-nothing reading is not thrown away, it is returned
+        alongside as `solved`, because that is the number every previous run
+        reported and the one a held-out comparison has to be made on.
+        """
+        scores = []
         for _ in range(self.num_samples):
             code = student.attempt_solution(dialogue, problem)
-            score = self.verifier.verify(code, problem)
-            if score == 1.0:
-                passed += 1
-        return passed / self.num_samples
+            scores.append(self.verifier.verify(code, problem))
+        n = len(scores)
+        return SolveOutcome(
+            score=sum(scores) / n,
+            solved=sum(1 for s in scores if s == 1.0) / n,
+        )
 
 
 def tutor_code_solves(dialogue, problem: Problem, verifier: CodeVerifier, estimator) -> bool:

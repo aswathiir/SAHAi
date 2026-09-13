@@ -113,7 +113,18 @@ class Settings(BaseModel):
                 dtype="bfloat16",
                 lora_rank=8,
                 lora_alpha=16,
-                lora_dropout=0.05,
+                # 0.05 -> 0.0, required by the clipped surrogate. Rollouts are
+                # generated under `model.eval()`, so the policy that produced
+                # the data has dropout off; the update forward runs under
+                # `model.train()`, so with dropout on the two sides of the
+                # importance ratio are different functions and the ratio picks
+                # up noise that is not policy movement. Measured on a trained
+                # adapter: dropout alone moved |rho - 1| as far as 0.065, a
+                # third of the 0.2 clip band, which would make the clip fire on
+                # sampling noise. Regularisation is not lost — the KL penalty
+                # to the frozen reference policy is doing that job, and 160
+                # optimizer steps at rank 8 is not an overfitting regime.
+                lora_dropout=0.0,
                 student_quantize_4bit=True,
             ),
             reward=RewardSettings(

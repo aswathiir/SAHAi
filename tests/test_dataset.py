@@ -203,3 +203,32 @@ def test_zpd_sample_still_returns_n_when_everything_fits():
 def test_zpd_sample_cannot_exceed_the_bank():
     bank, tracer = _bank_with_mastery({"only": 0.99})
     assert len(bank.zpd_sample(tracer, 4)) == 1
+
+
+def test_eval_budget_still_fits_after_the_greedy_solve_change():
+    """The reward phase dominates the epoch and is mostly student generation.
+
+    Measured on the 2026-09-12 run: ~20 min rollout + ~35 min rewards + ~2.5
+    min update per epoch = 9.1 h for 10 epochs, plus 0.5 h for a 20-problem
+    eval. Four sampled solution attempts per rollout were the bulk of that 35
+    min; one greedy attempt replaces them. This asserts the arithmetic still
+    clears the 12 h cap with the 60-problem eval, so the two changes are not
+    quietly in conflict.
+    """
+    from sahai.settings import Settings
+
+    settings = Settings.kaggle()
+
+    rollout_min, reward_min, update_min = 20.0, 35.0, 2.5
+    # Generation is ~4/5 of the reward phase; one greedy draw replaces four.
+    reward_min_after = reward_min * (0.2 + 0.8 / 4)
+    epoch_h = (rollout_min + reward_min_after + update_min) / 60.0
+    training_h = epoch_h * settings.training.epochs
+    # 89 s/problem measured, and the eval student also drops to one draw.
+    eval_h = settings.eval_problems * 89.0 * 0.4 / 3600.0
+
+    assert training_h + eval_h < 11.0, (
+        f"training {training_h:.1f}h + eval {eval_h:.1f}h leaves no margin "
+        "under the 12h cap"
+    )
+    assert training_h < 9.1, "the greedy change should have bought time, not cost it"
