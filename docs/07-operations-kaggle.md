@@ -104,6 +104,70 @@ misconfigured run costs about five minutes rather than a silent GPU-hour.
 > **Careful:** a later `kaggle kernels push` may reset the accelerator back to
 > the server default. After a CLI push, re-check the sidebar before running.
 
+## 2b. The notebook and the dataset drift apart — and it is silent
+
+`kaggle_upload/` (the `sahai/` package) and the kernel (the notebook cells) are
+**two separate uploads**. Since §2a says not to `kaggle kernels push` — it resets
+the accelerator to P100 and kills the run at ~45s — the normal workflow pushes
+only the dataset and runs the existing kernel from the browser. Which means:
+
+> **A change that lives in a notebook cell does not reach Kaggle. A change that
+> lives in `sahai/` does. Nothing warns you which kind you just made.**
+
+This has already cost a full run. Commit `15033f9` raised the held-out eval from
+20 problems to 60, and `settings.eval_problems` duly shipped in the dataset — but
+the *call site* is a notebook cell, and the kernel still held the pre-`15033f9`
+text:
+
+```python
+eval_problems = load_mbpp(split="test", max_problems=20)   # kernel (stale)
+```
+
+So the 2026-09-12 run evaluated on 20 problems while the log, the settings file
+and the commit message all said 60. Its held-out number carries sd 0.082, not
+the 0.047 that was the entire point of the change.
+
+**Rule:** a notebook cell should contain no number, threshold or flag. Anything
+tunable belongs in `sahai/settings.py`, where the dataset push carries it. Cells
+call; they do not decide.
+
+### Staged edit — apply before the next run
+
+Paste over the eval cell in the browser editor (**not** via `kernels push`).
+Open the notebook, find the cell beginning `from sahai.eval.benchmark import
+Evaluator`, and replace its whole body with:
+
+```python
+from sahai.eval.benchmark import Evaluator
+
+# Fitted on the TRAINING bank, not the held-out eval set:
+# leakage counts a token only if it is rare across the corpus, so the
+# trainer and evaluator must share one corpus or they score by different rules.
+evaluator = Evaluator(
+    settings, solution_corpus=[p.solution for p in problem_bank.problems]
+)
+
+# Evaluate on a subset of problems
+# Size comes from settings — 20 could not resolve the differences it was
+# being used to judge (sd 0.082 on a 20-problem mean). See settings.py.
+eval_problems = load_mbpp(split="test", max_problems=settings.eval_problems)
+print(f"Evaluating on {len(eval_problems.problems)} test problems...")
+
+student.tracer.reset()
+report_trained = evaluator.evaluate_model(
+    "SAHAI-GRPO", tutor, student, pedagogy, eval_problems
+)
+
+print("\n" + Evaluator.compare([report_trained]))
+
+# Save report
+Evaluator.save_report(report_trained, os.path.join(settings.output_dir, "eval_report.json"))
+```
+
+Confirm it took effect: the run must print `Evaluating on 60 test problems...`.
+If it prints 20, the paste did not save — stop the run rather than spending nine
+hours on an unreadable result.
+
 ## 2. Push and run the notebook
 
 Preferred: push from the CLI. `notebooks/kernel-metadata.json` already sets the

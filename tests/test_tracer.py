@@ -29,13 +29,32 @@ def test_ability_average():
     assert abs(tracer.get_ability() - 0.5) < 1e-6
 
 
-def test_zpd():
+def test_zpd_is_a_difficulty_window_around_the_target():
     tracer = BKTTracer(TracerSettings(p_init=0.5, zpd_low=0.3, zpd_high=0.7))
-    assert tracer.in_zpd(1, ["arrays"])
-    tracer.skills["arrays"] = 0.1
-    assert not tracer.in_zpd(1, ["arrays"])
+    tracer.skills["arrays"] = 0.5          # target = 1 + 0.5*4 = 3.0
+    assert tracer.target_difficulty(5) == 3.0
+    assert tracer.in_zpd(2, ["arrays"], 5)
+    assert tracer.in_zpd(4, ["arrays"], 5)
+    assert not tracer.in_zpd(1, ["arrays"], 5)
+    assert not tracer.in_zpd(5, ["arrays"], 5)
+
+
+def test_zpd_excludes_mastery_above_the_ceiling_but_not_below_a_floor():
+    """There is deliberately no lower mastery bound any more.
+
+    `zpd_low` as a floor meant a learner failing a skill was removed from that
+    skill's problems entirely, and since BKT sends a failed skill to ~0.109 and
+    never lifts it, that removal was permanent. Difficulty targeting is what
+    responds to a struggling learner now; the ceiling only stops work they have
+    already demonstrated.
+    """
+    tracer = BKTTracer(TracerSettings(p_init=0.5, zpd_low=0.3, zpd_high=0.7))
+
+    tracer.skills["arrays"] = 0.05
+    assert tracer.in_zpd(1, ["arrays"], 5), "a failing learner was excluded again"
+
     tracer.skills["arrays"] = 0.9
-    assert not tracer.in_zpd(1, ["arrays"])
+    assert not tracer.in_zpd(5, ["arrays"], 5)
 
 
 def test_reset():
