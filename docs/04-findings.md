@@ -614,3 +614,37 @@ itself. That pays for the 60-problem eval outright (~9.6 h → ~7.3 h total).
 
 What this does **not** do is add a new reward term. That is deliberate. Adding
 terms to the controllable channel is the move that has failed twice.
+
+### Applied
+
+Both, plus the two update defects:
+
+* `StudentSimulator.attempt_solution` decodes greedily (`do_sample=False`), and
+  `SolveReward` draws once instead of four times.
+* `SolveReward.compute` returns the **mean fraction of tests passed** as the
+  reward, and the all-or-nothing rate alongside it as `solved`. Training logs,
+  rollout dumps and the eval report now carry both — `solve` is the shaped
+  signal the policy optimises, `solved` is the series comparable to every run
+  back to v6. Held-out results must be read on `solved`, or the partial credit
+  will look like a gain that is not one.
+* `_policy_update` uses the clipped surrogate
+  `min(rho_t·A, clip(rho_t, 1±eps)·A)` with `rho_t` against log-probs cached
+  from before the first optimizer step. `clip_epsilon` had been sitting unused
+  in `settings.py` since the beginning.
+* `lora_dropout` 0.05 → 0.0 **on Kaggle**. Rollouts generate under
+  `model.eval()` and the update forward runs under `model.train()`, so with
+  dropout on, the two sides of the importance ratio are different functions.
+  Measured on a trained adapter, dropout alone moved `|rho − 1|` as far as
+  0.065 — a third of the clip band — which would fire the clip on sampling
+  noise. The KL penalty to the frozen reference is doing the regularising.
+
+`scripts/check_policy_update.py` exercises the real update path on a tiny
+randomly-initialised model: the surrogate's clip asymmetry, `rho == 1` before
+the first step, the gradient's sign in both directions, no active dropout, and
+that later rollouts really are off-policy (after four stale steps, 15 of 32
+tokens land outside the clip band). Worth having with no GPU quota left — a
+sign error would otherwise cost a nine-hour run to find.
+
+Budget after both changes: the reward phase falls from ~35 to ~14 min/epoch,
+so training is ~6.1 h and a 60-problem greedy eval ~0.6 h — **~6.9 h** of the
+12 h cap including the extra forward pass the ratio needs, against 9.6 h before.

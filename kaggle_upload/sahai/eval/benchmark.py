@@ -25,6 +25,14 @@ class MetricsReport:
     model_name: str
     num_problems: int = 0
     solve_rate: float = 0.0
+    """Fraction of held-out problems the student fully solved after tutoring.
+
+    Deliberately the **all-or-nothing** reading, not the partial credit the
+    reward now uses: this is the series every run since v6 is reported on, and
+    the only one a comparison against 16.3% can be made against. Partial credit
+    would raise it for reasons that have nothing to do with the policy."""
+    partial_credit: float = 0.0
+    """Mean fraction of test cases passed — the quantity GRPO optimises."""
     ped_acceptance: float = 0.0
     leakage_rate: float = 0.0
     mean_reward: float = 0.0
@@ -70,7 +78,11 @@ class Evaluator:
         for problem in problem_bank.problems:
             dialogue = self.dialogue_engine.run(tutor, student, problem)
 
-            r_sol = self.solve_reward.compute(student, dialogue, problem)
+            outcome = self.solve_reward.compute(student, dialogue, problem)
+            # The reward is scored on partial credit because that is what the
+            # policy was trained against; the report leads with the strict
+            # pass rate because that is what earlier runs are comparable on.
+            r_sol = outcome.score
             r_ped = pedagogy_reward.evaluate(dialogue)
             # Both keyword arguments were previously omitted, so eval silently
             # used the defaults (problem_text="", tutor_code_solves=False) and
@@ -93,21 +105,30 @@ class Evaluator:
             ability = student.tracer.get_ability()
             components = self.sahai_reward.compute(r_sol, r_ped, leak, ability)
 
-            report.solve_rate += r_sol
+            report.solve_rate += outcome.solved
+            report.partial_credit += r_sol
             report.ped_acceptance += r_ped
             report.leakage_rate += leak
             report.mean_reward += components.r_sahai
 
             bucket = difficulty_buckets.setdefault(problem.difficulty, [])
-            bucket.append({"r_sol": r_sol, "r_ped": r_ped, "leak": leak})
+            bucket.append(
+                {
+                    "solved": outcome.solved,
+                    "r_sol": r_sol,
+                    "r_ped": r_ped,
+                    "leak": leak,
+                }
+            )
 
             logger.info(
-                f"  {problem.id}: r_sol={r_sol:.2f} r_ped={r_ped:.2f} "
-                f"leak={leak:.2f} reward={components.r_sahai:.4f}"
+                f"  {problem.id}: solved={outcome.solved:.2f} r_sol={r_sol:.2f} "
+                f"r_ped={r_ped:.2f} leak={leak:.2f} reward={components.r_sahai:.4f}"
             )
 
         n = max(report.num_problems, 1)
         report.solve_rate /= n
+        report.partial_credit /= n
         report.ped_acceptance /= n
         report.leakage_rate /= n
         report.mean_reward /= n
@@ -115,7 +136,8 @@ class Evaluator:
         for diff, entries in difficulty_buckets.items():
             k = len(entries)
             report.per_difficulty[diff] = {
-                "solve_rate": sum(e["r_sol"] for e in entries) / k,
+                "solve_rate": sum(e["solved"] for e in entries) / k,
+                "partial_credit": sum(e["r_sol"] for e in entries) / k,
                 "ped_acceptance": sum(e["r_ped"] for e in entries) / k,
                 "leakage_rate": sum(e["leak"] for e in entries) / k,
                 "count": k,
@@ -125,13 +147,22 @@ class Evaluator:
 
     @staticmethod
     def compare(reports: list[MetricsReport]) -> str:
-        header = f"{'Model':<30} {'Solve':>8} {'Ped':>8} {'Leak':>8} {'Reward':>10}"
+        header = (
+            f"{'Model':<30} {'Solve':>8} {'Partial':>9} {'Ped':>8} "
+            f"{'Leak':>8} {'Reward':>10}"
+        )
         lines = [header, "-" * len(header)]
         for r in reports:
             lines.append(
-                f"{r.model_name:<30} {r.solve_rate:>8.3f} {r.ped_acceptance:>8.3f} "
-                f"{r.leakage_rate:>8.3f} {r.mean_reward:>10.4f}"
+                f"{r.model_name:<30} {r.solve_rate:>8.3f} {r.partial_credit:>9.3f} "
+                f"{r.ped_acceptance:>8.3f} {r.leakage_rate:>8.3f} {r.mean_reward:>10.4f}"
             )
+        lines.append("")
+        lines.append(
+            "Solve is all-or-nothing and comparable to every previous run "
+            "(best so far 0.163)."
+        )
+        lines.append("Partial is the mean fraction of tests passed — what GRPO optimises.")
         return "\n".join(lines)
 
     @staticmethod

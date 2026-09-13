@@ -29,6 +29,9 @@ class Rollout:
     problem: Problem
     dialogue: Dialogue
     r_sol: float = 0.0
+    # All-or-nothing pass rate. `r_sol` carries partial credit now, so this is
+    # the only field comparable to the solve rates of earlier runs.
+    solved: float = 0.0
     r_ped: float = 0.0
     leakage: float = 0.0
     reward: float = 0.0
@@ -45,6 +48,9 @@ class TrainMetrics:
     mean_solve_rate: float
     mean_ped_rate: float
     mean_leakage: float
+    # Fraction of attempts passing every test. `mean_solve_rate` is partial
+    # credit now; this is the series that lines up with runs before that.
+    mean_solved: float = 0.0
 
 
 class GRPOTrainer:
@@ -108,9 +114,11 @@ class GRPOTrainer:
         ability = self.student.tracer.get_ability()
 
         for rollout in rollouts:
-            rollout.r_sol = self.solve_reward.compute(
+            outcome = self.solve_reward.compute(
                 self.student, rollout.dialogue, rollout.problem
             )
+            rollout.r_sol = outcome.score
+            rollout.solved = outcome.solved
             rollout.r_ped = self.pedagogy_reward.evaluate(rollout.dialogue)
             rollout.leakage = self.leakage_estimator.estimate(
                 rollout.dialogue,
@@ -145,14 +153,62 @@ class GRPOTrainer:
             for rollout in group:
                 rollout.advantage = (rollout.reward - mean_r) / (std_r + 1e-8)
 
+    def _old_log_probs(self, rollouts: list[Rollout]) -> list[torch.Tensor]:
+        """Log-probs under the policy that generated these rollouts.
+
+        Must be computed for *every* rollout before the first optimizer step,
+        because after that step the policy is no longer the one that sampled
+        them. That is the whole point of the ratio below.
+        """
+        self.tutor.model.eval()
+        cached = []
+        with torch.no_grad():
+            for rollout in rollouts:
+                log_probs, _ = self.tutor.compute_log_probs(
+                    rollout.dialogue, rollout.problem
+                )
+                cached.append(log_probs.detach())
+        return cached
+
     def _policy_update(self, rollouts: list[Rollout]) -> tuple[float, float]:
+        """One GRPO update over a batch of rollouts.
+
+        This was plain REINFORCE — `-advantage * mean_log_prob`, with no
+        importance ratio and no clipping, while `clip_epsilon` sat in
+        `settings.py` referenced nowhere in the codebase. On its own that is a
+        defensible estimator only when a single gradient step is taken per
+        batch of samples. It was not: 32 rollouts are collected under one
+        policy and then 16 sequential optimizer steps are taken over them
+        (`gradient_accumulation_steps=2`), so steps 2..16 pushed on samples
+        from a policy that no longer existed, uncorrected. Every run shows the
+        symptom — KL to the reference climbing monotonically (0.002 -> 0.026)
+        while held-out performance does not move.
+
+        The surrogate is now the standard clipped one, per token:
+
+            min(rho_t * A, clip(rho_t, 1-eps, 1+eps) * A)
+
+        where `rho_t = pi_theta(t) / pi_theta_old(t)`. Where the policy has
+        already moved far on a token, the clip flattens the objective and that
+        token stops contributing gradient, which is exactly the protection the
+        sequential steps needed.
+
+        Note the reported `policy_loss` changes meaning: it was O(advantage x
+        mean log-prob), a number around 0.01-0.2, and is now O(advantage) with
+        rho near 1. The *gradient* scale is unchanged at rho ~= 1, so the
+        learning rate does not need retuning — but the loss column is not
+        comparable to earlier runs.
+        """
         self.tutor.model.train()
         total_policy_loss = 0.0
         total_kl_loss = 0.0
         n = len(rollouts)
 
+        old_log_probs = self._old_log_probs(rollouts)
+
         self.optimizer.zero_grad()
         accum_steps = self.settings.training.gradient_accumulation_steps
+        clip_eps = self.settings.training.clip_epsilon
         effective_n = 0
 
         for idx, rollout in enumerate(rollouts):
@@ -166,8 +222,13 @@ class GRPOTrainer:
             )
 
             token_count = mask.sum().clamp(min=1)
-            mean_lp = (log_probs * mask).sum() / token_count
-            policy_loss = -advantage * mean_lp
+
+            # Both tensors are already masked, so a padded position gives
+            # 0 - 0 = 0 and a ratio of exactly 1; `mask` below drops it anyway.
+            ratio = torch.exp(log_probs - old_log_probs[idx])
+            unclipped = ratio * advantage
+            clipped = torch.clamp(ratio, 1.0 - clip_eps, 1.0 + clip_eps) * advantage
+            policy_loss = -(torch.min(unclipped, clipped) * mask).sum() / token_count
 
             kl = ((log_probs - ref_log_probs) * mask).sum() / token_count
             kl_loss = self.settings.training.kl_coeff * kl
@@ -240,6 +301,7 @@ class GRPOTrainer:
                 mean_solve_rate=sum(r.r_sol for r in rollouts) / len(rollouts),
                 mean_ped_rate=sum(r.r_ped for r in rollouts) / len(rollouts),
                 mean_leakage=sum(r.leakage for r in rollouts) / len(rollouts),
+                mean_solved=sum(r.solved for r in rollouts) / len(rollouts),
             )
             all_metrics.append(metrics)
             self._write_metrics(output_dir, all_metrics)
@@ -247,12 +309,18 @@ class GRPOTrainer:
             logger.info(
                 f"Epoch {epoch} | loss={policy_loss:.4f} kl={kl_loss:.4f} "
                 f"reward={metrics.mean_reward:.4f} solve={metrics.mean_solve_rate:.4f} "
+                f"solved={metrics.mean_solved:.4f} "
                 f"ped={metrics.mean_ped_rate:.4f} leak={metrics.mean_leakage:.4f}"
             )
 
             for rollout in rollouts:
-                solved = rollout.r_sol > 0.5
-                self.student.tracer.update_batch(rollout.problem.skills, solved)
+                # BKT observes "did they get it right", which is the
+                # all-or-nothing reading. Thresholding partial credit at 0.5
+                # would count an attempt passing 3 of 5 tests as mastery
+                # evidence and drift the ability estimate upward.
+                self.student.tracer.update_batch(
+                    rollout.problem.skills, rollout.solved > 0.5
+                )
 
             step += 1
             if step % self.settings.training.checkpoint_every == 0:
@@ -276,6 +344,7 @@ class GRPOTrainer:
                 "kl_loss": m.kl_loss,
                 "mean_reward": m.mean_reward,
                 "mean_solve_rate": m.mean_solve_rate,
+                "mean_solved": m.mean_solved,
                 "mean_ped_rate": m.mean_ped_rate,
                 "mean_leakage": m.mean_leakage,
             }
@@ -303,6 +372,7 @@ class GRPOTrainer:
                     "problem_title": r.problem.title,
                     "num_turns": len(r.dialogue),
                     "r_sol": r.r_sol,
+                    "solved": r.solved,
                     "r_ped": r.r_ped,
                     "leakage": r.leakage,
                     "reward": r.reward,

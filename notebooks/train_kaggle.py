@@ -394,7 +394,7 @@ for path in sorted(glob.glob(os.path.join(settings.output_dir, "rollouts", "epoc
 # %%
 from sahai.eval.benchmark import Evaluator
 
-# Fitted on the TRAINING bank (198 problems), not the 20 eval problems:
+# Fitted on the TRAINING bank, not the held-out eval set:
 # leakage counts a token only if it is rare across the corpus, so the
 # trainer and evaluator must share one corpus or they score by different rules.
 evaluator = Evaluator(

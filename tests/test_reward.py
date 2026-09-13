@@ -174,3 +174,86 @@ def test_unfitted_estimator_does_not_silently_filter():
         dialogue, "def f(x):\n    count = 0\n    return count", problem_text=""
     )
     assert 0.0 < scored <= 1.0
+
+
+# --- r_sol: partial credit, and the strict reading kept alongside it ---
+
+
+class _FixedStudent:
+    """Returns one canned attempt, so `verify` decides the score."""
+
+    def __init__(self, code):
+        self.code = code
+        self.calls = 0
+
+    def attempt_solution(self, dialogue, problem):
+        self.calls += 1
+        return self.code
+
+
+def _three_test_problem():
+    from sahai.core.data import Problem, TestCase
+
+    return Problem(
+        id="p", title="Double", description="Return 2n.", difficulty=1,
+        skills=["math"], function_name="d", function_signature="def d(n):",
+        test_cases=[
+            TestCase(input={"n": 1}, expected=2),
+            TestCase(input={"n": 2}, expected=4),
+            TestCase(input={"n": 3}, expected=6),
+        ],
+        solution="def d(n):\n    return 2 * n",
+    )
+
+
+def test_partial_credit_is_not_thrown_away():
+    """An attempt passing 2 of 3 tests used to score the same zero as one that
+    did not parse. The verifier already returned the fraction; `SolveReward`
+    discarded it with `if score == 1.0`. On the one reward term that carries no
+    other signal, that was the largest avoidable loss of resolution — 22 of 24
+    rollouts on disk scored exactly 0.00."""
+    from sahai.reward.solve import CodeVerifier, SolveReward
+
+    problem = _three_test_problem()
+    # Correct for n=1 and n=2, wrong for n=3.
+    student = _FixedStudent("def d(n):\n    return 2 * n if n < 3 else 0")
+    reward = SolveReward(CodeVerifier(timeout=5), num_samples=4)
+
+    outcome = reward.compute(student, Dialogue(problem_id="p"), problem)
+    assert abs(outcome.score - 2 / 3) < 1e-6, outcome.score
+    assert outcome.solved == 0.0, "a partial pass is not a solve"
+
+
+def test_solved_stays_all_or_nothing_for_comparability():
+    from sahai.reward.solve import CodeVerifier, SolveReward
+
+    problem = _three_test_problem()
+    student = _FixedStudent("def d(n):\n    return 2 * n")
+    reward = SolveReward(CodeVerifier(timeout=5), num_samples=4)
+
+    outcome = reward.compute(student, Dialogue(problem_id="p"), problem)
+    assert outcome.score == 1.0
+    assert outcome.solved == 1.0
+
+
+def test_a_greedy_student_is_asked_once_not_four_times():
+    """`attempt_solution` decodes greedily, so repeated draws are identical.
+    Paying for four of them was the bulk of the ~35 min/epoch reward phase."""
+    from sahai.reward.solve import CodeVerifier, SolveReward
+
+    student = _FixedStudent("def d(n):\n    return 2 * n")
+    reward = SolveReward(CodeVerifier(timeout=5), num_samples=4)
+    reward.compute(student, Dialogue(problem_id="p"), _three_test_problem())
+    assert student.calls == 1, f"generated {student.calls} times for one dialogue"
+
+
+def test_outcome_behaves_as_its_own_score():
+    """Load-bearing: the Kaggle kernel is a separate upload from the package
+    and formats this value with `:.2f` in its smoke-check cell. A plain
+    dataclass would kill the run before training starts."""
+    from sahai.reward.solve import SolveOutcome
+
+    outcome = SolveOutcome(0.6, 0.0)
+    assert f"{outcome:.2f}" == "0.60"
+    assert outcome + 0.4 == 1.0
+    assert outcome.score == 0.6 and outcome.solved == 0.0
