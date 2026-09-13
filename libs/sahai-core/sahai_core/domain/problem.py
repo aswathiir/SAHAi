@@ -66,51 +66,62 @@ class ProblemBank:
     def filter_skills(self, skills: set[str]) -> list[Problem]:
         return [p for p in self.problems if skills & set(p.skills)]
 
-    def zpd_candidates(self, tracer) -> list[Problem]:
-        """Problems whose average skill mastery sits inside the ZPD band.
+    def max_difficulty(self) -> int:
+        """The top of this bank's own difficulty scale, for ability mapping."""
+        return max((p.difficulty for p in self.problems), default=1)
 
-        Exposed separately so a caller can log how many there were. The band
-        running short is the interesting event, and `zpd_sample` deliberately
-        hides it by topping the batch up.
+    def zpd_candidates(self, tracer) -> list[Problem]:
+        """Problems sitting one step beyond what the learner can already do.
+
+        Exposed separately so a caller can log how many there were. Under the
+        old mastery-only band this was the interesting event, because the band
+        emptied permanently after three epochs; with difficulty as the axis it
+        should stay populated, and a warning now means something has gone
+        wrong rather than something routine.
         """
-        return [p for p in self.problems if tracer.in_zpd(p.difficulty, p.skills)]
+        top = self.max_difficulty()
+        return [p for p in self.problems if tracer.in_zpd(p.difficulty, p.skills, top)]
 
     def zpd_sample(self, tracer, n: int) -> list[Problem]:
-        """`n` problems, preferring the ZPD band, topped up when it is short.
+        """`n` problems, nearest the learner's target difficulty.
 
-        This used to return `min(n, len(candidates))`, and the "band is empty"
-        fallback only fired when it was *completely* empty. With one to three
-        problems in the band and n=4 it returned a short batch, silently: epoch
-        5 of three separate runs drew 2 problems instead of 4, which is half
-        that epoch's rollouts and half its gradient, with nothing in the logs
-        saying so beyond a line nobody reads as an error.
+        This is a *ranking*, not a filter with a fallback. The previous version
+        filtered on a band that could be — and for seven of ten epochs in the
+        2026-09-12 run was — completely empty, then topped the batch up with
+        whatever sorted nearest. The top-up kept the batch at full size but the
+        ordering it fell back on was distance from a band nothing was in, so
+        the "curriculum" was decided by how rarely a skill happened to be
+        tagged. Ranking directly on difficulty cannot degenerate that way: it
+        returns the same `n` whether or not anything clears the band.
 
-        The top-up takes the problems nearest the band rather than random ones,
-        because "just outside the ZPD" is the best available substitute for
-        "inside it" — the alternative is padding a thin epoch with work the
-        learner has either mastered or cannot touch.
+        Draws are random within the window, not ranked into it. See the body
+        for why: ranking reintroduced the same freeze on a different axis.
         """
-        in_band = self.zpd_candidates(tracer)
-        if len(in_band) >= n:
-            return random.sample(in_band, n)
+        if not self.problems:
+            return []
 
-        chosen = list(in_band)
+        # Sample *within* the window rather than sorting to the single nearest
+        # difficulty. Sorting looked right and simulated badly: at an ability
+        # that puts the target near 2.0, `abs(d - target)` is 0.0 for every
+        # difficulty-2 problem and 1.0 for every difficulty-1 one, so all ten
+        # epochs drew difficulty 2 and the 186 easier problems were never seen.
+        # That is the same failure as before wearing different clothes — one
+        # frozen slice of the bank — and GRPO needs reward spread, which comes
+        # from a mix.
+        band = self.zpd_candidates(tracer)
+        if len(band) >= n:
+            return random.sample(band, n)
+
+        # Only if the window really is short: fill from the nearest problems
+        # outside it, closest difficulty first, then best mastery fit.
+        chosen = list(band)
         rest = [p for p in self.problems if p not in chosen]
-        if not rest:
-            return chosen
-
-        def distance_from_band(problem: Problem) -> float:
-            if not problem.skills:
-                return 0.0
-            avg = sum(tracer.get_mastery(s) for s in problem.skills) / len(problem.skills)
-            if avg < tracer.settings.zpd_low:
-                return tracer.settings.zpd_low - avg
-            if avg > tracer.settings.zpd_high:
-                return avg - tracer.settings.zpd_high
-            return 0.0
-
-        # Shuffle first so ties are broken randomly rather than by bank order,
-        # which would hand every short epoch the same problems.
+        target = tracer.target_difficulty(self.max_difficulty())
         random.shuffle(rest)
-        rest.sort(key=distance_from_band)
+        rest.sort(
+            key=lambda p: (
+                abs(p.difficulty - target),
+                tracer.mastery_gap(p.skills),
+            )
+        )
         return chosen + rest[: n - len(chosen)]

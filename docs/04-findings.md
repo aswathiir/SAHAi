@@ -463,3 +463,154 @@ so a short epoch does not always draw the same problems.
 The trainer now logs a WARNING naming the band size whenever it tops up. The
 batch no longer shrinks, so without that line the padding would be invisible —
 which is how the original went unnoticed for three runs.
+
+> **Superseded — the top-up was treating a symptom.** The next run's log showed
+> `Only 0 problems in the ZPD band` at epochs 4, 5, 6, 7 and 9: the band was not
+> thin, it was empty, and permanently. See finding 13b.
+
+### 13b. The ZPD band was never a difficulty band, and empties for good
+
+`BKTTracer.in_zpd(difficulty, skills)` took `difficulty` as an argument and
+**ignored it**, selecting purely on `zpd_low <= mean(mastery) <= zpd_high`.
+Two facts then combine:
+
+* `p_init` is 0.3 and `zpd_low` is 0.3, so an **untouched** skill sits exactly
+  on the boundary and passes. The band therefore meant "problems using skills
+  the learner has never attempted" — an exploration frontier, not a difficulty
+  band.
+* BKT here has no forgetting transition, and at this student's competence a
+  failed skill converges to a fixed point of **0.109** within three
+  observations. Simulating the real update rule at the measured ~15% solve
+  rate: `0.30 → 0.15 → 0.12 → 0.11 → 0.11 …`, far below `zpd_low`.
+
+So the band holds the entire bank at epoch 0, and once every skill has been
+touched — 4 problems/epoch over 15 skills, so by about epoch 3 — it is empty
+and stays empty. Seven of the ten epochs in the 2026-09-12 run were drawn by
+the top-up ordering rather than by any curriculum, which is why
+gcd-by-recursion is the best rollout in three of the last six epochs.
+
+**Fixed** by making difficulty the primary axis, which is what the argument was
+always for:
+
+* `target_difficulty() = 1 + ability · (max − 1)` maps the BKT probability onto
+  the bank's own 1..5 ordinal scale;
+* `in_zpd` is `|difficulty − target| <= 1`, plus mastery as a **ceiling** only.
+  The old mastery *floor* is gone deliberately: a skill at 0.11 means the
+  learner is failing it, which is when they should be handed something easier,
+  not excluded from practice permanently;
+* `zpd_sample` draws **at random within the window**. Ranking by
+  `abs(difficulty − target)` was tried first and simulated badly — at a target
+  near 2.0 every difficulty-2 problem scores 0.0 and every difficulty-1 problem
+  scores 1.0, so all ten epochs drew difficulty 2 and the 186 easier problems
+  were never seen. That is the original bug on a different axis.
+
+Simulated over the measured bank (difficulty 1:186 2:59 3:36 4:9 5:6) at a 14%
+solve rate, the band now holds 95–245 problems at every epoch instead of
+collapsing to 0, the drawn difficulty mix is 1/2/3 rather than one level, and
+35 of 40 draws are distinct problems.
+
+This is a real defect and worth fixing, but note its size: it decides *which*
+problems are trained on, not whether training can work at all. For the latter,
+see finding 14.
+
+---
+
+## 14. The root cause under all thirteen findings: only half the reward can teach
+
+Six runs, six diagnoses, and held-out solve rate has never left the 6–16% band.
+Findings 1–13 are all real and all fixed, and none of them moved the number.
+That pattern is itself the evidence: we have been repairing the wrong thing.
+
+### The measurement
+
+`r_SAHAI = (r_sol − ability) + (r_ped − 1)·λ − γ·L` has two kinds of term.
+
+* `r_ped` and `L` are **deterministic functions of the tutor's own text**. The
+  tutor fully controls them; identical text always scores identically.
+* `r_sol` is a **4-sample Bernoulli estimate** of whether a different, frozen,
+  4-bit-quantised 1.5B model writes passing code after reading the dialogue.
+  The tutor influences it weakly, indirectly, and through another model's
+  sampling.
+
+Correlate each against epoch index, across the three completed 10-epoch runs:
+
+| run | corr(epoch, r_ped) | corr(epoch, leak) | corr(epoch, r_sol) |
+|---|---|---|---|
+| A (rare-token leakage) | +0.80 | −0.64 | +0.48 |
+| B (question fraction)  | +0.99 | −0.80 | +0.54 |
+| C (pedagogy narrowed)  | +0.64 | −0.48 | **+0.01** |
+
+The two deterministic terms move strongly and in the intended direction in
+**every** run. The outcome term does not move in any of them — within-run
+epoch-to-epoch sd of `r_sol` is ~0.10, larger than any trend it might carry.
+
+The rollouts still on disk say the same thing at the level GRPO actually
+operates on. Mean **within-group** variance (the only variance that survives the
+z-score, so the only thing that becomes gradient):
+
+```
+r_sol 0.0098      r_ped 0.0482      leak 0.0144
+```
+
+`r_ped` supplies five times the usable signal of the term the project exists to
+optimise. 22 of 24 rollouts scored `r_sol = 0.00` exactly.
+
+### Why this explains everything else
+
+A policy optimises whatever part of its reward it can actually control. `r_ped`
+and `L` are controllable and noiseless; `r_sol` is mostly another model's dice.
+So every run, the policy drives the rule-based terms to their limit and treats
+the outcome term as noise — which is precisely what the logs show.
+
+Re-read the project history with that in mind:
+
+* Every gain came from **removing a distortion from the rule-based channel**
+  (truncation cap, length bias, the eval/training leakage mismatch, rare-token
+  filtering). Correct — that is the only channel carrying gradient.
+* The one attempt to **add** an incentive (finding 11, the question fraction)
+  was gamed inside a single run. Also correct, and predictable: it was added to
+  the controllable channel, which is exactly the channel a policy will exploit.
+* Narrowing pedagogy to three answer-giving checks (11b) recovered the number.
+  That is not learning either — it removed a distortion from the same channel.
+* **Teaching that causes a student to solve problems has never been trained at
+  all.** It has no usable gradient to train on.
+
+The trap, stated plainly: we keep tuning the channel that works and hoping the
+channel we care about follows it. It does not, and it will not, while `r_sol`
+is a four-sample coin flip.
+
+### Three defects that follow from reading the update
+
+1. **It is not GRPO.** `_policy_update` computes `−advantage · mean_log_prob`.
+   There is no importance ratio and no clipping; `clip_epsilon = 0.2` is
+   declared in `settings.py` and referenced nowhere in the codebase. This is
+   REINFORCE with a z-scored baseline.
+2. **And it is off-policy REINFORCE.** 32 rollouts are collected under policy
+   θ_k, then 16 sequential optimizer steps are taken (`grad_accum = 2`). Steps
+   2–16 use samples from a policy that no longer exists, uncorrected — which is
+   what the ratio and clip exist to handle. The symptom is in every run: KL to
+   the reference climbs monotonically (0.002 → 0.026) while nothing improves.
+3. **Partial credit is discarded.** `SolveReward.compute` counts a sample only
+   when `verify()` returns exactly 1.0, so a student attempt passing 4 of 5
+   tests scores the same zero as one that does not parse. The verifier already
+   returns the fraction; the reward throws it away. This is the single largest
+   avoidable loss of resolution in the term that most needs it.
+
+### The fix this implies
+
+Make `r_sol` a **deterministic function of the dialogue**:
+
+* decode the student's solution attempt greedily (`do_sample=False`, one
+  sample) so that within-group variance in `r_sol` comes from what the tutor
+  said rather than from the student's sampling;
+* score it as the **fraction of tests passed**, not a strict all-or-nothing
+  gate, restoring the resolution lost in (3).
+
+Together these convert `r_sol` from a five-level noisy estimate to a continuous
+attributable one, and they cost *less* compute, not more: the reward phase is
+dominated by four 512-token student generations per rollout, so one greedy
+sample cuts the measured ~35 min/epoch reward phase to roughly a quarter of
+itself. That pays for the 60-problem eval outright (~9.6 h → ~7.3 h total).
+
+What this does **not** do is add a new reward term. That is deliberate. Adding
+terms to the controllable channel is the move that has failed twice.

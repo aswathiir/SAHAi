@@ -200,15 +200,23 @@ class GRPOTrainer:
             in_band = len(self.problem_bank.zpd_candidates(self.student.tracer))
             problems = self.problem_bank.zpd_sample(self.student.tracer, batch_size)
 
-            # A thin band used to shrink the batch instead of being reported:
-            # epoch 5 of three separate runs trained on 2 problems rather than
-            # 4 and said so only as a number in a routine log line. The batch
-            # is topped up now, so the band size has to be stated explicitly or
-            # the fact that the epoch was padded disappears entirely.
+            # Selection is a ranking on difficulty now, so the batch is always
+            # full and this number is pure diagnostics: it says how much of the
+            # bank actually sits at the learner's level. Under the old
+            # mastery-only band it read 0 for seven of ten epochs and the
+            # curriculum was decided by the top-up ordering instead.
+            ability = self.student.tracer.get_ability()
+            target = self.student.tracer.target_difficulty(
+                self.problem_bank.max_difficulty()
+            )
+            logger.info(
+                f"Epoch {epoch}: ability={ability:.3f} target_difficulty={target:.2f} "
+                f"({in_band} of {len(self.problem_bank.problems)} problems in band)"
+            )
             if in_band < batch_size:
                 logger.warning(
-                    f"Only {in_band} problems in the ZPD band (need {batch_size}); "
-                    f"topped up with the nearest {batch_size - in_band} outside it"
+                    f"Only {in_band} problems within one difficulty level of the "
+                    f"target (need {batch_size}); drawing the nearest available"
                 )
 
             logger.info(f"Epoch {epoch}: rollout on {len(problems)} problems x G={self.settings.training.group_size}")

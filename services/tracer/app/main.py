@@ -334,10 +334,14 @@ async def observations(
 async def zpd(req: ZPDRequest, db: AsyncSession = Depends(get_db)) -> dict:
     """Filter candidate problems to the learner's zone of proximal development."""
     tracer = _tracer_from(await _load(db, req.learner_id))
+    # The scale is the caller's own candidate set, not a constant: a request
+    # carrying only difficulty-1 and -2 problems should map ability onto that
+    # range rather than onto a 1..5 scale nothing in the request occupies.
+    top = max((p.get("difficulty", 1) for p in req.candidates), default=1)
     eligible = [
         p
         for p in req.candidates
-        if tracer.in_zpd(p.get("difficulty", 1), p.get("skills", []))
+        if tracer.in_zpd(p.get("difficulty", 1), p.get("skills", []), top)
     ]
     if not eligible:
         eligible = req.candidates
