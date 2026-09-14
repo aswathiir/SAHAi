@@ -12,6 +12,7 @@ from sahai_core.prompt import RULES, system_prompt
 from sahai_core.reward.combined import RewardComponents, SAHAIReward
 from sahai_core.reward.leakage import LeakageEstimator
 from sahai_core.reward.pedagogy import RuleBasedJudge
+from sahai_core.turn_signals import TurnSignals, read_turn, turn_guidance
 from sahai_core.reward.solve import (
     AttemptResult,
     ExecutionOutcome,
@@ -42,5 +43,8 @@ __all__ = [
     "TestResult",
     "TracerSettings",
     "Turn",
+    "TurnSignals",
+    "read_turn",
+    "turn_guidance",
     "__version__",
 ]

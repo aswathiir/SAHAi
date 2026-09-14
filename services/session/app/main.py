@@ -25,7 +25,15 @@ from datetime import datetime, timezone
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field
-from sahai_core import TERMINATION_PHRASES, Dialogue, RuleBasedJudge, Turn, system_prompt
+from sahai_core import (
+    TERMINATION_PHRASES,
+    Dialogue,
+    RuleBasedJudge,
+    Turn,
+    read_turn,
+    system_prompt,
+    turn_guidance,
+)
 from sqlalchemy import ForeignKey, String, Text, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import (
@@ -331,7 +339,14 @@ async def add_turn(
         content=req.content, complete=True,
     )
 
-    messages = [{"role": "system", "content": _system_prompt(row, req.learner_context, req.problem_statement)}]
+    messages = [
+        {
+            "role": "system",
+            "content": _system_prompt(
+                row, req.learner_context, req.problem_statement, req.content
+            ),
+        }
+    ]
     for t in row.turns:
         messages.append(
             {"role": "assistant" if t.role == "tutor" else "user", "content": t.content}
@@ -412,14 +427,29 @@ async def get_session(
     )
 
 
-def _system_prompt(row: SessionRow, learner_context: str = "", statement: str = "") -> str:
+def _system_prompt(
+    row: SessionRow,
+    learner_context: str = "",
+    statement: str = "",
+    learner_message: str = "",
+) -> str:
     """Delegates to the shared prompt; falls back to the stored title.
 
     The title is a truncated statement, so it is the degraded path — used only
     when a caller sends no statement, which keeps this service usable on its
     own without silently pretending the truncation is fine.
+
+    `learner_message` is read here rather than at the gateway because both the
+    text and the voice path funnel through `add_turn`: doing it once at the
+    point the prompt is assembled means the signals are computed from exactly
+    the string that reaches the model, and a transcribed turn gets the same
+    treatment as a typed one without the websocket handler repeating anything.
     """
-    return system_prompt(statement or row.problem_title, learner_context)
+    return system_prompt(
+        statement or row.problem_title,
+        learner_context,
+        turn_guidance(read_turn(learner_message)),
+    )
 
 
 async def _call_tutor(messages: list[dict]) -> dict:
