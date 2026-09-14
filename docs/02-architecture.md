@@ -9,8 +9,8 @@ policy, and the online services that serve it.
 
 ```
                     ┌──────────────── ProblemBank (MBPP) ────────────────┐
-                    │   zpd_sample(tracer, n) — only problems whose      │
-                    │   mastery sits in [0.3, 0.7] for this student      │
+                    │   zpd_sample(tracer, n) — problems one step       │
+                    │   beyond this student's current ability           │
                     └───────────────────────┬────────────────────────────┘
                                             │  n problems
                                             ▼
@@ -50,11 +50,11 @@ policy, and the online services that serve it.
 | Module | Role |
 |---|---|
 | `agents/tutor.py` | `TutorPolicy` — the **only** trained component. Qwen2.5-1.5B + LoRA. |
-| `agents/student.py` | `StudentSimulator` — frozen Qwen2.5-0.5B (4-bit) with a persona: ability level, misconceptions per skill, code-mixing language. |
+| `agents/student.py` | `StudentSimulator` — frozen Qwen2.5-**1.5B** (4-bit) with a persona: ability level, misconceptions per skill, code-mixing language. Raised from 0.5B, which could not hold the "confused student" persona under RL pressure and volunteered complete solutions unprompted. |
 | `agents/tracer.py` | `BKTTracer` — Bayesian Knowledge Tracing per skill. Supplies the `ability` baseline and drives ZPD problem selection. |
 | `core/dialogue.py` | `DialogueEngine` — alternating turns, termination phrases, per-turn completeness. |
 | `reward/solve.py` | Executes candidate code in a subprocess sandbox against unit tests. |
-| `reward/pedagogy.py` | `RuleBasedJudge` (5 graded checks) or an LLM judge with ACCEPT/REJECT rubrics. |
+| `reward/pedagogy.py` | `RuleBasedJudge` (**3** graded checks, all asking "did the tutor give the answer away") or an LLM judge with ACCEPT/REJECT rubrics. Two checks were removed after one of them was gamed inside a single run. |
 | `reward/leakage.py` | Token-overlap leakage; optional ACE (assistance-corrected effect) term. |
 | `training/grpo.py` | Rollout → reward → advantage → policy update, plus checkpointing and rollout dumps. |
 | `core/asr.py` | Code-mixed speech front-end (Whisper), with keyword-preserving noise injection. |
@@ -75,9 +75,16 @@ scores identically contributes exactly zero gradient.
 **The pedagogy score is graded, not binary.** All-or-nothing scoring collapsed
 every group to a single value and zeroed the gradient — see §3.
 
-**ZPD sampling.** `zpd_sample` only draws problems whose average skill mastery
-falls in `[zpd_low, zpd_high]`, so the tutor is not trained on problems the
-student either already knows or cannot approach.
+**ZPD sampling.** `zpd_sample` draws problems whose difficulty sits within one
+level of `1 + ability·(max−1)`, with skill mastery acting only as a ceiling so
+that demonstrated work is not re-offered.
+
+This used to be a pure mastery band, `zpd_low <= mean(mastery) <= zpd_high`,
+which ignored the `difficulty` argument it was passed. Since `p_init` and
+`zpd_low` were both 0.3, that band meant "skills never attempted" — and BKT
+drives a failed skill to ~0.109 with no forgetting transition, so once every
+skill had been tried it was empty permanently. Seven of ten epochs in the
+2026-09-12 run drew from the top-up path rather than from a curriculum.
 
 ---
 
@@ -95,7 +102,7 @@ differently:
 
 |  | training | production |
 |---|---|---|
-| the student | a 0.5B model the engine calls in a loop | a real person sending one turn and waiting |
+| the student | a 1.5B model the engine calls in a loop | a real person sending one turn and waiting |
 | control flow | batch: run the whole dialogue, then score | event-driven: hold state across requests |
 | lifetime | one process, discarded | must survive restarts |
 | mastery state | synthetic, thrown away | belongs to a person, persists forever |

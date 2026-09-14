@@ -41,15 +41,26 @@ r_SAHAI = (0.00 − 0.30) + (0.40 − 1)(1.0) − 0.5(0.14)
 ### 1.1 `r_sol` — execution, not opinion
 
 `sahai/reward/solve.py`. After the dialogue ends the student is asked to write a
-solution `K` times. Each attempt is written to a script, run in a subprocess,
-and its return value compared to the expected output. `r_sol` is the fraction of
-attempts passing **all** test cases — partial passes score zero, matching the
-all-or-nothing correctness indicator in the literature.
+solution. The attempt is written to a script, run in a subprocess, and its
+return value compared to the expected output. `r_sol` is the **fraction of test
+cases passed**; the all-or-nothing rate is returned alongside it as `solved`.
 
-`K = 4` on Kaggle (the review recommends `K ≥ 8`). This is deliberate: `r_sol`
-is currently ~0 because the 0.5B student cannot solve MBPP, so extra samples
-measure noise more precisely at 50% of total runtime. Raise `K` once the student
-can actually solve.
+The attempt is decoded **greedily**, once. It used to be sampled at temperature
+0.3 and averaged over `K = 4` draws, and that made `r_sol` a 4-sample Bernoulli
+estimate: at a true pass probability of 0.15 the sampling sd alone is 0.18,
+larger than any plausible tutor-induced difference. Since GRPO's advantage is a
+z-score of within-group spread, the term the project exists to optimise was
+feeding the gradient mostly noise — measured within-group variance was 0.0098
+for `r_sol` against 0.0482 for the deterministic pedagogy term. Greedy decoding
+makes `r_sol` a deterministic function of the dialogue, so its spread now comes
+from what the tutor said. `K ≥ 8` from the review is therefore moot rather than
+outstanding: raising `K` means restoring the sampling that caused the problem.
+
+Partial credit matters for the same reason. `compute` used to count a draw only
+when it passed *every* test, so an attempt passing 4 of 5 scored the same zero
+as one that did not parse — 22 of 24 rollouts in the dumps on disk scored
+exactly 0.00. The verifier had always returned the fraction; the reward
+discarded it.
 
 ### 1.2 `r_ped` — three answer-giving checks
 
@@ -145,18 +156,32 @@ only the ordering and relative spread matter.
 
 ```python
 mean_lp     = (log_probs * mask).sum() / token_count
-policy_loss = -advantage * mean_lp
+ratio       = torch.exp(log_probs - old_log_probs)          # per token
+policy_loss = -(torch.min(ratio * advantage,
+                          torch.clamp(ratio, 1 - eps, 1 + eps) * advantage)
+                * mask).sum() / token_count
 kl          = ((log_probs - ref_log_probs) * mask).sum() / token_count
-loss        = policy_loss + kl_coeff * kl        # kl_coeff = 0.05
+loss        = policy_loss + kl_coeff * kl        # kl_coeff = 0.05, eps = 0.2
 ```
 
-**Stated honestly: this is REINFORCE with a KL penalty, not clipped GRPO.**
-`clip_epsilon` exists in settings and is unused — there is no importance ratio.
-Acceptable for a single inner epoch over freshly sampled rollouts, but the
-method should not be described as clipped GRPO until the ratio term is added.
+`old_log_probs` is cached for every rollout **before the first optimizer step**,
+which is what makes the ratio meaningful: 32 rollouts are collected under one
+policy and 16 sequential steps are taken over them, so all but the first are
+off-policy.
 
-Also, `mean(log π − log π_ref)` is **not** a KL divergence and can go negative.
-The k3 estimator `exp(δ) − δ − 1` would be correct.
+> **This was REINFORCE until 2026-09-13.** `policy_loss` was
+> `-advantage * mean_lp` with no ratio and no clipping, while `clip_epsilon`
+> sat in settings referenced nowhere in the codebase. That is defensible for
+> one step per batch of samples, and this takes sixteen. It is correct to
+> describe the method as clipped GRPO now, and it was not before.
+
+`lora_dropout` is 0 on Kaggle for the same reason: rollouts generate under
+`model.eval()` and the update runs under `model.train()`, so with dropout on
+the two sides of the ratio are different functions — measured at up to 0.065
+of spurious `|ρ − 1|`, a third of the clip band.
+
+Still outstanding: `mean(log π − log π_ref)` is **not** a KL divergence and can
+go negative. The k3 estimator `exp(δ) − δ − 1` would be correct.
 
 ### 2.3 The reference policy
 
@@ -247,7 +272,9 @@ needs as `α` and the curriculum needs for ZPD filtering. This is a data-scale
 decision, not a claim that BKT predicts better.
 
 **ZPD sampling.** `ProblemBank.zpd_sample` draws only problems whose mean skill
-mastery falls in `[0.3, 0.7]` — not already mastered, not hopeless.
+difficulty sits within one level of `1 + ability·(max−1)`, with mastery as a
+ceiling only — not already mastered, not far beyond reach. (This was a `[0.3,
+0.7]` mastery band until 2026-09-13; see §1.1 and 04-findings.md §13b.)
 
 ---
 

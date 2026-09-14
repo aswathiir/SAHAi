@@ -296,8 +296,9 @@ the judge is not catching it — that is a bug, report it.
 
 **4. Are the roles right?** `[STUDENT]` should be short, confused, asking
 questions. `[TUTOR]` should be asking one guiding question. If the student is
-writing solutions and the tutor is correcting them, the roles have inverted —
-the 0.5B student is not holding its persona and needs to move to 1.5B.
+writing solutions and the tutor is correcting them, the roles have inverted.
+The 0.5B student could not hold its persona and was raised to 1.5B; if you see
+inversion now it is a new cause, not that one.
 
 ### Metric sanity
 
@@ -353,10 +354,15 @@ collapse; more epochs over degenerate groups just burns GPU hours. Budget
 
 Carried forward deliberately, in rough priority order:
 
-1. **Leakage metric is inflated** — does not exclude problem-statement tokens.
-2. **0.5B student breaks persona** — the likely cause of role inversion.
-3. **No importance ratio / clipping** — `clip_epsilon` is in settings but unused;
-   the update is REINFORCE, not clipped GRPO. Acceptable for one inner epoch,
-   but do not call it GRPO in a writeup.
-4. **KL estimator** — should be the k3 form `exp(δ) − δ − 1`.
+1. **KL estimator** — should be the k3 form `exp(δ) − δ − 1`. `mean(log π −
+   log π_ref)` can go negative and is not a KL.
+2. **Conceptual leakage is unpriced** — the tutor can state the whole algorithm
+   in English prose and score `ped 1.00, leak 0.00`. All three pedagogy checks
+   are syntactic and leakage is lexical.
+3. **ACE is written and never called** — `estimate()` accepts
+   `solve_with`/`solve_without` and the trainer passes neither.
+
+*Fixed since this list was written:* leakage now excludes problem-statement
+tokens and filters to rare ones; the student is 1.5B; the update has an
+importance ratio and clipping, so it **is** correct to call it GRPO now.
 5. **`_build_tutor_mask` is O(n²)** — re-tokenizes every message prefix.

@@ -24,7 +24,7 @@ PROGRAM A — TRAINING                 PROGRAM B — SERVING
 "make the tutor better"              "let a person talk to the tutor"
 
 runs on:  Kaggle, one GPU            runs on:  Docker, any machine
-student:  a 0.5B model pretending    student:  a real human
+student:  a 1.5B model pretending    student:  a real human
 output:   a LoRA adapter             output:   HTTP responses
 code in:  sahai/  notebooks/         code in:  services/
 ```

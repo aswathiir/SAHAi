@@ -72,7 +72,7 @@ SAHAi/
 │   │   └── models.py           loads Qwen + attaches LoRA
 │   ├── reward/
 │   │   ├── solve.py            runs student code, checks tests   ← r_sol
-│   │   ├── pedagogy.py         5 checks on teaching quality      ← r_ped
+│   │   ├── pedagogy.py         3 checks on answer-giving         ← r_ped
 │   │   ├── leakage.py          did the tutor give away the answer? ← L
 │   │   └── combined.py         puts them into one score          ← r_SAHAI
 │   ├── training/grpo.py        THE TRAINING LOOP. Start here for training bugs.
@@ -114,7 +114,7 @@ One epoch does four things, in `sahai/training/grpo.py`:
                   → DialogueEngine.run() in core/dialogue.py
 2. REWARD       score each conversation
                   → reward/solve.py    did the student then solve it?  (runs code)
-                  → reward/pedagogy.py was it good teaching?           (5 checks)
+                  → reward/pedagogy.py did it give the answer away?    (3 checks)
                   → reward/leakage.py  did it leak the answer?
                   → reward/combined.py combine into one number
 3. ADVANTAGE    compare the 8 scores against each other
@@ -191,7 +191,8 @@ different from the last.
       │                     │                            │
   placement or        zpd_sample picks             system prompt gains
   a solved-repo       problems whose skill         "New to X / Solid on Y"
-  import seeds        mastery sits in [0.3,0.7]
+  import seeds        difficulty sits one step
+                      beyond current ability
   BKT priors                │                            │
       │                     ▼                            ▼
       └──────────►  you solve or fail  ──►  BKT posterior moves  ──┘
