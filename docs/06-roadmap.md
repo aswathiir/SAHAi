@@ -237,7 +237,7 @@ WER/CER benchmark.
 | DKT model | Needs interaction sequences at a scale a synthetic student won't produce |
 | Swap DKT behind the tracer API | Cheap once the model exists — `/mastery`, `/observe`, `/zpd` already isolate it |
 | Skill taxonomy mapping | ASSISTments / EdNet won't share MBPP's skill vocabulary. Worth deciding before much data accumulates. |
-| Importer steps 2 & 5 | Reading the learner's own solution *source* and letting the tutor reference it. Blocked on a design question, not effort: it points a learner's working solutions at a tutor whose entire reward exists to stop solutions reaching them. |
+| ~~Importer steps 2 & 5~~ | **Done.** The design question is settled by where the code stops: the importer parses the source and discards it, and only a problem title plus a technique name crosses into storage or the prompt. Neither the tracer's `prior_work` table nor the gateway's request model has a field for code. The problem being worked on is excluded, and the tutor is told to ask the learner to make the connection rather than making it for them. |
 | Sim→real pilot (H1–H4, N=34) | Not begun |
 | IRB, consent, pre-registration | Not begun |
 

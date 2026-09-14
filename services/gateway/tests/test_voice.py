@@ -85,9 +85,25 @@ def test_voice_turn_is_personalised_like_a_typed_turn():
     from app.main import voice_turn
 
     src = inspect.getsource(voice_turn)
-    assert "_learner_context(" in src
+    # Both paths call the one helper now. They built the block separately
+    # before, which is how they drifted apart in the first place.
+    assert "_context_for(" in src
     assert "problem_statement" in src
     assert "PROBLEMS_BY_ID" in src, "skills must be resolved server-side, not trusted"
+
+
+def test_both_paths_build_the_same_context():
+    import inspect
+
+    from app.main import add_turn, voice_turn
+
+    for fn in (add_turn, voice_turn):
+        src = inspect.getsource(fn)
+        assert "_context_for(" in src, f"{fn.__name__} builds its own context"
+        assert "_learner_context(" not in src, (
+            f"{fn.__name__} bypasses the shared helper — that is how the two "
+            "paths diverged before"
+        )
 
 
 def test_voice_reports_each_stage_before_the_pipeline_finishes():

@@ -13,8 +13,16 @@ from app.main import MASTERY_NEW, MASTERY_SOLID, _learner_context
 
 def test_new_skill_asks_for_the_idea_first():
     out = _learner_context(["hash_maps"], {"hash_maps": 0.1})
-    assert "hash_maps" in out
+    assert "hash maps" in out
     assert "Build the idea" in out
+
+
+def test_skill_names_are_written_the_way_they_are_spoken():
+    """The tutor says these to a learner, and the prior-work block right beside
+    this one says "a hash map"; `hash_maps` there reads as a different thing."""
+    out = _learner_context(["two_pointers"], {"two_pointers": 0.05})
+    assert "two pointers" in out
+    assert "two_pointers" not in out
 
 
 def test_solid_skill_is_not_re_explained():

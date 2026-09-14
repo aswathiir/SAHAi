@@ -14,12 +14,12 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from sahai_core import BKTTracer, TracerSettings
-from sqlalchemy import ForeignKey, String, UniqueConstraint, select
+from sqlalchemy import Date, ForeignKey, String, UniqueConstraint, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -50,6 +50,43 @@ class SkillMastery(Base):
     skill: Mapped[str] = mapped_column(String(64))
     mastery: Mapped[float] = mapped_column(default=SETTINGS.p_init)
     observations: Mapped[int] = mapped_column(default=0)
+
+
+class PriorWork(Base):
+    """A problem the learner solved before SAHAi ever saw them, and how.
+
+    Imported from a solutions repo — see `scripts/import_neetcode.py`. Three
+    columns and no fourth on purpose: **no source code is stored here.** The
+    importer parses the solution, derives the technique, and discards the text;
+    what lands in this table is "solved Two Sum with a hash map, dated then".
+
+    That boundary is the design decision that made this buildable at all. The
+    tutor's entire reward exists to stop solutions reaching the learner, so
+    putting their old code anywhere the tutor can read it reintroduces exactly
+    what the reward is defending against. A technique *name* carries the part
+    worth teaching with — "you have done this shape before" — and none of the
+    part that gives an answer away.
+
+    Separate from `Observation` because it is not one: these are unverified
+    claims from a third-party repo, not attempts this system graded. Mixing
+    them would corrupt the sequence a knowledge-tracing model trains on.
+    """
+
+    __tablename__ = "prior_work"
+    __table_args__ = (
+        UniqueConstraint("learner_id", "slug", name="uq_learner_prior_slug"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    learner_id: Mapped[str] = mapped_column(String(64), index=True)
+    slug: Mapped[str] = mapped_column(String(120))
+    title: Mapped[str] = mapped_column(String(160))
+    skill: Mapped[str] = mapped_column(String(64), index=True)
+    technique: Mapped[str] = mapped_column(String(64))
+    solved_on: Mapped[date] = mapped_column(Date)
+    # The importer cannot date bulk-imported work; the tutor should not say
+    # "three weeks ago" about something it cannot place.
+    dated: Mapped[bool] = mapped_column(default=True)
 
 
 class Observation(Base):
@@ -328,6 +365,83 @@ async def observations(
         )
         for r in rows
     ]
+
+
+class PriorWorkItem(BaseModel):
+    slug: str = Field(max_length=120)
+    title: str = Field(max_length=160)
+    skill: str = Field(max_length=64)
+    technique: str = Field(max_length=64)
+    solved_on: date
+    dated: bool = True
+
+
+class PriorWorkRequest(BaseModel):
+    learner_id: str = Field(max_length=64)
+    items: list[PriorWorkItem] = Field(max_length=2000)
+
+
+@app.post("/prior_work")
+async def put_prior_work(
+    req: PriorWorkRequest, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Replace this learner's imported prior work.
+
+    Replace rather than append: re-running the importer over the same repo
+    should converge, not accumulate duplicates with drifting dates. It touches
+    nothing else — `skill_mastery` and `observations` are untouched, so a
+    re-import cannot disturb work this system actually graded.
+    """
+    # A bulk DELETE statement, not `db.delete(row)` per row. The ORM defers
+    # per-row deletes to flush time and orders INSERTs first, so re-importing
+    # the same repo tripped `uq_learner_prior_slug` — the new Two Sum row was
+    # inserted while the old one was still there. Found by re-running the
+    # importer against a live Postgres; the statement form executes
+    # immediately, so the table is empty before anything is added.
+    await db.execute(delete(PriorWork).where(PriorWork.learner_id == req.learner_id))
+
+    for item in req.items:
+        db.add(
+            PriorWork(
+                learner_id=req.learner_id, slug=item.slug, title=item.title,
+                skill=item.skill, technique=item.technique,
+                solved_on=item.solved_on, dated=item.dated,
+            )
+        )
+    await db.commit()
+    return {"learner_id": req.learner_id, "stored": len(req.items)}
+
+
+@app.get("/prior_work/{learner_id}")
+async def get_prior_work(
+    learner_id: str,
+    skills: str = "",
+    limit: int = 3,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Prior work for the named skills, most recent first.
+
+    `limit` is small by design. This ends up in a system prompt whose own rule
+    is 2-3 sentences per reply, and a list of thirty solved problems would
+    crowd out the instruction not to give the answer away.
+    """
+    wanted = [s for s in skills.split(",") if s.strip()]
+    query = select(PriorWork).where(PriorWork.learner_id == learner_id)
+    if wanted:
+        query = query.where(PriorWork.skill.in_(wanted))
+    rows = (
+        await db.execute(query.order_by(PriorWork.solved_on.desc()).limit(limit))
+    ).scalars().all()
+    return {
+        "items": [
+            {
+                "slug": r.slug, "title": r.title, "skill": r.skill,
+                "technique": r.technique, "solved_on": r.solved_on.isoformat(),
+                "dated": r.dated,
+            }
+            for r in rows
+        ]
+    }
 
 
 @app.post("/zpd")
