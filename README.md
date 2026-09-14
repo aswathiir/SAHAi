@@ -275,14 +275,36 @@ evidence than a self-report, and no credentials needed — public repo, document
 API, stable layout.
 
 ```bash
-python scripts/import_neetcode.py --repo owner/name --learner me --dry-run
+python scripts/import_neetcode.py --repo owner/name --dry-run
+python scripts/import_neetcode.py --repo owner/name --token "$TOKEN"
 ```
 
-Paths and dates only. The solution *source* is deliberately not read: it is a
-far richer signal, but it is also the answer to a problem, and this project's
-whole reward function exists to stop answers reaching the learner. Three things
-the first real repo forced, each of which would otherwise have produced
-plausible-looking nonsense:
+Paths, dates, **and the source**. The source used to be deliberately unread —
+a solution is the answer to a problem, and this project's whole reward function
+exists to stop answers reaching the learner. That was right about the risk and
+wrong about where it lives: the risk is not in *reading* code, it is in code
+reaching a prompt.
+
+> **The source is parsed in the importer and discarded there.** What leaves the
+> script is a set of skill tags and one phrase per problem — "a hash map",
+> "binary search". Never a line of code. The tracer's `prior_work` table has no
+> column for one and the gateway's `PriorWorkIn` has no field for one.
+
+That buys both things the old note was weighing against each other:
+
+| | before | after |
+|---|---|---|
+| mastery | `kth-largest-element-in-an-array` guessed from the slug | `heapq` in the file says **heaps**, not sorting |
+| tags | 121 of 319 slugs matched nothing at all | the source tags them regardless of the name |
+| the tutor | knew only *what* had been solved | can ask "you used a hash map in Two Sum — what is similar here?" |
+
+Two rules on the tutor side. The problem currently being worked on is excluded
+— everything here is already solved, so naming its technique ends the lesson —
+and the prompt tells the tutor to *ask* the learner to make the connection
+rather than making it for them.
+
+Three things the first real repo forced, each of which would otherwise have
+produced plausible-looking nonsense:
 
 | what | why it matters |
 |---|---|

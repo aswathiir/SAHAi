@@ -267,6 +267,11 @@ def _learner_context(skills: list[str], mastery: dict[str, float]) -> str:
     if not skills:
         return ""
 
+    # The tutor says these to a learner, and `hash_maps` next to the prior-work
+    # block's "a hash map" reads like two different things.
+    def human(skill: str) -> str:
+        return skill.replace("_", " ")
+
     new, solid = [], []
     for skill in sorted(set(skills)):
         # Unseen skills have no posterior yet; treat them as new rather than
@@ -280,11 +285,13 @@ def _learner_context(skills: list[str], mastery: dict[str, float]) -> str:
     lines = []
     if new:
         lines.append(
-            f"- New to {', '.join(new)}. Build the idea before asking them to apply it."
+            f"- New to {', '.join(human(s) for s in new)}. "
+            "Build the idea before asking them to apply it."
         )
     if solid:
         lines.append(
-            f"- Solid on {', '.join(solid)}. Do not re-explain it; push on what is new here."
+            f"- Solid on {', '.join(human(s) for s in solid)}. "
+            "Do not re-explain it; push on what is new here."
         )
     # Everything in between is exactly where the tutor should already be
     # pitching, so saying so would just spend tokens agreeing with itself.
@@ -309,6 +316,90 @@ async def _mastery_for(learner: str) -> dict[str, float]:
     except Exception as exc:  # noqa: BLE001 - degrade, never fail the turn
         logger.warning("mastery lookup failed for %s: %s", learner, type(exc).__name__)
         return {}
+
+
+async def _context_for(learner: str, problem: dict | None) -> str:
+    """The full personalisation block: who they are, and what they have done.
+
+    Both the typed and the spoken path call this. They used to build the block
+    separately and drifted apart once already — voice posted `{"content": ...}`
+    and nothing else, so speaking to the tutor silently opted out of
+    personalisation entirely.
+    """
+    if not problem:
+        return ""
+    skills = problem.get("skills", [])
+    context = _learner_context(skills, await _mastery_for(learner))
+    prior = _prior_work_lines(
+        await _prior_work_for(learner, skills, exclude_slug=problem.get("id", ""))
+    )
+    blocks = [b for b in (context, "\n".join(prior)) if b]
+    return "\n\n".join(blocks)
+
+
+async def _prior_work_for(learner: str, skills: list[str], exclude_slug: str = "") -> list[dict]:
+    """Problems this learner already solved in these skills, or [].
+
+    Fails open like `_mastery_for`, for the same reason.
+
+    `exclude_slug` drops the problem currently being worked on. Everything here
+    is a problem the learner has *already solved*, so if this one is among them
+    the "technique they used" is the answer to the question in front of them.
+    The importer stores no code, so this is not a leak of source — but it is
+    still the one hint that ends the lesson, and it is cheap to withhold.
+    """
+    if not skills:
+        return []
+    try:
+        r = await app.state.http.get(
+            f"{TRACER_URL}/prior_work/{learner}",
+            params={"skills": ",".join(skills), "limit": 4},
+            headers=_trace(),
+            timeout=PROBE_TIMEOUT_S,
+        )
+        r.raise_for_status()
+        items = r.json().get("items", [])
+    except Exception as exc:  # noqa: BLE001 - degrade, never fail the turn
+        logger.warning("prior work lookup failed for %s: %s", learner, type(exc).__name__)
+        return []
+    return [i for i in items if i.get("slug") != exclude_slug][:2]
+
+
+def _prior_work_lines(items: list[dict], today: date | None = None) -> list[str]:
+    """Render prior work as something the tutor can teach *from*.
+
+    Names the problem and the technique, never the code — that is the whole
+    reason reading a solutions repo is safe (see `PriorWork` in the tracer).
+    The instruction is to *ask*, not to tell: "you used a hash map in Two Sum"
+    handed over as a statement is a hint; asked back as a question is the
+    analogy doing the teaching.
+
+    Undated work says "before" rather than inventing a time. The importer
+    cannot date bulk-imported commits, and a tutor confidently saying "three
+    weeks ago" about something it cannot place is worse than vague.
+    """
+    today = today or datetime.now(timezone.utc).date()
+    lines = []
+    for item in items:
+        when = "before"
+        if item.get("dated"):
+            try:
+                days = (today - date.fromisoformat(item["solved_on"])).days
+            except (ValueError, TypeError):
+                days = None
+            if days is not None and days >= 0:
+                weeks = days // 7
+                when = (
+                    "this week" if weeks < 1
+                    else f"{weeks} weeks ago" if weeks < 9
+                    else f"{max(days // 30, 1)} months ago"
+                )
+        lines.append(f"- They solved \"{item['title']}\" with {item['technique']}, {when}.")
+    if not lines:
+        return []
+    return [
+        "WHAT THEY HAVE ALREADY DONE (ask them to connect it, do not connect it for them):"
+    ] + lines
 
 
 class SubmitRequest(BaseModel):
@@ -451,9 +542,7 @@ async def add_turn(
     # Resolve skills from the gateway's own bank rather than the request, so a
     # caller cannot name skills to steer the hint they get.
     problem = PROBLEMS_BY_ID.get(req.problem_id or "")
-    context = ""
-    if problem:
-        context = _learner_context(problem.get("skills", []), await _mastery_for(learner))
+    context = await _context_for(learner, problem)
 
     payload = req.model_dump(exclude={"problem_id"})
     payload["learner_context"] = context
@@ -575,9 +664,7 @@ async def voice_turn(
                 problem = PROBLEMS_BY_ID.get(problem_id or "")
                 payload = {"content": transcript}
                 if problem:
-                    payload["learner_context"] = _learner_context(
-                        problem.get("skills", []), await _mastery_for(learner_id)
-                    )
+                    payload["learner_context"] = await _context_for(learner_id, problem)
                     payload["problem_statement"] = (
                         problem.get("description") or problem.get("title", "")
                     )
@@ -786,6 +873,42 @@ async def set_placement(
     r = await app.state.http.post(
         f"{TRACER_URL}/placement",
         json={"learner_id": learner, "responses": body.responses},
+        headers=_trace(),
+    )
+    if r.status_code >= 400:
+        raise HTTPException(r.status_code, r.text[:200])
+    return r.json()
+
+
+class PriorWorkIn(BaseModel):
+    """Imported evidence of problems solved before this system saw the learner.
+
+    There is deliberately no field for source code. That is the whole design
+    decision behind reading a solutions repo at all — the importer parses the
+    code and discards it, and what crosses this boundary is a problem title and
+    a technique name. A `code` field here would put the answer one careless
+    prompt change away from the tutor, which is what the entire reward function
+    exists to prevent.
+    """
+
+    items: list[dict] = Field(default_factory=list, max_length=2000)
+
+
+@app.post("/v1/me/prior_work", responses=AUTH_RESPONSES)
+async def set_prior_work(
+    body: PriorWorkIn, authorization: str | None = LearnerHeader
+) -> dict:
+    """Replace the caller's imported prior work.
+
+    The learner is the authenticated one, never a field in the body — the
+    importer cannot write to somebody else's record by naming them.
+    """
+    learner = await _learner(authorization)
+    allowed = {"slug", "title", "skill", "technique", "solved_on", "dated"}
+    items = [{k: v for k, v in item.items() if k in allowed} for item in body.items]
+    r = await app.state.http.post(
+        f"{TRACER_URL}/prior_work",
+        json={"learner_id": learner, "items": items},
         headers=_trace(),
     )
     if r.status_code >= 400:
