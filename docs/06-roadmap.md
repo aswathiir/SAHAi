@@ -69,9 +69,12 @@ Everything needed to run, serve, observe, and debug the system.
   adapter, generate, sanitise) but it is also the only one holding a GPU model.
 - Gateway rate limiting is untested. Identity/401 handling is covered by 54
   tests; `_rate_limit` is not among them.
-- Identity is a client-supplied `x-learner-id` header. Ownership checks close
-  the cross-learner gap **given a trusted header**, and the header is not
-  trusted. This is not authentication and is not described as such anywhere.
+- Identity is a bearer token verified at the gateway. It authenticates a
+  *bearer*, not a person — no second factor, no recovery, no revocation beyond
+  deleting the row — and the internal hop to session and tracer still trusts
+  `x-learner-id`, which is a network-topology assumption rather than a
+  cryptographic one. Both are written down where they apply rather than
+  implied.
 
 ---
 

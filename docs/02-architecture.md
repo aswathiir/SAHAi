@@ -221,7 +221,8 @@ SAHAI_DEVICE=cuda docker compose up -d tutor
 
 | Item | Why it is missing |
 |---|---|
-| Real auth | Gateway trusts `x-learner-id`. The seam exists; the identity provider does not. |
+| Password or federated login | The gateway verifies a bearer token minted at registration — real enough that a client can no longer claim an identity, but it authenticates a *bearer*, not a person: no second factor, no recovery, no revocation beyond deleting the row. |
+| Signed internal hop | Session and tracer still trust `x-learner-id`, which the gateway fills in after verifying. That rests on the compose topology — those services publish no ports — so it is a network assumption, not a cryptographic one. |
 | vLLM backend | `hf` is enough to serve one adapter; throughput is not yet a constraint. |
 | Whisper ASR | Text-first this phase. Contract and health check are real, transcription is not. |
 | Alembic migrations | Tables are created at startup. Fine for a single deployment, wrong for schema evolution. |

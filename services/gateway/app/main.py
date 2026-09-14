@@ -4,8 +4,9 @@ Everything behind this is on an internal network and is not directly reachable.
 The gateway does the things that must happen exactly once per request — CORS,
 request ids, rate limiting, and aggregate health — and otherwise forwards.
 
-Auth is a deliberate stub: it establishes the seam and the header contract
-without pretending to be a real identity provider.
+Identity is verified here and nowhere else: a bearer token in, a learner id
+out, forwarded inward on an internal network. See `app/identity.py` for what
+that does and does not promise.
 """
 
 from __future__ import annotations
@@ -29,6 +30,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+from app import identity
 
 # Curated by scripts/export_problems.py. Deliberately excludes `solution` —
 # this file is served straight to the browser, and the tutor's entire job is
@@ -81,6 +84,10 @@ PROBE_TIMEOUT_S = 3.0
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Identity must exist before the first request can be authenticated, and a
+    # gateway that cannot authenticate has nothing useful to serve — so this is
+    # allowed to fail startup rather than degrade.
+    await identity.create_tables()
     app.state.http = httpx.AsyncClient(
         timeout=GATEWAY_TIMEOUT_S,
         # Bounded pool. The default is unbounded, so a burst opens a connection
@@ -158,34 +165,57 @@ def _rate_limit(learner_id: str) -> None:
 
 # Declared once so every endpoint documents the header identically, and so
 # Swagger renders it with a description instead of a bare field name.
+#
+# The name `LearnerHeader` is kept from when this *was* `x-learner-id`, so that
+# every endpoint signature reads the same; what it carries is now a token.
 LearnerHeader = Header(
     default=None,
-    alias="x-learner-id",
-    description="Who you are. Any string works — this is a stub identity, "
-    "not real authentication. Example: 'me'.",
-    examples=["me"],
+    alias="authorization",
+    description="`Bearer <token>` — the token returned once by "
+    "POST /v1/auth/register. Not a learner id: sending one is no longer "
+    "accepted.",
+    examples=["Bearer 0oEXAMPLEtokenGOEShere"],
 )
 
-# Without this, Swagger labels the 401 'Undocumented' and gives no hint that
-# the header is what's missing.
+# Without this, Swagger labels the 401 'Undocumented' and gives no hint about
+# what is missing.
 AUTH_RESPONSES = {
     401: {
-        "description": "Missing x-learner-id header",
+        "description": "Missing or invalid bearer token",
         "content": {
             "application/json": {
-                "example": {"detail": "x-learner-id header required"}
+                "example": {"detail": "invalid or expired token"}
             }
         },
     }
 }
 
 
-async def _learner(x_learner_id: str | None) -> str:
-    # Stub identity. Real deployment terminates auth here and derives the
-    # learner from a verified token instead of trusting a header.
-    if not x_learner_id:
-        raise HTTPException(401, "x-learner-id header required")
-    return x_learner_id
+def _bearer(authorization: str | None) -> str:
+    scheme, _, token = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        raise HTTPException(401, "Authorization: Bearer <token> required")
+    return token.strip()
+
+
+async def _learner(authorization: str | None) -> str:
+    """The authenticated learner id, or 401.
+
+    This used to return `x_learner_id` unchanged — a value the browser chose.
+    Every ownership check in session and tracer compares against what this
+    returns, so all of them were resting on the client's honesty: sending
+    another learner's id was enough to read their sessions, mastery and
+    submissions. The checks were right; the identity under them was not.
+
+    One message for "no token" and "wrong token" on purpose. Distinguishing
+    them tells an attacker which half of a guess was correct.
+    """
+    token = _bearer(authorization)
+    async with identity.SessionLocal() as db:
+        row = await identity.resolve(db, token)
+    if row is None:
+        raise HTTPException(401, "invalid or expired token")
+    return row.learner_id
 
 
 class StartRequest(BaseModel):
@@ -320,11 +350,87 @@ async def health() -> JSONResponse:
     )
 
 
+# ---------------------------------------------------------------- identity
+
+
+class RegisterIn(BaseModel):
+    display_name: str = Field(min_length=1, max_length=identity.MAX_DISPLAY_NAME)
+
+
+REGISTRATIONS_PER_HOUR = int(os.getenv("SAHAI_REGISTRATIONS_PER_HOUR", "10"))
+_registrations: dict[str, deque[float]] = defaultdict(deque)
+
+
+def _limit_registrations(client_ip: str) -> None:
+    """Registration cannot be limited per learner — it is what creates one.
+
+    Keyed on the client address instead, and on a one-hour window rather than
+    the request path's one-minute one, because minting credentials is not
+    something a real person does repeatedly. Without this the endpoint is an
+    unauthenticated row-insert loop.
+    """
+    now = time.time()
+    window = _registrations[client_ip]
+    while window and now - window[0] > 3600:
+        window.popleft()
+    if len(window) >= REGISTRATIONS_PER_HOUR:
+        raise HTTPException(429, "too many registrations from this address")
+    window.append(now)
+
+
+@app.post("/v1/auth/register", status_code=201)
+async def register(req: RegisterIn, request: Request) -> dict:
+    """Mint a learner and their one and only token.
+
+    The token is in this response and nowhere else — the row stores a SHA-256
+    of it. There is no endpoint that returns it again, deliberately: an
+    endpoint that can re-read a credential is an endpoint that can leak one.
+    Losing it means `scripts/mint_token.py`.
+
+    The learner id is generated here and is **not** taken from the request.
+    Letting a caller name its own id would let it claim an id that already
+    holds someone's history, which is the same hole this replaces.
+    """
+    _limit_registrations(request.client.host if request.client else "unknown")
+    async with identity.SessionLocal() as db:
+        learner_id, token = await identity.register(db, req.display_name)
+    logger.info("rid=%s registered learner %s", _request_id.get(), learner_id)
+    return {
+        "learner_id": learner_id,
+        "display_name": req.display_name.strip(),
+        "token": token,
+        "note": "Save this token. It is not shown again and cannot be recovered.",
+    }
+
+
+@app.get("/v1/auth/me", responses=AUTH_RESPONSES)
+async def whoami(authorization: str | None = LearnerHeader) -> dict:
+    """Who the presented token belongs to.
+
+    The client uses this to decide whether a token it has stored is still
+    good, rather than discovering it on the first real request and having to
+    unwind a half-started session.
+    """
+    token = _bearer(authorization)
+    async with identity.SessionLocal() as db:
+        row = await identity.resolve(db, token)
+    if row is None:
+        raise HTTPException(401, "invalid or expired token")
+    return {
+        "learner_id": row.learner_id,
+        "display_name": row.display_name,
+        "created_at": row.created_at.isoformat(),
+    }
+
+
+# ---------------------------------------------------------------- sessions
+
+
 @app.post("/v1/sessions", responses=AUTH_RESPONSES)
 async def start_session(
-    req: StartRequest, x_learner_id: str | None = LearnerHeader
+    req: StartRequest, authorization: str | None = LearnerHeader
 ) -> dict:
-    learner = await _learner(x_learner_id)
+    learner = await _learner(authorization)
     _rate_limit(learner)
     r = await app.state.http.post(
         f"{SESSION_URL}/sessions",
@@ -337,9 +443,9 @@ async def start_session(
 
 @app.post("/v1/sessions/{session_id}/turns", responses=AUTH_RESPONSES)
 async def add_turn(
-    session_id: str, req: TurnRequest, x_learner_id: str | None = LearnerHeader
+    session_id: str, req: TurnRequest, authorization: str | None = LearnerHeader
 ) -> dict:
-    learner = await _learner(x_learner_id)
+    learner = await _learner(authorization)
     _rate_limit(learner)
 
     # Resolve skills from the gateway's own bank rather than the request, so a
@@ -367,9 +473,9 @@ async def add_turn(
 
 @app.post("/v1/sessions/{session_id}/submit", responses=AUTH_RESPONSES)
 async def submit(
-    session_id: str, req: SubmitRequest, x_learner_id: str | None = LearnerHeader
+    session_id: str, req: SubmitRequest, authorization: str | None = LearnerHeader
 ) -> dict:
-    learner = await _learner(x_learner_id)
+    learner = await _learner(authorization)
     _rate_limit(learner)
     r = await app.state.http.post(
         f"{SESSION_URL}/sessions/{session_id}/submit",
@@ -385,7 +491,6 @@ async def submit(
 async def voice_turn(
     websocket: WebSocket,
     session_id: str,
-    learner_id: str = "me",
     lang: str = "hi",
     problem_id: str | None = None,
 ) -> None:
@@ -409,8 +514,38 @@ async def voice_turn(
     generation can take minutes on CPU, and a learner who has just spoken has
     no idea whether they were heard. Sending the transcript the moment it
     exists turns a blind wait into a conversation.
+
+    **The first frame must be `{"token": "..."}`.** This took `learner_id` as a
+    *query parameter defaulting to `"me"`* — so opening
+    `ws://host/v1/voice?session_id=…&learner_id=<someone>` was enough to speak
+    into another learner's session and have the reply written to their
+    transcript. The ownership check in the session service could not help: it
+    compares against the id the gateway forwards, and the gateway was
+    forwarding whatever the URL said.
+
+    Authenticating on the first frame rather than in the query string is
+    deliberate. Browsers cannot set headers on a WebSocket handshake, so the
+    usual alternative is `?token=…` — and query strings land in access logs,
+    proxy logs and browser history, which is the last place a long-lived
+    credential should be. The frame costs one extra round trip before the first
+    utterance and nothing after that.
     """
     await websocket.accept()
+
+    try:
+        hello = await websocket.receive_json()
+    except Exception:  # noqa: BLE001 - a non-JSON first frame is a failed handshake
+        await websocket.close(code=1008, reason="auth frame required")
+        return
+    try:
+        learner_id = await _learner(f"Bearer {hello.get('token', '')}")
+    except HTTPException:
+        # 1008 = policy violation. The client cannot read an HTTP status here,
+        # so the close code has to carry it.
+        await websocket.close(code=1008, reason="invalid or expired token")
+        return
+    await websocket.send_json({"stage": "authenticated", "learner_id": learner_id})
+
     try:
         while True:
             audio_bytes = await websocket.receive_bytes()
@@ -499,9 +634,9 @@ async def voice_turn(
 
 @app.get("/v1/sessions/{session_id}", responses=AUTH_RESPONSES)
 async def get_session(
-    session_id: str, x_learner_id: str | None = LearnerHeader
+    session_id: str, authorization: str | None = LearnerHeader
 ) -> dict:
-    learner = await _learner(x_learner_id)
+    learner = await _learner(authorization)
     r = await app.state.http.get(
         f"{SESSION_URL}/sessions/{session_id}", headers=_trace(learner)
     )
@@ -511,8 +646,8 @@ async def get_session(
 
 
 @app.get("/v1/me/mastery", responses=AUTH_RESPONSES)
-async def mastery(x_learner_id: str | None = LearnerHeader) -> dict:
-    learner = await _learner(x_learner_id)
+async def mastery(authorization: str | None = LearnerHeader) -> dict:
+    learner = await _learner(authorization)
     r = await app.state.http.get(
         f"{TRACER_URL}/mastery/{learner}", headers=_trace()
     )
@@ -639,7 +774,7 @@ def _next_up(skills: dict[str, float], solved: set[str]) -> dict | None:
 
 @app.post("/v1/me/placement", responses=AUTH_RESPONSES)
 async def set_placement(
-    body: PlacementIn, x_learner_id: str | None = LearnerHeader
+    body: PlacementIn, authorization: str | None = LearnerHeader
 ) -> dict:
     """Record a self-assessment so the first assignment fits the learner.
 
@@ -647,7 +782,7 @@ async def set_placement(
     and the opening session picks problems as if they knew nothing about
     anything.
     """
-    learner = await _learner(x_learner_id)
+    learner = await _learner(authorization)
     r = await app.state.http.post(
         f"{TRACER_URL}/placement",
         json={"learner_id": learner, "responses": body.responses},
@@ -659,7 +794,7 @@ async def set_placement(
 
 
 @app.get("/v1/me/progress", responses=AUTH_RESPONSES)
-async def progress(x_learner_id: str | None = LearnerHeader) -> dict:
+async def progress(authorization: str | None = LearnerHeader) -> dict:
     """Everything the progress view needs, in one round trip.
 
     Derived entirely from the append-only observation log rather than new
@@ -667,7 +802,7 @@ async def progress(x_learner_id: str | None = LearnerHeader) -> dict:
     streaks and activity are a projection of it. Anything stored separately
     would be a second source of truth that could drift from the history.
     """
-    learner = await _learner(x_learner_id)
+    learner = await _learner(authorization)
 
     obs_resp, mastery_resp = await asyncio.gather(
         app.state.http.get(
@@ -775,7 +910,7 @@ DIAGNOSTIC_SIZE = 4
 
 
 @app.get("/v1/me/sessions", responses=AUTH_RESPONSES)
-async def my_sessions(x_learner_id: str | None = LearnerHeader) -> list[dict]:
+async def my_sessions(authorization: str | None = LearnerHeader) -> list[dict]:
     """Unfinished conversations, newest first.
 
     Sessions have always survived a restart — they are rows in Postgres — but
@@ -785,7 +920,7 @@ async def my_sessions(x_learner_id: str | None = LearnerHeader) -> list[dict]:
     Fails open like the mastery lookup: an unavailable session service should
     cost the learner this list, not the page.
     """
-    learner = await _learner(x_learner_id)
+    learner = await _learner(authorization)
     try:
         r = await app.state.http.get(
             f"{SESSION_URL}/sessions",
@@ -801,7 +936,7 @@ async def my_sessions(x_learner_id: str | None = LearnerHeader) -> list[dict]:
 
 
 @app.get("/v1/diagnostic", responses=AUTH_RESPONSES)
-async def diagnostic(x_learner_id: str | None = LearnerHeader) -> dict:
+async def diagnostic(authorization: str | None = LearnerHeader) -> dict:
     """Pick a short set of problems that will actually tell us something.
 
     Spread across *different* skills, because four problems on arrays measures
@@ -815,7 +950,7 @@ async def diagnostic(x_learner_id: str | None = LearnerHeader) -> dict:
     each skill's range is the best default when the ability is exactly what is
     being measured.
     """
-    learner = await _learner(x_learner_id)
+    learner = await _learner(authorization)
     mastery = await _mastery_for(learner)
 
     by_skill: dict[str, list[dict]] = defaultdict(list)
@@ -866,7 +1001,7 @@ async def diagnostic(x_learner_id: str | None = LearnerHeader) -> dict:
 
 @app.post("/v1/diagnostic/grade", responses=AUTH_RESPONSES)
 async def diagnostic_grade(
-    body: DiagnosticAnswer, x_learner_id: str | None = LearnerHeader
+    body: DiagnosticAnswer, authorization: str | None = LearnerHeader
 ) -> dict:
     """Grade one diagnostic answer and record it as a real observation.
 
@@ -874,7 +1009,7 @@ async def diagnostic_grade(
     are the grading criteria — accepting them from the client would let a
     caller mark their own work.
     """
-    learner = await _learner(x_learner_id)
+    learner = await _learner(authorization)
     _rate_limit(learner)
 
     problem = PROBLEMS_BY_ID.get(body.problem_id)

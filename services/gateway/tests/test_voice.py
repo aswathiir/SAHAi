@@ -6,6 +6,7 @@ not crash the connection or hang.
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -13,19 +14,64 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_voice_socket_accepts_connection_and_reports_unreachable_backend():
+def test_voice_socket_accepts_connection_and_reports_unreachable_backend(auth_headers):
+    token = auth_headers["Authorization"].split()[1]
     with client:  # runs lifespan, so app.state.http exists
-        with client.websocket_connect("/v1/ws/voice/some-session?learner_id=me&lang=hi") as ws:
+        with client.websocket_connect("/v1/ws/voice/some-session?lang=hi") as ws:
+            ws.send_json({"token": token})
+            assert ws.receive_json()["stage"] == "authenticated"
             ws.send_bytes(b"fake audio bytes")
             msg = ws.receive_json()
     assert msg["error"] == "upstream_unreachable"
 
 
-def test_voice_socket_survives_client_disconnect():
+def test_voice_socket_survives_client_disconnect(auth_headers):
     # Connecting and closing immediately must not raise inside the handler.
+    token = auth_headers["Authorization"].split()[1]
     with client:
         with client.websocket_connect("/v1/ws/voice/some-session") as ws:
-            pass
+            ws.send_json({"token": token})
+            ws.receive_json()
+
+
+def test_voice_socket_refuses_an_unauthenticated_speaker():
+    """`learner_id` was a query parameter defaulting to "me" and the gateway
+    trusted it, so `?learner_id=<someone>` was enough to speak into another
+    learner's session and have the reply written to their transcript. The
+    ownership check in the session service could not help — it compares
+    against the id the gateway forwards."""
+    from starlette.websockets import WebSocketDisconnect
+
+    with client:
+        for hello in ({"token": "not-a-real-token"}, {}):
+            with pytest.raises(WebSocketDisconnect) as excinfo:
+                with client.websocket_connect("/v1/ws/voice/some-session") as ws:
+                    ws.send_json(hello)
+                    ws.receive_json()
+            assert excinfo.value.code == 1008
+
+
+def test_voice_socket_will_not_take_audio_before_the_token():
+    """A binary first frame is a failed handshake, not an anonymous turn."""
+    from starlette.websockets import WebSocketDisconnect
+
+    with client:
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            with client.websocket_connect("/v1/ws/voice/some-session") as ws:
+                ws.send_bytes(b"audio before auth")
+                ws.receive_json()
+        assert excinfo.value.code == 1008
+
+
+def test_voice_socket_takes_no_identity_from_the_query_string():
+    """A token in a query string lands in access logs, proxy logs and browser
+    history. The handler must not accept one there."""
+    import inspect
+
+    from app.main import voice_turn
+
+    assert "learner_id" not in inspect.signature(voice_turn).parameters
+    assert "token" not in inspect.signature(voice_turn).parameters
 
 
 def test_voice_turn_is_personalised_like_a_typed_turn():

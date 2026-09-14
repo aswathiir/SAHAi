@@ -188,10 +188,10 @@ def test_next_up_is_none_when_everything_is_solved():
     assert _next_up({"arrays": 0.5}, {p["id"] for p in PROBLEMS}) is None
 
 
-def test_diagnostic_spans_different_skills():
+def test_diagnostic_spans_different_skills(auth_headers):
     """Four problems on arrays measures arrays four times and leaves the other
     fourteen skills exactly as unknown as before."""
-    r = client.get("/v1/diagnostic", headers={"x-learner-id": "t"})
+    r = client.get("/v1/diagnostic", headers=auth_headers)
     assert r.status_code == 200
     problems = r.json()["problems"]
     assert len(problems) > 1
@@ -202,33 +202,41 @@ def test_diagnostic_spans_different_skills():
     assert len(set(targets)) == len(targets), f"repeated target: {targets}"
 
 
-def test_diagnostic_is_not_all_hardest_problems():
+def test_diagnostic_is_not_all_hardest_problems(auth_headers):
     """An item only discriminates near the learner's ability. Four difficulty-5
     problems produce four failures, which says "not expert" and nothing else."""
-    problems = client.get("/v1/diagnostic", headers={"x-learner-id": "t"}).json()["problems"]
+    problems = client.get("/v1/diagnostic", headers=auth_headers).json()["problems"]
     assert not all(p["difficulty"] >= 5 for p in problems)
     assert len({p["difficulty"] for p in problems}) > 1, "no difficulty spread"
 
 
-def test_diagnostic_never_ships_the_answer():
+def test_diagnostic_never_ships_the_answer(auth_headers):
     """Same rule as the problem catalogue: this is served straight to a browser."""
-    body = client.get("/v1/diagnostic", headers={"x-learner-id": "t"}).text
+    body = client.get("/v1/diagnostic", headers=auth_headers).text
     assert "solution" not in body
-    for p in client.get("/v1/diagnostic", headers={"x-learner-id": "t"}).json()["problems"]:
+    for p in client.get("/v1/diagnostic", headers=auth_headers).json()["problems"]:
         assert "test_cases" not in p, "tests are the grading criteria, not a hint"
 
 
-def test_diagnostic_requires_a_learner():
+def test_diagnostic_requires_a_token():
     assert client.get("/v1/diagnostic").status_code == 401
     r = client.post("/v1/diagnostic/grade", json={"problem_id": "x", "code": "pass"})
     assert r.status_code == 401
 
 
-def test_diagnostic_grade_rejects_an_unknown_problem():
+def test_claiming_a_learner_id_is_no_longer_enough():
+    """The hole this replaces: `x-learner-id` was whatever the client typed,
+    so naming someone else's id read their record."""
+    for headers in ({"x-learner-id": "someone-else"}, {"Authorization": "Bearer nope"}):
+        assert client.get("/v1/me/progress", headers=headers).status_code == 401
+        assert client.get("/v1/diagnostic", headers=headers).status_code == 401
+
+
+def test_diagnostic_grade_rejects_an_unknown_problem(auth_headers):
     r = client.post(
         "/v1/diagnostic/grade",
         json={"problem_id": "not_a_real_id", "code": "pass"},
-        headers={"x-learner-id": "t"},
+        headers=auth_headers,
     )
     assert r.status_code == 404
 
@@ -322,31 +330,33 @@ def test_resume_warns_when_the_last_turn_went_unanswered():
     assert "last_role" in progress
 
 
-def test_changing_learner_drops_the_open_conversation():
-    """Switching learner is a context switch, not a label change.
+def test_no_page_can_name_its_own_learner():
+    """The free-text learner box is gone from all three pages.
 
-    The handler used to only write localStorage, so an open conversation kept
-    running: further turns went out under the new learner's header, were
-    appended to the previous learner's session, and were personalised against
-    the wrong mastery while the panel still showed the old learner's skills.
+    It used to set `x-learner-id`, so typing another learner's id read their
+    sessions, mastery and submissions. Switching identity is signing out now,
+    which reloads — the old handler had to tear down the conversation, the
+    mastery panel and any in-flight request by hand, and a reload cannot miss
+    a piece.
     """
+    for page_name in ("index.html", "progress.html", "diagnostic.html"):
+        page = _static(page_name)
+        assert "x-learner-id" not in page, f"{page_name} still claims an identity"
+        assert 'id="learner-id"' not in page, f"{page_name} still has the learner box"
+        assert "authHeaders()" in page or "authToken()" in page, page_name
+        assert "requireAuth(" in page, f"{page_name} renders before identity is settled"
+
+
+def test_the_voice_socket_does_not_take_identity_from_the_url():
+    """`learner_id` was a query parameter defaulting to "me", so any value
+    opened someone else's session; and a token in a query string lands in
+    access logs and browser history. It goes in the first frame instead."""
     page = _static("index.html")
-    handler = page[page.index("learner-id').addEventListener('change'"):]
-    handler = handler[: handler.index("});")]
-    assert "state.sessionId = null" in handler
-    assert "state.epoch += 1" in handler, "in-flight replies must be invalidated too"
-    assert "refreshMastery()" in handler
-
-
-def test_diagnostic_pins_the_learner_for_the_whole_run():
-    """Reading the box at submit time meant switching learner mid-diagnostic
-    split one sitting across two permanent records. Unlike a stale render,
-    graded answers are durable evidence that moves the wrong learner's
-    mastery."""
-    page = _static("diagnostic.html")
-    assert "runAs" in page
-    assert "state.runAs ||" in page, "learnerId() must prefer the pinned value"
-    assert "disabled = true" in page, "the box must not claim one learner while grading another"
+    socket = page[page.index("function openVoiceSocket"):]
+    socket = socket[: socket.index("function closeVoiceSocket")]
+    assert "learner_id=" not in socket, "identity is back in the URL"
+    assert "token=" not in socket, "token is back in the URL"
+    assert "ws.send(JSON.stringify({ token" in socket
 
 
 def test_gateway_forwards_the_learner_to_session():
@@ -363,5 +373,5 @@ def test_gateway_forwards_the_learner_to_session():
         # `_trace(learner)` while the handler only did `await _learner(...)`
         # without binding the result, so every read raised NameError at
         # runtime while this assertion passed.
-        bound = "learner = await _learner(" in src or "learner_id: str" in src
+        bound = "learner = await _learner(" in src or "await _learner(f\"Bearer" in src
         assert bound, f"{name} references `learner` without binding it"
