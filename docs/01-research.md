@@ -15,7 +15,7 @@ Full experimental record: [04-findings.md](04-findings.md).
 |---|---|---|
 | Online RL on simulated tutor↔student dialogue; no human tutoring corpus | `DialogueEngine.run()` — alternating turns, terminates on a phrase or `2 × max_turns` | **Implemented** |
 | Reward at conversation level, not per turn | `SAHAIReward.compute()` scores the completed `Dialogue` | **Implemented** |
-| `r_sol` = post-dialog solve rate over `K` sampled student answers | `SolveReward.compute()` calls `student.attempt_solution()` `K` times | **Implemented** (`K=4`, below the review's `K≥8` — see §4) |
+| `r_sol` = post-dialog solve rate over `K` sampled student answers | `SolveReward.compute()` calls `student.attempt_solution()` once, greedily | **Changed** — sampling `K` times made `r_sol` mostly student noise; see §4 and [04-findings.md §14](04-findings.md) |
 | Verifiable outcome reward, not judge-scored correctness | `CodeVerifier` runs candidate code in a `subprocess` against unit tests | **Implemented** |
 | `r_ped` from `M` judges, conversation accepted only if **all** accept | `PedagogyReward` holds 2 rubrics; a `RuleBasedJudge` is used on Kaggle | **Changed — see §3.1** |
 | Hard penalty: `r_ped = 0 ⇒ r = −λ` | `SAHAIReward.compute()`, `hard_penalty=True` | **Implemented** |
@@ -35,10 +35,10 @@ plus the "advanced" variant:
 
 | Mechanism | Our implementation | Status |
 |---|---|---|
-| LLM + explicit skill tracer | `StudentSimulator` (Qwen2.5-0.5B) + `BKTTracer` maintaining `dict[skill → mastery]` | **Implemented** |
+| LLM + explicit skill tracer | `StudentSimulator` (Qwen2.5-**1.5B**, raised from 0.5B) + `BKTTracer` maintaining `dict[skill → mastery]` | **Implemented** |
 | Injected misconceptions matching real error patterns | `MISCONCEPTIONS` — per-skill error list (e.g. `binary_search → ["wrong midpoint calculation", "infinite loop on boundaries"]`) injected into the persona prompt | **Implemented** |
 | Ability-conditioned solve `r_sol(a_T \| s_T, α)` | `tracer.get_ability()` → `ability_baseline`, entering the reward as `(r_sol − α)` | **Implemented** |
-| Leakage estimate `L ∈ [0,1]` | `LeakageEstimator` | **Partially — token-match only, see §4** |
+| Leakage estimate `L ∈ [0,1]` | `LeakageEstimator` — rare-token overlap, problem-statement tokens subtracted, plus an execution check on any code the tutor wrote | **Implemented**; ACE still unwired, see §4 |
 | Token-match leakage heuristic | `token_match_leakage()` — overlap between tutor text and reference solution, minus Python keywords | **Implemented** |
 | ACE-based leakage heuristic | `ace_leakage()` exists but is **never called with data** — training passes only `(dialogue, solution)`, so the ACE branch is dead | **Not active** |
 | Combined `r_SAHAI` with `λ`, `γ` | `SAHAIReward` — `lambda_ped=1.0`, `gamma_leak=0.5` | **Implemented** |
@@ -84,10 +84,16 @@ This is a scale-driven deviation, not a claim that BKT predicts better.
 
 ### 2.5 Curriculum / ZPD
 
-`ProblemBank.zpd_sample()` draws only problems whose mean skill mastery falls in
-`[zpd_low, zpd_high] = [0.3, 0.7]`, so the tutor is never trained on problems the
-simulated student has already mastered or cannot approach. This operationalises
-the "curriculum decisions" use the DKT paper describes for a learner model.
+`ProblemBank.zpd_sample()` draws problems whose **difficulty** sits within one
+level of `1 + ability·(max−1)`, with skill mastery acting only as a ceiling so
+demonstrated work is not re-offered. This operationalises the "curriculum
+decisions" use the DKT paper describes for a learner model.
+
+It was a pure mastery band, `[zpd_low, zpd_high] = [0.3, 0.7]`, which ignored
+the `difficulty` argument it received. With `p_init` also 0.3 that band selected
+skills the learner had *never attempted*, and since BKT sends a failed skill to
+~0.109 with no forgetting transition, it emptied permanently once every skill
+had been tried.
 
 ---
 
@@ -129,10 +135,12 @@ when a dialogue fails every check, which is its intended meaning.
 The paper uses PPO. We use group-relative advantages with no critic, which
 halves memory on a 16GB T4 and removes value-function tuning.
 
-**Stated honestly:** `clip_epsilon` exists in settings but is unused. The update
-is currently REINFORCE with a KL penalty to a frozen reference (LoRA adapters
-disabled), not clipped PPO-style GRPO. This should not be described as clipped
-GRPO in any writeup until the ratio term is added.
+**Resolved 2026-09-13.** For most of this project `clip_epsilon` sat in
+settings unused and the update was REINFORCE with a KL penalty to a frozen
+reference — not clipped, PPO-style GRPO — and this document said so. The
+clipped surrogate is now implemented, with the importance ratio taken against
+log-probs cached before the first optimizer step. Describing the method as
+clipped GRPO is accurate as of that commit and was not accurate before it.
 
 ### 3.3 Rule-based judge instead of `M` LLM judges
 

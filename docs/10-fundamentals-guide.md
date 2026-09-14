@@ -203,7 +203,13 @@ literal: nothing here is a language model's opinion.
 
 ### 3.4 How it works
 
-$K=4$ on our Kaggle config. Say the student attempts the problem 4 times:
+*This section describes the original sampled estimator. Since 2026-09-13 the
+student makes **one greedy attempt** and $r_{sol}$ is the fraction of tests it
+passes — sampling $K$ times made the reward mostly the student's own noise
+rather than the tutor's effect ([04-findings.md §14](04-findings.md)). The
+worked example below still shows why averaging was the intent.*
+
+$K=4$ on the old Kaggle config. Say the student attempts the problem 4 times:
 
 ```
 attempt 1: def f(s): return s[0]              → runs, wrong answer   → fail
@@ -705,8 +711,8 @@ mathematically incapable of changing, because it's frozen, full stop.
         │
         ▼
    ┌─────────────────────────────────────────┐
-   │  r_sol  (§3, run the code, K samples)     │
-   │  r_ped  (§4, 5 graded checks)             │
+   │  r_sol  (§3, run the code, greedy, graded) │
+   │  r_ped  (§4, 3 graded checks)             │
    │  L      (§5, run the code, or word match) │
    └─────────────────────────────────────────┘
         │

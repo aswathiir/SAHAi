@@ -7,6 +7,14 @@ This report states what has been implemented from the literature review, what
 was deliberately changed and on what evidence, what remains unimplemented, and
 how the training runs were actually executed.
 
+> **Written after run v6 and patched for fact since.** Sections 2–4 (what was
+> taken from the review, and what deviates from it) still hold. Sections 5–6
+> describe **v6 specifically** and are not the current configuration — six runs
+> have completed since, and the diagnosis of why none of them learned is
+> [`04-findings.md` §14](04-findings.md). For current state and what runs next,
+> read [`06-roadmap.md`](06-roadmap.md), which is maintained; this report is a
+> point-in-time document.
+
 ---
 
 ## 0. Plain-language summary
@@ -43,7 +51,14 @@ r_SAHAI(a_T | s_T, α) = (r_sol(a_T | s_T, α) − α) + (r_ped(a_T | s_T) − 1
 As of the last completed run the pipeline produces a non-zero gradient, the
 reward discriminates leaking tutors from non-leaking ones, and every dialogue is
 dumped with its reward decomposition for inspection. What it does **not** yet
-show is the tutor getting better: 3 epochs × 8 rollouts is a smoke test.
+show is the tutor getting better.
+
+*Updated:* runs are now 10 epochs × 32 rollouts rather than the 3 × 8 smoke test
+described below, and six have completed. The tutor still does not measurably
+improve, and the reason is now established rather than suspected: only the
+deterministic rule-based reward terms carried any gradient, while `r_sol` — the
+term the project exists to optimise — was a four-sample estimate dominated by
+the simulated student's own sampling noise. See [`04-findings.md` §14](04-findings.md).
 
 ---
 
@@ -55,7 +70,7 @@ show is the tutor getting better: 3 epochs × 8 rollouts is a smoke test.
 |---|---|---|
 | Online RL on simulated tutor↔student dialogue; no human tutoring corpus | `DialogueEngine.run()` — alternating turns, terminates on a phrase or `2 × max_turns` | **Implemented** |
 | Reward at conversation level, not per turn | `SAHAIReward.compute()` scores the completed `Dialogue` | **Implemented** |
-| `r_sol` = post-dialog solve rate over `K` sampled student answers | `SolveReward.compute()` calls `student.attempt_solution()` `K` times | **Implemented** (`K=4`, below the review's `K≥8` — see §4) |
+| `r_sol` = post-dialog solve rate over `K` sampled student answers | `SolveReward.compute()` called `student.attempt_solution()` `K` times; since 2026-09-13 it calls it **once, greedily**, and scores the fraction of tests passed | **Changed** — `K`-sampling made `r_sol` mostly the student's own noise; see §4 and [04-findings.md §14](04-findings.md) |
 | Verifiable outcome reward, not judge-scored correctness | `CodeVerifier` runs candidate code in a `subprocess` against unit tests | **Implemented** |
 | `r_ped` from `M` judges, conversation accepted only if **all** accept | `PedagogyReward` holds 2 rubrics; a `RuleBasedJudge` is used on Kaggle | **Changed — see §3.1** |
 | Hard penalty: `r_ped = 0 ⇒ r = −λ` | `SAHAIReward.compute()`, `hard_penalty=True` | **Implemented** |
@@ -75,7 +90,7 @@ plus the "advanced" variant:
 
 | Mechanism | Our implementation | Status |
 |---|---|---|
-| LLM + explicit skill tracer | `StudentSimulator` (Qwen2.5-0.5B) + `BKTTracer` maintaining `dict[skill → mastery]` | **Implemented** |
+| LLM + explicit skill tracer | `StudentSimulator` (Qwen2.5-1.5B, raised from the 0.5B used in §5–6) + `BKTTracer` maintaining `dict[skill → mastery]` | **Implemented** |
 | Injected misconceptions matching real error patterns | `MISCONCEPTIONS` — per-skill error list (e.g. `binary_search → ["wrong midpoint calculation", "infinite loop on boundaries"]`) injected into the persona prompt | **Implemented** |
 | Ability-conditioned solve `r_sol(a_T \| s_T, α)` | `tracer.get_ability()` → `ability_baseline`, entering the reward as `(r_sol − α)` | **Implemented** |
 | Leakage estimate `L ∈ [0,1]` | `LeakageEstimator` | **Partially — token-match only, see §4** |
@@ -125,7 +140,8 @@ This is a scale-driven deviation, not a claim that BKT predicts better.
 ### 2.5 Curriculum / ZPD
 
 `ProblemBank.zpd_sample()` draws only problems whose mean skill mastery falls in
-`[zpd_low, zpd_high] = [0.3, 0.7]`, so the tutor is never trained on problems the
+`[zpd_low, zpd_high] = [0.3, 0.7]` **at the time of this report** — difficulty
+targeting replaced that band on 2026-09-13 — so the tutor was not trained on problems the
 simulated student has already mastered or cannot approach. This operationalises
 the "curriculum decisions" use the DKT paper describes for a learner model.
 
@@ -169,10 +185,11 @@ when a dialogue fails every check, which is its intended meaning.
 The paper uses PPO. We use group-relative advantages with no critic, which
 halves memory on a 16GB T4 and removes value-function tuning.
 
-**Stated honestly:** `clip_epsilon` exists in settings but is unused. The update
-is currently REINFORCE with a KL penalty to a frozen reference (LoRA adapters
-disabled), not clipped PPO-style GRPO. This should not be described as clipped
-GRPO in any writeup until the ratio term is added.
+**Stated honestly, and since resolved:** `clip_epsilon` existed in settings and
+was unused, so the update was REINFORCE with a KL penalty to a frozen reference
+(LoRA adapters disabled), not clipped PPO-style GRPO — true of every run
+reported in §6. The clipped surrogate was implemented on 2026-09-13, so
+"clipped GRPO" is accurate for the code as it stands and not for those runs.
 
 ### 3.3 Rule-based judge instead of `M` LLM judges
 
@@ -192,10 +209,10 @@ judge-holdout protection from the review is absent.
 
 | Item | Why it matters | Status |
 |---|---|---|
-| ACE via randomized hint ablation (withhold hints in 10–20% of rollouts) | The review's primary defence against rewarding non-causal solves. `ace_leakage()` is written but receives no data. | **Not wired** |
-| `K ≥ 8` student samples for stable `r_sol` | We run `K=4` on Kaggle for time. `r_sol` is quantised to 1/32 across an epoch, so small changes are unmeasurable. | **Below spec** |
+| ACE via randomized hint ablation (withhold hints in 10–20% of rollouts) | The review's primary defence against rewarding non-causal solves. `ace_leakage()` is written but receives no data. | **Not wired** — and now the most relevant unimplemented item in this table, since §14 showed non-causal solves are exactly what `r_sol` was rewarding |
+| `K ≥ 8` student samples for stable `r_sol` | We ran `K=4` on Kaggle for time. | **Superseded** — the student decodes greedily now, so repeated draws are identical and `K` is clamped to 1. Raising `K` means restoring sampling, which is what made `r_sol` unusable. |
 | Multiple judge families, one held out | Judge-gaming protection | **Not implemented** |
-| Leakage excluding problem-statement tokens | Current `L` counts any word overlap, so a clean Socratic question scores non-zero. Only the trend is meaningful. | **Known defect** |
+| Leakage excluding problem-statement tokens | `L` counted any word overlap, so a clean Socratic question scored non-zero. | **Fixed** — problem-statement tokens are subtracted and a rare-token filter ignores ordinary teaching vocabulary. The evaluator was separately found to be scoring leakage by a *different rule* than training. |
 | Retention / transfer tests (24–72h) | Review's measures of true mastery vs short-term | **Not applicable at simulator stage** |
 | Pre-registered sim→real pilot (H1–H4, N=34, mixed-effects logistic) | The whole human-validation arm | **Not begun** |
 
@@ -204,7 +221,8 @@ judge-holdout protection from the review is absent.
 ## 5. How the runs were executed
 
 Training requires a GPU, so all runs are on Kaggle. The local machine has no
-torch; only the torch-free modules are testable locally (**44 tests passing**).
+torch; only the torch-free modules are testable locally (**91 tests passing**,
+plus 152 across the shared library and the five testable services).
 
 ### 5.1 Execution path
 
@@ -241,7 +259,10 @@ documented in `docs/07-operations-kaggle.md`: `kaggle datasets version` silently
 without `--dir-mode zip`; jupytext strips the kernelspec; the accelerator cannot
 be set from the CLI.
 
-### 5.3 Configuration of the completed run
+### 5.3 Configuration of run v6
+
+Not the current configuration — see [`06-roadmap.md`](06-roadmap.md). Kept as
+the record of what produced the results in §6.
 
 ```
 tutor    Qwen2.5-1.5B-Instruct  + LoRA (r=8, α=16, q/k/v/o_proj)

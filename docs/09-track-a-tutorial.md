@@ -170,12 +170,15 @@ $$L^{CLIP}(\theta) = \mathbb{E}\Big[\min\big(r_t(\theta) A_t,\ \text{clip}(r_t(\
 where $r_t(\theta) = \pi_\theta(a_t|s_t) / \pi_{\theta_{old}}(a_t|s_t)$ is the
 **importance ratio** between the current and the pre-update policy.
 
-**Honest note about our code:** `sahai/settings.py` defines `clip_epsilon` but
-`sahai/training/grpo.py` never uses it — there is no importance ratio computed
-anywhere in `_policy_update`. What we run is REINFORCE-with-baseline (the
-formula from §2.3), not clipped PPO. This is documented as an open item in
-[06-roadmap.md](06-roadmap.md) Track A. Don't call the current implementation
-"clipped GRPO" in a report until that ratio term exists.
+**Note about our code:** this is what `_policy_update` now does. For most of
+the project it did not — `clip_epsilon` was defined in `sahai/settings.py` and
+used nowhere, and what ran was REINFORCE-with-baseline (the formula from §2.3).
+The ratio and the clip were added on 2026-09-13, together with the cache of
+pre-update log-probs the ratio is measured against, so "clipped GRPO" is now an
+accurate description of the implementation. Results from runs before that date
+were produced by the unclipped version; see
+[08-team-split.md](08-team-split.md) Track A and
+[04-findings.md §14](04-findings.md).
 
 ### 3.2 GRPO's idea: replace the critic with group statistics
 
@@ -475,13 +478,30 @@ weakening the "beat the group" signal.
 
 $$r_{sol} = \frac{1}{K} \sum_{k=1}^{K} \mathbb{1}\!\left[\hat{s}^{(k)} = s\right]$$
 
-This is a Monte Carlo estimate of "probability the student solves it,"
-obtained by literally sampling $K$ independent attempts from the student
-policy (`attempt_solution`, called $K$ times) and averaging the pass/fail
-indicator. $K=4$ on Kaggle (paper recommends $K\geq 8$; kept low deliberately,
-since $r_{sol}\approx 0$ currently and more samples would just measure that
-same near-zero value more precisely, at real compute cost — see
-[04-findings.md](04-findings.md)).
+This was the implementation until 2026-09-13, with $K=4$ on Kaggle against the
+paper's $K\geq 8$. It is no longer what runs, and the reason is worth
+understanding because it is the central result of the project so far.
+
+A $K$-sample Monte Carlo estimate carries sampling sd $\sqrt{p(1-p)/K}$. At
+$p=0.15$ and $K=4$ that is $0.18$ — **larger than any plausible difference the
+tutor could make to $p$**. GRPO's advantage is a z-score of the spread *within*
+a group of rollouts on the same problem, so that sampling noise went straight
+into the gradient: measured within-group variance was $0.0098$ for $r_{sol}$
+against $0.0482$ for the deterministic pedagogy term. The term the project
+exists to optimise was contributing a fifth of the usable signal, and the policy
+did the rational thing and optimised the rule-based terms instead.
+
+What runs now is a single **greedy** attempt scored by *fraction of test cases
+passed*:
+
+$$r_{sol} = \frac{\#\{\text{tests passed}\}}{\#\{\text{tests}\}}, \qquad \text{decoded with } \texttt{do\_sample=False}$$
+
+Deterministic given the dialogue, so all of its within-group spread is
+attributable to the tutor; continuous, so a near-miss is distinguishable from
+nonsense. The all-or-nothing rate is still reported alongside it as `solved`,
+because that is the series every earlier run is comparable on. Raising $K$ is
+therefore moot rather than outstanding — it would mean restoring the sampling
+that caused the problem. See [04-findings.md §14](04-findings.md).
 
 **Why subtract $\alpha$ (the traced ability):** without this term, a tutor
 gets full credit for a student who could already solve the problem
@@ -614,14 +634,30 @@ $\Pr[L]$ per skill also drives **ZPD sampling** — Vygotsky's "Zone of Proximal
 Development," operationalised as a simple mastery-band filter:
 
 ```python
-def in_zpd(self, difficulty, skills):
-    avg = mean(self.get_mastery(s) for s in skills)
-    return zpd_low <= avg <= zpd_high   # 0.3 to 0.7
+def in_zpd(self, difficulty, skills, max_difficulty=5):
+    if skills and mean(self.get_mastery(s) for s in skills) > zpd_high:
+        return False                      # already demonstrated
+    target = 1.0 + self.get_ability() * (max_difficulty - 1)
+    return abs(difficulty - target) <= 1.0
 ```
 
-Only problems whose average mastery falls in $[0.3, 0.7]$ get sampled for
-training — not already-mastered (mastery $> 0.7$, no learning signal left),
-not hopeless (mastery $< 0.3$, the student can't engage with it yet).
+**This is not what the code did until 2026-09-13**, and the old version is
+instructive. It was a pure mastery band — `zpd_low <= avg <= zpd_high`, with
+the `difficulty` argument accepted and thrown away. Two facts then interact:
+`p_init` is 0.3 and `zpd_low` is 0.3, so an *untouched* skill sat exactly on the
+boundary and passed, which made the band mean "skills never attempted"; and BKT
+has no forgetting transition, so at this student's competence a failed skill
+converges to $\approx 0.109$ within three observations and can never return. The
+band held the whole bank at epoch 0 and was empty from epoch 3 onward.
+
+Problems are drawn from within one difficulty level of the learner's target —
+not already-mastered (mastery $> 0.7$, no learning signal left), and not far
+beyond reach (difficulty well above $1 + \alpha(\text{max}-1)$).
+
+Note there is deliberately no mastery *floor* any more. A skill at $0.11$ means
+the learner is failing it, which is exactly when they should be handed something
+easier — the job difficulty targeting now does — rather than excluded from that
+skill's problems permanently.
 
 ---
 
@@ -682,7 +718,8 @@ attached to it.
 
 **Given:** `problem = "first repeated character"`, `group_size = 8`. This
 rollout's raw scores: $r_{sol}=0.00$, $\alpha = 0.30$ (traced ability at the
-time), $r_{ped} = 0.40$ (2 of 5 checks passed), $L = 0.14$.
+time), $r_{ped} = 0.40$ (scored under the 5-check judge of the time; there are
+3 checks now — see §4), $L = 0.14$.
 
 **Step 1 — combine into $r_{SAHAI}$** (Part 7, $\lambda=1.0$, $\gamma=0.5$):
 
