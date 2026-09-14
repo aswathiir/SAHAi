@@ -13,8 +13,11 @@ import sys
 import httpx
 
 GATEWAY = "http://localhost:8080"
-LEARNER = "smoke-learner"
-HEADERS = {"x-learner-id": LEARNER}
+# Registered fresh on every run rather than reusing a fixed id. The gateway
+# mints the learner id now — a client cannot name one — and a smoke run that
+# invented its own identity would be testing the hole this replaced.
+LEARNER = None
+HEADERS: dict[str, str] = {}
 
 SOLUTION = """def first_repeated_char(s):
     seen = set()
@@ -46,12 +49,34 @@ def main() -> int:
             print("\nstack is not healthy; aborting")
             return 1
 
-        # 2. auth is enforced
+        # 2. auth is enforced — no credential, and a claimed learner id
+        global LEARNER, HEADERS
         if c.post("/v1/sessions", json={"problem_id": "p"}).status_code != 401:
-            print("  [FAIL] missing x-learner-id should be rejected")
+            print("  [FAIL] a request with no bearer token should be rejected")
             ok = False
         else:
             print("  [ok ] unauthenticated request rejected")
+
+        # The exact request that used to work.
+        claimed = c.post(
+            "/v1/sessions",
+            headers={"x-learner-id": "someone-else"},
+            json={"problem_id": "p"},
+        )
+        if claimed.status_code != 401:
+            print("  [FAIL] a claimed x-learner-id is still accepted")
+            ok = False
+        else:
+            print("  [ok ] claimed learner id rejected")
+
+        r = c.post("/v1/auth/register", json={"display_name": "smoke test"})
+        if r.status_code != 201:
+            print(f"  [FAIL] register -> {r.status_code} {r.text[:160]}")
+            return 1
+        body = r.json()
+        LEARNER = body["learner_id"]
+        HEADERS = {"Authorization": f"Bearer {body['token']}"}
+        print(f"  [ok ] registered {LEARNER}")
 
         # 3. start a session
         r = c.post("/v1/sessions", headers=HEADERS, json={

@@ -47,7 +47,14 @@ services:
     environment:
       <<: *base-env
       SAHAI_RATE_LIMIT_PER_MIN: "60"
+      # The gateway terminates identity, so it owns the credential table.
+      SAHAI_GATEWAY_DSN: postgresql+asyncpg://sahai:sahai@postgres:5432/sahai
+      SAHAI_REGISTRATIONS_PER_HOUR: "10"
     depends_on:
+      # Directly, not transitively through session: startup creates the
+      # identity table, and a gateway that cannot authenticate has nothing
+      # useful to serve.
+      postgres: {condition: service_healthy}
       session: {condition: service_healthy}
 
   session:

@@ -136,11 +136,11 @@ One student message, traced through the services:
 ```
   student's browser
        │  POST /v1/sessions/{id}/turns   {"content": "I'm stuck"}
-       │  header: x-learner-id
+       │  header: Authorization: Bearer <token>
        ▼
   ┌─ gateway ─────────┐  services/gateway/app/main.py
-  │ check header      │  rejects with 401 if x-learner-id missing
-  │ rate limit        │  429 if >60/min
+  │ verify the token  │  401 unless it hashes to a known learner
+  │ rate limit        │  429 if >60/min, keyed on the *verified* learner
   └────────┬──────────┘
            │  forwards to session
            ▼
@@ -178,6 +178,55 @@ Later, when the student submits code:
 `tutor` gets a list of messages and returns text — it has no memory.
 `executor` gets code and returns pass/fail — it knows nothing about users.
 That's on purpose: small services with one job each are far easier to debug.
+
+---
+
+## 4b. Who you are
+
+Every page used to carry a free-text `learner` box whose value went out as
+`x-learner-id`, and the gateway returned it unchanged. Typing someone else's id
+read their sessions, mastery and submissions. The ownership checks in the
+session service were correct; the identity underneath them was not.
+
+```
+  POST /v1/auth/register {"display_name": "Ada"}
+        │
+        ▼   201  { learner_id: "lnr_8a04…", token: "…" }   ← shown once
+  ┌─ gateway ──────────────────────────────────────────┐
+  │  stores sha256(token) only — no endpoint returns   │
+  │  the token again, deliberately                     │
+  └────────────────────┬───────────────────────────────┘
+                       │  Authorization: Bearer <token>
+                       ▼  resolved to a learner id, then forwarded inward
+                          as x-learner-id on the internal network
+```
+
+**Bearer tokens, not passwords.** The project stores no passwords and never
+sees one. A fast hash is right *here* specifically: bcrypt and argon2 exist to
+make offline brute force expensive against low-entropy human secrets, and a
+32-byte `secrets.token_urlsafe` has no brute-force surface to protect.
+
+**The websocket authenticates on its first frame**, not in the query string.
+`learner_id` used to be a query parameter defaulting to `"me"`, so
+`ws://host/v1/voice?session_id=…&learner_id=<someone>` was enough to speak into
+another learner's session. Browsers cannot set headers on a WebSocket
+handshake, and a token in a URL lands in access logs and browser history — so
+the client sends `{"token": …}` and waits for `{"stage": "authenticated"}`.
+
+**What it does not promise.** It authenticates a bearer, not a person: anyone
+holding the token is the learner, with no second factor, no recovery, and no
+revocation beyond deleting the row. Session and tracer still trust the
+`x-learner-id` the gateway fills in — they publish no ports, so that is a
+network assumption, not a cryptographic one, and it is why the compose file's
+network split matters.
+
+Learners that predate this (`me`, `smoke-learner`, an imported NeetCode
+profile) have no credential and are otherwise unreachable. Attach one without
+disturbing their history:
+
+```bash
+docker compose exec gateway python /srv/scripts/mint_token.py --list
+```
 
 ---
 
@@ -382,7 +431,8 @@ docker compose ps                    # what's actually running
 |---|---|---|
 | `make up` fails to build | Dockerfile or dependency problem | the build output; `services/<name>/Dockerfile` |
 | `/health` says a service is `unreachable` | container crashed or never started | `docker compose logs <name>` — the traceback is at the bottom |
-| `401 x-learner-id header required` | you forgot the header | add `-H "x-learner-id: me"` |
+| `401 Authorization: Bearer <token> required` | no credential sent | register once: `curl -XPOST localhost:8080/v1/auth/register -H 'content-type: application/json' -d '{"display_name":"me"}'`, then send `-H "Authorization: Bearer <token>"` |
+| `401 invalid or expired token` | wrong token, or the row was deleted | mint another: `docker compose exec gateway python /srv/scripts/mint_token.py --learner <id> --name <name>` |
 | `429 rate limit exceeded` | >60 requests/min | wait, or raise `SAHAI_RATE_LIMIT_PER_MIN` |
 | `404 session not found` | wrong session id, or DB was wiped | `docker compose down -v` wipes Postgres |
 | `409 session is solved` | you already submitted | start a new session |

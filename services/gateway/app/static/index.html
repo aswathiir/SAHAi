@@ -195,8 +195,7 @@
     <a href="/progress.html" style="color:var(--cream-dim);text-decoration:none;padding-bottom:3px">Record</a>
     <a href="/progress.html?assess=1" style="color:var(--cream-dim);text-decoration:none;padding-bottom:3px">Assessment</a>
     <a href="/diagnostic.html" style="color:var(--cream-dim);text-decoration:none;padding-bottom:3px">Diagnostic</a>
-    <span>learner</span>
-    <input id="learner-id" placeholder="me" spellcheck="false">
+    <span id="whoami"></span>
   </div>
 </header>
 
@@ -255,6 +254,8 @@
   </div>
 </div>
 
+<script src="/auth.js"></script>
+
 <script>
 const state = {
   problems: [], selected: null, sessionId: null, status: null, sending: false,
@@ -272,42 +273,13 @@ function stillCurrent(epoch) {
   return epoch === state.epoch;
 }
 
-function learnerId() {
-  let v = document.getElementById('learner-id').value.trim();
-  if (!v) v = 'me';
-  return v;
-}
-document.getElementById('learner-id').value = localStorage.getItem('sahai_learner') || 'me';
-document.getElementById('learner-id').addEventListener('keydown', e => {
-  // `change` only fires on blur; pressing Enter looked like nothing happened.
-  if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
-});
-document.getElementById('learner-id').addEventListener('change', e => {
-  localStorage.setItem('sahai_learner', e.target.value.trim() || 'me');
-  // Changing the learner is a context switch, not a label change. It used to
-  // only write localStorage, so an open conversation kept running: further
-  // turns went out under the new learner's header and were appended to the
-  // previous learner's session, personalised against the wrong mastery, while
-  // the panel still showed the old learner's skills. Drop the conversation and
-  // reload everything that is per-learner.
-  state.sessionId = null;
-  state.selected = null;
-  state.status = null;
-  state.epoch += 1;          // invalidate anything already in flight
-  closeVoiceSocket();
-
-  document.querySelectorAll('.problem-item').forEach(el => el.classList.remove('active'));
-  document.getElementById('turns').innerHTML = '';
-  document.getElementById('chat-card').style.display = 'none';
-  document.getElementById('submit-card').style.display = 'none';
-  document.getElementById('problem-detail-card').style.display = 'none';
-  document.getElementById('placeholder').style.display = '';
-  document.getElementById('start-btn').disabled = false;
-  refreshMastery();
-});
+// Switching learners was a text box; it is a sign-out now. The old handler had
+// to tear down the conversation, the mastery panel and any in-flight request by
+// hand, because leaving them up appended one learner's turns to another's
+// transcript. `signOut()` reloads instead, which cannot miss a piece.
 
 async function api(path, opts = {}) {
-  const headers = Object.assign({ 'x-learner-id': learnerId() }, opts.headers || {});
+  const headers = Object.assign({}, authHeaders(), opts.headers || {});
   if (opts.body) headers['Content-Type'] = 'application/json';
   const res = await fetch(path, Object.assign({}, opts, { headers }));
   if (!res.ok) {
@@ -588,11 +560,17 @@ function openVoiceSocket() {
   closeVoiceSocket();
   const lang = document.getElementById('voice-lang').value;
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  // No identity in the URL. `learner_id` used to be a query parameter and the
+  // gateway trusted it, so any value opened someone else's session; and a
+  // token in a query string lands in access logs and browser history. The
+  // token goes in the first frame instead — browsers cannot set headers on a
+  // WebSocket handshake, which is why this is not just another header.
   const url = `${proto}://${location.host}/v1/ws/voice/${state.sessionId}` +
-    `?learner_id=${encodeURIComponent(learnerId())}&lang=${lang}` +
+    `?lang=${lang}` +
     `&problem_id=${encodeURIComponent(state.selected?.id || '')}`;
   const ws = new WebSocket(url);
   state.voiceEpoch = state.epoch;
+  ws.onopen = () => ws.send(JSON.stringify({ token: authToken() }));
   ws.onmessage = onVoiceMessage;
   ws.onerror = () => voiceStatus('Voice connection error.');
   ws.onclose = () => { if (state.voiceSocket === ws) state.voiceSocket = null; };
@@ -623,6 +601,7 @@ function onVoiceMessage(event) {
 
   // Stage events arrive as the pipeline progresses, so a learner who has just
   // spoken sees they were heard immediately instead of waiting out generation.
+  if (msg.stage === 'authenticated') { voiceStatus('Voice ready.'); return; }
   if (msg.stage === 'transcribed') {
     voiceStatus('Heard you.');
     const studentDiv = document.createElement('div');
@@ -758,7 +737,11 @@ async function resumeSession(sessionId) {
   }
 }
 
+// Nothing per-learner is fetched until identity is settled. Letting the page
+// load first and discovering the 401 per panel produced three simultaneous
+// error banners and a half-rendered record.
 (async () => {
+  if (!await requireAuth(document.getElementById('whoami'))) return;
   await loadProblems();
   refreshMastery();
   const resume = new URLSearchParams(location.search).get('session');

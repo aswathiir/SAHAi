@@ -91,9 +91,7 @@
     <a href="/progress.html">Record</a>
     <a href="/progress.html?assess=1">Assessment</a>
     <a href="/diagnostic.html" class="here">Diagnostic</a>
-    <label for="learner-id" style="color:var(--cream-dim);cursor:pointer">learner</label>
-    <input id="learner-id" placeholder="me" spellcheck="false"
-           style="background:var(--ink-2);border:1px solid var(--rule);color:var(--cream);border-radius:5px;padding:5px 9px;font:400 13px var(--mono);width:104px">
+    <span id="whoami"></span>
   </nav>
 </header>
 
@@ -111,7 +109,7 @@
       Every answer is graded by running it against the real tests, and counts
       as evidence — so it can move your mastery in either direction.
     </p>
-    <button id="begin" class="cta">Begin diagnostic</button>
+    <button id="begin" class="cta" disabled>Begin diagnostic</button>
   </section>
 
   <section id="run" class="hidden">
@@ -143,29 +141,24 @@
   </section>
 </main>
 
+<script src="/auth.js"></script>
+
 <script>
 const $ = id => document.getElementById(id);
 const state = {
   problems: [], i: 0, answers: [], started: 0, tick: null,
-  // Pinned when the run begins. Reading the box at submit time meant switching
-  // learner mid-diagnostic split one sitting across two permanent records —
-  // and unlike a stale render, graded answers are durable evidence that then
-  // moves the wrong learner's mastery.
-  runAs: null,
 };
 
-$('learner-id').value = localStorage.getItem('sahai_learner') || 'me';
-$('learner-id').addEventListener('change', e => {
-  localStorage.setItem('sahai_learner', e.target.value.trim() || 'me');
-});
-$('learner-id').addEventListener('keydown', e => {
-  if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
-});
-const learnerId = () => state.runAs || ($('learner-id').value.trim()) || 'me';
+// `state.runAs` used to pin the learner for the duration of a run, and the
+// learner box was disabled while one was in progress: switching mid-diagnostic
+// otherwise split one sitting across two permanent records, and graded answers
+// are durable evidence that then moves the wrong learner's mastery. Neither is
+// needed now — identity comes from the token, and signing out reloads the page,
+// which ends the run rather than quietly redirecting it.
 
 async function api(path, opts = {}) {
   const headers = Object.assign(
-    { 'x-learner-id': learnerId() },
+    {}, authHeaders(),
     opts.body ? { 'content-type': 'application/json' } : {},
   );
   const res = await fetch(path, Object.assign({}, opts, { headers }));
@@ -254,8 +247,6 @@ async function grade(skipped) {
 function finish() {
   $('run').classList.add('hidden');
   $('done').classList.remove('hidden');
-  $('learner-id').disabled = false;
-  $('learner-id').title = 'Type a learner id and press Enter';
   const passed = state.answers.filter(a => a.passed).length;
   const total = state.answers.length;
   const elapsed = fmt(Date.now() - state.started);
@@ -282,11 +273,6 @@ $('begin').addEventListener('click', async () => {
     const d = await api('/v1/diagnostic');
     if (!d.problems.length) { showErr('No problems available for a diagnostic.'); return; }
     state.problems = d.problems;
-    state.runAs = ($('learner-id').value.trim()) || 'me';
-    // Locked rather than merely ignored, so the box cannot say one thing while
-    // the answers are recorded against another.
-    $('learner-id').disabled = true;
-    $('learner-id').title = 'Locked for the duration of this diagnostic';
     $('intro').classList.add('hidden');
     $('run').classList.remove('hidden');
     startClock();
@@ -298,6 +284,14 @@ $('begin').addEventListener('click', async () => {
 });
 $('submit').addEventListener('click', () => grade(false));
 $('skip').addEventListener('click', () => grade(true));
+
+// Nothing per-learner is fetched until identity is settled. Letting the page
+// load first and discovering the 401 per panel produced three simultaneous
+// error banners and a half-rendered record.
+(async () => {
+  if (!await requireAuth($('whoami'))) return;
+  $('begin').disabled = false;
+})();
 </script>
 </body>
 </html>
