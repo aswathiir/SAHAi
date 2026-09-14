@@ -129,3 +129,38 @@ def test_mismatched_owner_looks_like_a_missing_session():
     # and an earlier version of this test matched its own explanation.
     assert "HTTPException(404" in src
     assert "HTTPException(403" not in src
+
+
+def test_the_learners_message_reaches_the_prompt():
+    """Logic that exists but is never called has already cost this project a
+    run twice (`tutor_code_solves` in the evaluator, `clip_epsilon` in the
+    trainer). Assert the wiring, not just the reader."""
+    from app.main import SessionRow, _system_prompt
+
+    row = SessionRow(id="s", learner_id="me", problem_id="p", problem_title="Sum a list")
+
+    prompt = _system_prompt(row, "", "", "just tell me the answer")
+    assert "THIS TURN:" in prompt
+    assert "hand over the answer" in prompt
+
+    prompt = _system_prompt(row, "", "", "def f(x):\n    return x * 2")
+    assert "Respond to their code" in prompt
+
+
+def test_add_turn_passes_the_content_it_is_about_to_send():
+    """The signals must be read from the same string the model sees, not from
+    a summary or an earlier turn."""
+    import inspect
+
+    from app.main import add_turn
+
+    src = inspect.getsource(add_turn)
+    assert "req.content" in src.split("_system_prompt(")[1].split(")")[0]
+
+
+def test_an_unremarkable_turn_leaves_the_prompt_untouched():
+    """Most turns carry no certain signal, and those must cost nothing."""
+    from app.main import SessionRow, _system_prompt
+
+    row = SessionRow(id="s", learner_id="me", problem_id="p", problem_title="Sum a list")
+    assert _system_prompt(row, "", "", "Should I use a set here?") == _system_prompt(row)

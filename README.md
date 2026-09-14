@@ -244,6 +244,32 @@ The tag table lives in the importer, **not** in `sahai.core.dataset.SKILL_KEYWOR
 — that table also tags the MBPP training bank, and re-tagging training data
 mid-experiment would change what the sampler offers for unrelated reasons.
 
+**Reading the turn, not just the learner** (`sahai_core.turn_signals`). Mastery
+says who the learner is; it says nothing about what they just wrote. Before this
+the tutor treated `Mujhe samajh nahi aa raha` and "here's my code, the third
+test fails" as the same situation, and the training transcripts show the three
+replies that follow:
+
+| what the learner did | what the tutor did | what it does now |
+|---|---|---|
+| said they were lost | replied with a textbook definition | gives one concrete thing to try, then asks what they notice |
+| asked for the code | gave a complete working function | says once that it won't, then asks what they have tried |
+| pasted an attempt | rewrote it wholesale | names the one input or line that breaks and leaves the fix to them |
+
+Three rules, rule-based, no extra model call — the tutor already owns 200s of a
+240s budget and there is nothing left to spend. A fourth, "they have proposed an
+approach, test it rather than replacing it", is the most useful move a tutor
+makes and is **deliberately absent**: nothing cheap separates proposing from
+guessing, and mistaking a lost learner for a confident one makes the turn worse
+than saying nothing. Detection is high-precision and silent when unsure, so most
+turns add nothing to the prompt at all.
+
+It runs inside the session service rather than the gateway, so the voice path
+gets it without the websocket handler repeating anything, and the signals are
+read from exactly the string that reaches the model. The block is appended
+*after* the rules and the learner profile, nearest the generation point, because
+it is the most perishable instruction of the three.
+
 **Progress** (`GET /v1/me/progress`). Streak, activity grid, per-skill mastery
 and per-track completion, all projected from the append-only observation log
 rather than new tables. The log already carries timestamp, skill, correctness

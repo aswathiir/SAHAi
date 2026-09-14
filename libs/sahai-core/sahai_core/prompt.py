@@ -29,8 +29,10 @@ RULES = (
 )
 
 
-def system_prompt(problem: str, learner_context: str = "") -> str:
-    """Rules, then the problem, then who is being taught.
+def system_prompt(
+    problem: str, learner_context: str = "", turn_guidance: str = ""
+) -> str:
+    """Rules, then the problem, then who is being taught, then what they said.
 
     `problem` must be the full statement. The session service used to pass
     `problem_title`, which the exporter truncates to 80 characters — so for 43
@@ -39,12 +41,21 @@ def system_prompt(problem: str, learner_context: str = "") -> str:
     not know the shape was a semicircle. A tutor that cannot see the question
     cannot ask a useful question about it.
 
-    `learner_context` is appended last so it can never displace the
-    never-give-the-answer rules; those are what the whole design rests on, and
-    a context block ahead of them would push them away from the generation
-    point.
+    `learner_context` and `turn_guidance` are appended after the rules so they
+    can never displace them; the never-give-the-answer rules are what the whole
+    design rests on, and a context block ahead of them would push them away
+    from the generation point.
+
+    `turn_guidance` comes last, nearest the generation point, because it is the
+    most perishable thing here: the rules hold for every turn and the profile
+    holds for the session, but "they just pasted code" is true of exactly this
+    reply and stops being true at the next one. It is also the narrower
+    instruction, and a narrow instruction placed before a broad one tends to be
+    read as an exception to it rather than as a refinement of it.
     """
     prompt = f"{RULES}\n\nProblem: {problem}"
     if learner_context:
         prompt += f"\n\n{learner_context}"
+    if turn_guidance:
+        prompt += f"\n\n{turn_guidance}"
     return prompt
