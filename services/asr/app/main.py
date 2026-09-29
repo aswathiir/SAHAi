@@ -25,6 +25,7 @@ from .backends import (
     TTSBackend,
     build_asr_backend,
     build_tts_backend,
+    detect_indic_lang,
     has_indic_script,
 )
 
@@ -61,7 +62,10 @@ class TranscriptOut(BaseModel):
 
 class TranslateRequest(BaseModel):
     text: str = Field(max_length=MAX_TEXT_CHARS)
-    source_lang: str = Field(default="hi", max_length=8)
+    # "auto" reads the script off the text. It is the default because the
+    # previous default was "hi", which silently mislabelled every non-Hindi
+    # turn. A caller that genuinely knows better can still name a language.
+    source_lang: str = Field(default="auto", max_length=8)
 
 
 class TranslateOut(BaseModel):
@@ -149,15 +153,26 @@ def translate(req: TranslateRequest) -> TranslateOut:
     if not has_indic_script(req.text):
         return TranslateOut(text=req.text, translated=False,
                             source_lang=req.source_lang, backend="skipped")
+
+    # Resolve "auto" against the characters themselves. Getting this wrong is
+    # not a graceful degradation: IndicTrans2 asked for Hindi on Tamil input
+    # returns a transliteration, which reads as a real answer and is worse
+    # than no translation at all.
+    lang = req.source_lang
+    if lang in ("auto", "", "unknown", "mixed"):
+        lang = detect_indic_lang(req.text) or "hi"
+
     backend = _state["translate"]
     try:
-        out = backend.translate(req.text, req.source_lang)
+        out = backend.translate(req.text, lang)
     except Exception as exc:  # noqa: BLE001
         # Fail open. A turn the learner can still send in their own words beats
         # a 500, and the tutor handling it poorly is a smaller loss than the
         # turn not happening.
         logger.warning("translate failed: %s", type(exc).__name__)
         return TranslateOut(text=req.text, translated=False,
-                            source_lang=req.source_lang, backend="error")
+                            source_lang=lang, backend="error")
+    # Reports the language actually used, not the one asked for, so a caller
+    # sending "auto" can see what it resolved to.
     return TranslateOut(text=out or req.text, translated=bool(out),
-                        source_lang=req.source_lang, backend=backend.describe)
+                        source_lang=lang, backend=backend.describe)

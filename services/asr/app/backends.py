@@ -290,10 +290,58 @@ _FLORES = {
     "pa": "pan_Guru", "gu": "guj_Gujr", "kn": "kan_Knda", "ml": "mal_Mlym",
 }
 
+# Same eight blocks as _INDIC_SCRIPT, kept separable so we can say *which* one.
+# Unicode assigns each language its own range, so this is a fact about the
+# characters rather than a guess.
+_SCRIPT_BLOCKS: tuple[tuple[str, int, int], ...] = (
+    ("hi", 0x0900, 0x097F),   # Devanagari
+    ("bn", 0x0980, 0x09FF),   # Bengali
+    ("pa", 0x0A00, 0x0A7F),   # Gurmukhi
+    ("gu", 0x0A80, 0x0AFF),   # Gujarati
+    ("ta", 0x0B80, 0x0BFF),   # Tamil
+    ("te", 0x0C00, 0x0C7F),   # Telugu
+    ("kn", 0x0C80, 0x0CFF),   # Kannada
+    ("ml", 0x0D00, 0x0D7F),   # Malayalam
+)
+
 
 def has_indic_script(text: str) -> bool:
     """True when translating is worth doing at all."""
     return bool(_INDIC_SCRIPT.search(text or ""))
+
+
+def detect_indic_lang(text: str) -> str | None:
+    """Which Indic language this is written in, or None if it is not.
+
+    Returns the script with the most characters, so a Tamil sentence quoting
+    one Devanagari word is still Tamil. Ties cannot really happen in practice
+    and are broken by _SCRIPT_BLOCKS order.
+
+    This exists because the caller used to assert the language instead of
+    reading it. The session hardcoded `source_lang="hi"`, so a Tamil turn was
+    handed to IndicTrans2 tagged as Hindi and came back transliterated rather
+    than translated -- "Enakku puriyavillai" instead of "I don't understand",
+    which is worse than not translating at all, because it looks like output.
+
+    Detecting beats plumbing the interface's language selector through to here.
+    A selector is a claim about what the learner intends to type and can be
+    stale the moment they switch language mid-session, which is exactly how the
+    Tamil case was found. The characters cannot be stale.
+    """
+    if not text:
+        return None
+    counts: dict[str, int] = {}
+    for ch in text:
+        code = ord(ch)
+        for lang, lo, hi in _SCRIPT_BLOCKS:
+            if lo <= code <= hi:
+                counts[lang] = counts.get(lang, 0) + 1
+                break
+    if not counts:
+        return None
+    # Order of _SCRIPT_BLOCKS breaks ties, since max() keeps the first maximum
+    # and dicts preserve insertion order.
+    return max(counts, key=lambda lang: counts[lang])
 
 
 class IndicTransTranslator:
@@ -344,6 +392,23 @@ class IndicTransTranslator:
 
     def translate(self, text: str, source_lang: str = "hi") -> str:
         self._ensure()
+
+        # Without script normalisation the model transliterates rather than
+        # translates for at least Tamil, and a transliteration reads like a
+        # real answer, so it passes every check a caller could make. Returning
+        # nothing instead lets the endpoint fail open and send the learner's
+        # own words through untouched, which is honest about having done
+        # nothing. Devanagari is exempt because it is the one script measured
+        # to survive the missing normaliser.
+        if self._proc is None and source_lang != "hi":
+            logger.warning(
+                "refusing to translate %s without IndicTransToolkit: the model "
+                "transliterates instead, which is worse than passing the turn "
+                "through unchanged",
+                source_lang,
+            )
+            return ""
+
         src = _FLORES.get(source_lang, "hin_Deva")
         batch = [text]
         if self._proc is not None:

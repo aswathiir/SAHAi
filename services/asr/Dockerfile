@@ -28,12 +28,29 @@ RUN pip install --no-cache-dir torch torchaudio --index-url https://download.pyt
  && pip install --no-cache-dir transformers onnxruntime==1.20.1 onnx==1.20.1 soundfile \
  && pip install --no-cache-dir "parler-tts @ git+https://github.com/huggingface/parler-tts.git"
 
-# IndicTrans2 (Indic -> English, in front of the tutor). sentencepiece is
-# the tokenizer the checkpoint ships with; IndicTransToolkit does the script
-# normalisation the model was trained against and the backend degrades
-# gracefully without it, so a failure here must not fail the image.
-RUN pip install --no-cache-dir sentencepiece sacremoses \
- && pip install --no-cache-dir IndicTransToolkit || true
+# IndicTrans2 (Indic -> English, in front of the tutor). sentencepiece is the
+# tokenizer the checkpoint ships with.
+#
+# IndicTransToolkit is NOT optional, whatever the previous comment here said.
+# It does the script normalisation IndicTrans2 was trained against, and without
+# it the model transliterates instead of translating: Tamil "எனக்கு
+# புரியவில்லை" came back as "Enkku Puriyavilai" rather than "I don't
+# understand". That is worse than no translation, because it looks like an
+# answer. The degradation is not graceful, so it is not treated as optional.
+#
+# It ships a Cython extension and python:3.11-slim has no compiler, so the
+# build failed with "No such file or directory: 'gcc'", and then, with gcc
+# alone, "fatal error: stdlib.h" for want of libc headers. `|| true` swallowed
+# both, which is why the image built clean for weeks with no normaliser in it.
+# build-essential supplies gcc and the headers, and is purged afterwards so it
+# does not ride along in the runtime image.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential \
+ && pip install --no-cache-dir sentencepiece sacremoses \
+ && pip install --no-cache-dir IndicTransToolkit \
+ && python -c "from IndicTransToolkit import IndicProcessor" \
+ && apt-get purge -y --auto-remove build-essential \
+ && rm -rf /var/lib/apt/lists/*
 
 COPY services/asr/app /srv/services/asr/app
 WORKDIR /srv/services/asr

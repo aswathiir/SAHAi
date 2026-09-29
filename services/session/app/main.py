@@ -480,12 +480,20 @@ async def _to_english(text: str) -> str:
         return text
     try:
         async with httpx.AsyncClient(timeout=TRANSLATE_TIMEOUT_S) as client:
-            r = await client.post(f"{ASR_URL}/translate",
-                                  json={"text": text, "source_lang": "hi"})
+            # No source_lang: the ASR service reads the script off the text.
+            # This used to say "hi", which meant a Tamil turn was translated as
+            # though it were Hindi and came back transliterated. The session
+            # has no reliable way to know the language -- the interface's
+            # selector is a claim about intent and goes stale the moment a
+            # learner switches language mid-session -- so it does not guess.
+            r = await client.post(f"{ASR_URL}/translate", json={"text": text})
             r.raise_for_status()
             data = r.json()
             if data.get("translated"):
-                logger.info("translated an Indic-script turn for the tutor")
+                logger.info(
+                    "translated a turn for the tutor (detected %s)",
+                    data.get("source_lang", "?"),
+                )
                 return data.get("text") or text
     except Exception as exc:  # noqa: BLE001 - degrade, never fail the turn
         logger.warning("translate unavailable: %s", type(exc).__name__)
