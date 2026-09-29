@@ -46,20 +46,40 @@ class TutorPolicy:
         self._terminators = terminator_ids(tokenizer, model)
         self.last_generation_complete = True
 
-    def _build_messages(self, dialogue: Dialogue, problem: Problem) -> list[dict[str, str]]:
+    def _build_messages(
+        self, dialogue: Dialogue, problem: Problem, learner_context: str = ""
+    ) -> list[dict[str, str]]:
+        """Rules, problem, then who is being taught.
+
+        `learner_context` is new to training. It was previously assembled only
+        at serving time, which meant the policy was optimised on prompts that
+        never contained it and then asked, at inference, to act on a block it
+        had never seen. Mastery reached training only as `alpha` in the reward
+        and as ZPD problem selection — both of which change what the tutor is
+        *scored on* or *shown*, never what it can *read*. A policy cannot learn
+        to condition on a signal absent from its input.
+
+        Appended after the rules, exactly as `sahai_core.prompt.system_prompt`
+        does at serving, so the two prompts agree and what is learned here
+        transfers there.
+        """
         system = (
             f"{TUTOR_SYSTEM_PROMPT}\n\n"
             f"Problem: {problem.title}\n{problem.description}\n"
             f"(You know the solution but must NOT reveal it.)"
         )
+        if learner_context:
+            system += f"\n\n{learner_context}"
         messages = [{"role": "system", "content": system}]
         for turn in dialogue.turns:
             role = "assistant" if turn.role == "tutor" else "user"
             messages.append({"role": role, "content": turn.content})
         return messages
 
-    def generate(self, dialogue: Dialogue, problem: Problem) -> str:
-        messages = self._build_messages(dialogue, problem)
+    def generate(
+        self, dialogue: Dialogue, problem: Problem, learner_context: str = ""
+    ) -> str:
+        messages = self._build_messages(dialogue, problem, learner_context)
         text = self.tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
         )
