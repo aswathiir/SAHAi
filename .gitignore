@@ -22,6 +22,8 @@ artifacts/
 
 # Local env
 .env
+.env.*
+!.env.example
 .DS_Store
 
 # Literature review PDF — likely contains copyrighted paper content.
