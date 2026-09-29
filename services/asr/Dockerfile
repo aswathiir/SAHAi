@@ -28,6 +28,13 @@ RUN pip install --no-cache-dir torch torchaudio --index-url https://download.pyt
  && pip install --no-cache-dir transformers onnxruntime==1.20.1 onnx==1.20.1 soundfile \
  && pip install --no-cache-dir "parler-tts @ git+https://github.com/huggingface/parler-tts.git"
 
+# IndicTrans2 (Indic -> English, in front of the tutor). sentencepiece is
+# the tokenizer the checkpoint ships with; IndicTransToolkit does the script
+# normalisation the model was trained against and the backend degrades
+# gracefully without it, so a failure here must not fail the image.
+RUN pip install --no-cache-dir sentencepiece sacremoses \
+ && pip install --no-cache-dir IndicTransToolkit || true
+
 COPY services/asr/app /srv/services/asr/app
 WORKDIR /srv/services/asr
 

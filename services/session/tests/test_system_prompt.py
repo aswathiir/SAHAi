@@ -7,6 +7,8 @@ push them away from the generation point.
 
 from __future__ import annotations
 
+import re
+
 def test_system_prompt_appends_learner_context_after_the_rules():
     """Context goes last so it can never displace the never-give-the-answer
     rules — those are what the whole design rests on."""
@@ -155,7 +157,22 @@ def test_add_turn_passes_the_content_it_is_about_to_send():
     from app.main import add_turn
 
     src = inspect.getsource(add_turn)
-    assert "req.content" in src.split("_system_prompt(")[1].split(")")[0]
+
+    # Pinned as an invariant, not a variable name: the string handed to
+    # `_system_prompt` must be the same one appended as the final user
+    # message. It was `req.content` until inbound Indic script began being
+    # translated, at which point the model reads the translated copy and the
+    # signals have to be read from that — otherwise turn guidance would
+    # describe a different sentence than the one the tutor answers.
+    sent_to_prompt = src.split("_system_prompt(")[1].split(")")[0].split(",")[-1].strip()
+    final_user_msg = re.search(
+        r'messages\.append\(\{"role": "user", "content": (\w+)\}\)', src
+    )
+    assert final_user_msg, "could not find the final user message in add_turn"
+    assert sent_to_prompt == final_user_msg.group(1), (
+        f"prompt gets {sent_to_prompt!r} but the model is sent "
+        f"{final_user_msg.group(1)!r}"
+    )
 
 
 def test_an_unremarkable_turn_leaves_the_prompt_untouched():

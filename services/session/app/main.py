@@ -50,6 +50,10 @@ DATABASE_URL = os.getenv(
 TUTOR_URL = os.getenv("SAHAI_TUTOR_URL", "http://tutor:8000")
 TRACER_URL = os.getenv("SAHAI_TRACER_URL", "http://tracer:8000")
 EXECUTOR_URL = os.getenv("SAHAI_EXECUTOR_URL", "http://executor:8000")
+ASR_URL = os.getenv("SAHAI_ASR_URL", "http://asr:8000")
+# Indic script goes to the translator before the tutor sees it. Generous,
+# because the 200M model loads lazily and the first such turn pays for it.
+TRANSLATE_TIMEOUT_S = float(os.getenv("SAHAI_TRANSLATE_TIMEOUT_S", "120"))
 MAX_TURNS = int(os.getenv("SAHAI_MAX_TURNS", "12"))
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
@@ -339,11 +343,15 @@ async def add_turn(
         content=req.content, complete=True,
     )
 
+    # The learner's own words are what gets stored above; this is the copy the
+    # model reads.
+    for_model = await _to_english(req.content)
+
     messages = [
         {
             "role": "system",
             "content": _system_prompt(
-                row, req.learner_context, req.problem_statement, req.content
+                row, req.learner_context, req.problem_statement, for_model
             ),
         }
     ]
@@ -351,7 +359,7 @@ async def add_turn(
         messages.append(
             {"role": "assistant" if t.role == "tutor" else "user", "content": t.content}
         )
-    messages.append({"role": "user", "content": req.content})
+    messages.append({"role": "user", "content": for_model})
 
     # Before any write: a failure here must leave the session exactly as it was.
     reply = await _call_tutor(messages)
@@ -450,6 +458,38 @@ def _system_prompt(
         learner_context,
         turn_guidance(read_turn(learner_message)),
     )
+
+
+
+async def _to_english(text: str) -> str:
+    """Indic script in, English out; anything else returned unchanged.
+
+    The tutor is Qwen2.5-1.5B, which reads Devanagari badly enough that a
+    learner writing in Hindi script gets a worse answer than the same question
+    in English. Translating on the way in keeps the model on ground it can
+    handle.
+
+    Only the copy sent to the model is translated. What gets written to the
+    transcript is still what the learner typed, because the record is theirs
+    and because leakage and pedagogy are scored against the real turn.
+
+    Fails open: a translator that is down or slow costs a worse reply, never
+    the turn itself.
+    """
+    if not text:
+        return text
+    try:
+        async with httpx.AsyncClient(timeout=TRANSLATE_TIMEOUT_S) as client:
+            r = await client.post(f"{ASR_URL}/translate",
+                                  json={"text": text, "source_lang": "hi"})
+            r.raise_for_status()
+            data = r.json()
+            if data.get("translated"):
+                logger.info("translated an Indic-script turn for the tutor")
+                return data.get("text") or text
+    except Exception as exc:  # noqa: BLE001 - degrade, never fail the turn
+        logger.warning("translate unavailable: %s", type(exc).__name__)
+    return text
 
 
 async def _call_tutor(messages: list[dict]) -> dict:

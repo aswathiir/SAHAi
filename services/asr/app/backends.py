@@ -18,10 +18,18 @@ from __future__ import annotations
 import subprocess
 
 import io
+import logging
 import os
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+
+
+# backends.py had no module logger; the translator referenced one and died
+# with NameError *after* loading the model successfully, so a working
+# translation was lost to a log line.
+logger = logging.getLogger("asr.backends")
 
 @dataclass(frozen=True)
 class Transcript:
@@ -243,3 +251,126 @@ def build_tts_backend() -> TTSBackend:
             device=os.getenv("SAHAI_DEVICE", "cpu"),
         )
     raise ValueError(f"unknown SAHAI_TTS_BACKEND: {kind!r}")
+
+
+# ---------------------------------------------------------------------------
+# Indic -> English translation
+# ---------------------------------------------------------------------------
+#
+# The tutor policy is Qwen2.5-1.5B, which handles romanised Hinglish poorly and
+# Devanagari worse: the training transcripts show it degenerating into
+# repetition and word-salad. A learner typing Hindi script therefore gets a
+# worse answer than the same question in English, which is the opposite of what
+# a code-mixed tutor should do.
+#
+# Translating Indic script to English before the prompt is assembled keeps the
+# model on ground it can handle. The learner's own words are still what gets
+# stored in the transcript; only the copy handed to the model is translated.
+#
+# Loaded lazily and only when a turn actually contains Indic script. The tutor
+# already holds ~3.7GB and the speech models ~5.6GB of an 11.67GB VM, and an
+# always-resident fourth model would put page-cache eviction back on the table
+# — which measured as a 3x slowdown on the tutor.
+TRANSLATE_MODEL = os.getenv(
+    "SAHAI_TRANSLATE_MODEL", "ai4bharat/indictrans2-indic-en-dist-200M"
+)
+TRANSLATE_MAX_SECONDS = float(os.getenv("SAHAI_TRANSLATE_MAX_SECONDS", "60"))
+
+# Devanagari, Tamil, Telugu, Bengali, Gurmukhi, Gujarati, Kannada, Malayalam.
+# Romanised Hinglish is deliberately NOT matched: it is already Latin script,
+# the model reads it better than it reads Devanagari, and round-tripping it
+# through a translator would lose the code-mixing the project exists to support.
+_INDIC_SCRIPT = re.compile(
+    r"[ऀ-ॿ஀-௿ఀ-౿ঀ-৿"
+    r"਀-੿઀-૿ಀ-೿ഀ-ൿ]"
+)
+
+_FLORES = {
+    "hi": "hin_Deva", "ta": "tam_Taml", "te": "tel_Telu", "bn": "ben_Beng",
+    "pa": "pan_Guru", "gu": "guj_Gujr", "kn": "kan_Knda", "ml": "mal_Mlym",
+}
+
+
+def has_indic_script(text: str) -> bool:
+    """True when translating is worth doing at all."""
+    return bool(_INDIC_SCRIPT.search(text or ""))
+
+
+class IndicTransTranslator:
+    """IndicTrans2 distilled, Indic -> English.
+
+    The distilled 200M checkpoint rather than the 1B: this runs on the same CPU
+    as everything else, and a turn already waits ~60s on the tutor. Quality is
+    lower than the full model and that is the right trade here.
+    """
+
+    def __init__(self, model_name: str = TRANSLATE_MODEL, device: str = "cpu"):
+        self._model_name = model_name
+        self._device = device
+        self._model = None
+        self._tok = None
+        self._proc = None
+
+    def _ensure(self) -> None:
+        if self._model is not None:
+            return
+        import torch
+        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
+        self._torch = torch
+        self._tok = AutoTokenizer.from_pretrained(self._model_name, trust_remote_code=True)
+        self._model = AutoModelForSeq2SeqLM.from_pretrained(
+            self._model_name, trust_remote_code=True
+        )
+        self._model.eval()
+        try:
+            from IndicTransToolkit.processor import IndicProcessor
+
+            self._proc = IndicProcessor(inference=True)
+        except Exception:
+            # The toolkit does the script normalisation the model was trained
+            # with. Without it the model still runs, just less accurately, and
+            # a missing optional dependency should not take translation out.
+            #
+            # Logged loudly: the Dockerfile installs this with `|| true`, so a
+            # failed install leaves no trace at build time. That silence is how
+            # the fallback path went untested until it asserted in production.
+            self._proc = None
+            logger.warning(
+                "IndicTransToolkit unavailable: translating without script "
+                "normalisation, which costs accuracy but not the feature"
+            )
+        logger.info("translate backend ready: %s", self._model_name)
+
+    def translate(self, text: str, source_lang: str = "hi") -> str:
+        self._ensure()
+        src = _FLORES.get(source_lang, "hin_Deva")
+        batch = [text]
+        if self._proc is not None:
+            batch = self._proc.preprocess_batch(batch, src_lang=src, tgt_lang="eng_Latn")
+        else:
+            # IndicTrans2's tokenizer reads the first two whitespace-separated
+            # tokens as the source and target language tags and asserts on
+            # anything else — without them it raised
+            # `Invalid source language tag: <first Hindi word>`. IndicProcessor
+            # normally prepends them; when it is unavailable this does the same
+            # thing, so a missing optional package costs script normalisation
+            # rather than the whole feature.
+            batch = [f"{src} eng_Latn {line}" for line in batch]
+
+        enc = self._tok(batch, return_tensors="pt", padding=True, truncation=True,
+                        max_length=256)
+        with self._torch.no_grad():
+            out = self._model.generate(
+                **enc, max_length=256, num_beams=1, do_sample=False,
+                max_time=TRANSLATE_MAX_SECONDS,
+            )
+        decoded = self._tok.batch_decode(out, skip_special_tokens=True)
+        if self._proc is not None:
+            decoded = self._proc.postprocess_batch(decoded, lang="eng_Latn")
+        return (decoded[0] if decoded else "").strip()
+
+    @property
+    def describe(self) -> str:
+        loaded = "loaded" if self._model is not None else "lazy"
+        return f"hf:{self._model_name} ({loaded})"

@@ -19,7 +19,14 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from .backends import ASRBackend, TTSBackend, build_asr_backend, build_tts_backend
+from .backends import (
+    ASRBackend,
+    IndicTransTranslator,
+    TTSBackend,
+    build_asr_backend,
+    build_tts_backend,
+    has_indic_script,
+)
 
 MAX_AUDIO_BYTES = 25 * 1024 * 1024
 MAX_TEXT_CHARS = 2000
@@ -34,6 +41,9 @@ _state: dict[str, ASRBackend | TTSBackend] = {}
 async def lifespan(app: FastAPI):
     _state["asr"] = build_asr_backend()
     _state["tts"] = build_tts_backend()
+    # Constructed, not loaded: the weights arrive on the first turn that
+    # actually contains Indic script.
+    _state["translate"] = IndicTransTranslator()
     logger.info("asr backend ready: %s", _state["asr"].describe)
     logger.info("tts backend ready: %s", _state["tts"].describe)
     yield
@@ -46,6 +56,18 @@ class TranscriptOut(BaseModel):
     text: str
     language: Literal["hi", "ta", "en", "mixed", "unknown"] = "unknown"
     confidence: float | None = None
+    backend: str
+
+
+class TranslateRequest(BaseModel):
+    text: str = Field(max_length=MAX_TEXT_CHARS)
+    source_lang: str = Field(default="hi", max_length=8)
+
+
+class TranslateOut(BaseModel):
+    text: str
+    translated: bool
+    source_lang: str
     backend: str
 
 
@@ -109,3 +131,33 @@ async def synthesize(req: SynthesizeRequest) -> Response:
         logger.exception("synthesis failed")
         raise HTTPException(500, f"synthesis failed: {exc}") from exc
     return Response(content=wav_bytes, media_type="audio/wav")
+
+
+@app.post("/translate", response_model=TranslateOut)
+def translate(req: TranslateRequest) -> TranslateOut:
+    """Indic script to English, for text on its way to the tutor.
+
+    A plain `def`: the model is synchronous and CPU-bound, and on the event
+    loop it would block this service's own health probe, which is the bug that
+    made the tutor look dead for 47 hours.
+
+    Text without Indic script is returned untouched and `translated=False`.
+    Romanised Hinglish is left alone deliberately — it is already Latin, the
+    tutor reads it better than Devanagari, and translating it away would
+    discard the code-mixing the project is about.
+    """
+    if not has_indic_script(req.text):
+        return TranslateOut(text=req.text, translated=False,
+                            source_lang=req.source_lang, backend="skipped")
+    backend = _state["translate"]
+    try:
+        out = backend.translate(req.text, req.source_lang)
+    except Exception as exc:  # noqa: BLE001
+        # Fail open. A turn the learner can still send in their own words beats
+        # a 500, and the tutor handling it poorly is a smaller loss than the
+        # turn not happening.
+        logger.warning("translate failed: %s", type(exc).__name__)
+        return TranslateOut(text=req.text, translated=False,
+                            source_lang=req.source_lang, backend="error")
+    return TranslateOut(text=out or req.text, translated=bool(out),
+                        source_lang=req.source_lang, backend=backend.describe)
