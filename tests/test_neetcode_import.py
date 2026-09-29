@@ -85,8 +85,10 @@ def test_levels_are_ordered_by_evidence():
 
 from import_neetcode import (  # noqa: E402
     TECHNIQUE_SKILLS,
+    first_commits,
     headline_technique,
     prior_work_items,
+    read_solutions,
     techniques_used,
     title_for,
 )
@@ -199,3 +201,42 @@ def test_titles_read_like_problem_names_not_url_fragments():
     assert title_for("binary-tree-level-order-traversal") == "Binary Tree Level Order Traversal"
     assert title_for("remove-nth-node-from-end-of-list") == "Remove Nth Node from End of List"
     assert title_for("lru-cache") == "LRU Cache"
+
+
+def _repo(tmp_path, layout):
+    """A throwaway git repo with one commit, files at the given paths."""
+    import subprocess
+
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    for rel in layout:
+        f = tmp_path / rel
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("seen = {}\n")
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t",
+         "commit", "-qm", "add solutions"],
+        cwd=tmp_path, check=True,
+    )
+    return tmp_path
+
+
+def test_slug_is_the_submission_directory_at_any_depth(tmp_path):
+    """`first_commits` must key on the same slug `read_solutions` does.
+
+    It indexed `parts[1]`, which assumes `<lang>/<slug>/file`. On a flat
+    `<slug>/submission-1.py` repo that returned the *filename*, so every
+    problem collapsed onto one bogus slug, techniques never joined to solved
+    problems, and the whole import produced no skills.
+    """
+    repo = _repo(tmp_path / "flat", [
+        "0001-two-sum/submission-1.py",
+        "0704-binary-search/submission-1.py",
+    ])
+    assert set(first_commits(repo)) == {"0001-two-sum", "0704-binary-search"}
+
+
+def test_slug_matches_read_solutions_so_techniques_actually_join(tmp_path):
+    """The two halves must agree, or parsed techniques are silently dropped."""
+    repo = _repo(tmp_path / "nested", ["python/0001-two-sum/submission-1.py"])
+    assert set(first_commits(repo)) == set(read_solutions(repo))

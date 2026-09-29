@@ -20,6 +20,7 @@ import os
 import time
 import uuid
 from collections import defaultdict, deque
+import re
 from datetime import date, datetime, timezone
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -48,6 +49,16 @@ TUTOR_URL = os.getenv("SAHAI_TUTOR_URL", "http://tutor:8000")
 EXECUTOR_URL = os.getenv("SAHAI_EXECUTOR_URL", "http://executor:8000")
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
+from sahai_core.learner_context import (
+    MASTERY_SOLID,
+    learner_context as _learner_context,
+)
+from sahai_core.techniques import (
+    TECHNIQUE_SKILLS,
+    headline_technique,
+    techniques_used,
+)
+
 logger = logging.getLogger("gateway")
 
 # Carries the id from the middleware into the downstream HTTP calls without
@@ -248,56 +259,6 @@ class TurnRequest(BaseModel):
 # mid-band is where the tutor should already be pitching.
 UNTRACKED_SKILL = "general"
 
-MASTERY_NEW = 0.35
-MASTERY_SOLID = 0.65
-
-
-def _learner_context(skills: list[str], mastery: dict[str, float]) -> str:
-    """Turn BKT posteriors into an instruction the model can act on.
-
-    Deliberately *not* the raw numbers. "arrays: 0.42" gives a language model
-    nothing to do — it has no calibration for what 0.42 should change about a
-    hint. Naming the pedagogical move instead ("build the idea" vs "assume it")
-    is the part that actually alters the next turn.
-
-    Only skills the current problem touches are mentioned. The learner's full
-    profile would be mostly irrelevant to any one problem and would crowd a
-    system prompt whose own rule is 2-3 sentences per reply.
-    """
-    if not skills:
-        return ""
-
-    # The tutor says these to a learner, and `hash_maps` next to the prior-work
-    # block's "a hash map" reads like two different things.
-    def human(skill: str) -> str:
-        return skill.replace("_", " ")
-
-    new, solid = [], []
-    for skill in sorted(set(skills)):
-        # Unseen skills have no posterior yet; treat them as new rather than
-        # inventing a middling one.
-        value = mastery.get(skill, 0.0)
-        if value < MASTERY_NEW:
-            new.append(skill)
-        elif value >= MASTERY_SOLID:
-            solid.append(skill)
-
-    lines = []
-    if new:
-        lines.append(
-            f"- New to {', '.join(human(s) for s in new)}. "
-            "Build the idea before asking them to apply it."
-        )
-    if solid:
-        lines.append(
-            f"- Solid on {', '.join(human(s) for s in solid)}. "
-            "Do not re-explain it; push on what is new here."
-        )
-    # Everything in between is exactly where the tutor should already be
-    # pitching, so saying so would just spend tokens agreeing with itself.
-    if not lines:
-        return ""
-    return "WHAT THIS LEARNER ALREADY KNOWS:\n" + "\n".join(lines)
 
 
 async def _mastery_for(learner: str) -> dict[str, float]:
@@ -894,6 +855,33 @@ class PriorWorkIn(BaseModel):
     items: list[dict] = Field(default_factory=list, max_length=2000)
 
 
+@app.get("/v1/me/prior_work", responses=AUTH_RESPONSES)
+async def get_prior_work(authorization: str | None = LearnerHeader) -> list[dict]:
+    """What this learner has imported, for their own record page.
+
+    The write side existed without a read side, so an import was invisible
+    to the person who performed it.
+    """
+    learner = await _learner(authorization)
+    try:
+        r = await app.state.http.get(
+            # The tracer defaults to 3, which is right when this feeds a system
+            # prompt and wrong when it is the learner's own record of what they
+            # imported. Ask for the record; the prompt path passes its own limit.
+            f"{TRACER_URL}/prior_work/{learner}?limit=200",
+            headers=_trace(),
+            timeout=PROBE_TIMEOUT_S,
+        )
+        r.raise_for_status()
+        # The tracer wraps the rows in `{"items": [...]}`; the page wants the
+        # list. Returning the envelope made FastAPI reject its own response
+        # against `list[dict]` and answer 500 on a perfectly good record.
+        payload = r.json()
+        return payload.get("items", []) if isinstance(payload, dict) else payload
+    except Exception:  # noqa: BLE001 - an empty record is not an error
+        return []
+
+
 @app.post("/v1/me/prior_work", responses=AUTH_RESPONSES)
 async def set_prior_work(
     body: PriorWorkIn, authorization: str | None = LearnerHeader
@@ -914,6 +902,130 @@ async def set_prior_work(
     if r.status_code >= 400:
         raise HTTPException(r.status_code, r.text[:200])
     return r.json()
+
+
+class ImportRepoIn(BaseModel):
+    repo: str = Field(max_length=140)
+
+
+_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,39}/[A-Za-z0-9_.-]{1,100}$")
+# A learner with a long history should not be able to make the gateway fetch
+# a thousand files on one click; the tail adds nothing to a skill estimate.
+IMPORT_MAX_FILES = 60
+
+
+def _title_from_slug(slug: str) -> str:
+    """`0001-two-sum` -> `Two Sum`; `1. Two Sum (Leetcode)` -> `Two Sum (Leetcode)`.
+
+    Repos number their directories differently, so the leading index and any
+    punctuation around it go, and separators become spaces. `str.capitalize`
+    is wrong here: it lowercases the rest of the string, which turns an
+    already-spaced `1. Two Sum` into `. two sum`. Words that already carry
+    capitals are left alone so `II` and `LRU` survive.
+    """
+    text = re.sub(r"^\W*\d+\W*", " ", slug).replace("_", " ").replace("-", " ")
+    words = [
+        w if any(c.isupper() for c in w) else w[:1].upper() + w[1:]
+        for w in text.split() if w
+    ]
+    return " ".join(words) or slug
+
+
+@app.post("/v1/me/import_repo", responses=AUTH_RESPONSES)
+async def import_repo(body: ImportRepoIn, authorization: str | None = LearnerHeader) -> dict:
+    """Read a public solutions repo and record what it shows this learner knows.
+
+    The importer existed only as a CLI, so the one path a learner could
+    actually reach did not exist. This runs the same detection over the
+    GitHub API rather than a clone, because the gateway image has no `git`
+    and cloning arbitrary repositories into a request path is a worse idea
+    than reading the few files that matter.
+
+    **Source is read and discarded here.** What leaves this function is a
+    technique name and a skill; `prior_work` has no column for code and the
+    tracer is never sent any.
+    """
+    learner = await _learner(authorization)
+    _rate_limit(learner)
+    repo = body.repo.strip().removeprefix("https://github.com/").removesuffix(".git").strip("/")
+    if not _REPO_RE.match(repo):
+        raise HTTPException(400, "expected owner/name")
+
+    gh = {"Accept": "application/vnd.github+json", "User-Agent": "sahai-import"}
+    try:
+        meta = await app.state.http.get(f"https://api.github.com/repos/{repo}", headers=gh, timeout=15)
+        if meta.status_code == 404:
+            raise HTTPException(404, "repository not found, or it is private")
+        if meta.status_code == 403:
+            raise HTTPException(429, "GitHub rate limit reached; try again shortly")
+        meta.raise_for_status()
+        branch = meta.json().get("default_branch", "main")
+
+        tree = await app.state.http.get(
+            f"https://api.github.com/repos/{repo}/git/trees/{branch}?recursive=1",
+            headers=gh, timeout=30,
+        )
+        tree.raise_for_status()
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"could not reach GitHub: {type(exc).__name__}") from exc
+
+    # `<slug>/anything.py`, at any depth: the slug is the directory holding the
+    # file, which is how the CLI keys it too.
+    paths = [
+        n["path"] for n in tree.json().get("tree", [])
+        if n.get("type") == "blob" and n["path"].endswith(".py") and "/" in n["path"]
+    ][:IMPORT_MAX_FILES]
+    if not paths:
+        raise HTTPException(422, "no Python solutions found in that repository")
+
+    by_slug: dict[str, set[str]] = {}
+    for path in paths:
+        slug = path.split("/")[-2]
+        try:
+            raw = await app.state.http.get(
+                f"https://raw.githubusercontent.com/{repo}/{branch}/{path}", timeout=15
+            )
+            if raw.status_code != 200:
+                continue
+            by_slug.setdefault(slug, set()).update(techniques_used(raw.text))
+        except Exception:  # noqa: BLE001 - one unreadable file must not fail the import
+            continue
+
+    today = date.today().isoformat()
+    items, skills_seen = [], set()
+    for slug, techs in sorted(by_slug.items()):
+        headline = headline_technique(techs)
+        skill = TECHNIQUE_SKILLS.get(headline or "")
+        if not skill:
+            continue
+        skills_seen.add(skill)
+        items.append({
+            "slug": slug, "title": _title_from_slug(slug), "skill": skill,
+            "technique": headline, "solved_on": today, "dated": True,
+        })
+    if not items:
+        raise HTTPException(422, "found solutions, but none used a technique we recognise")
+
+    r = await app.state.http.post(
+        f"{TRACER_URL}/prior_work", json={"learner_id": learner, "items": items}, headers=_trace()
+    )
+    if r.status_code >= 400:
+        raise HTTPException(r.status_code, r.text[:200])
+
+    # Seed the skills this evidence touches. The tracer refuses to overwrite
+    # anything already graded, so this can only fill gaps.
+    await app.state.http.post(
+        f"{TRACER_URL}/placement",
+        json={"learner_id": learner, "responses": {s: "seen" for s in sorted(skills_seen)}},
+        headers=_trace(),
+    )
+    return {
+        "repo": repo, "problems_read": len(by_slug),
+        "recorded": len(items), "skills": sorted(skills_seen),
+        "truncated": len(paths) >= IMPORT_MAX_FILES,
+    }
 
 
 @app.get("/v1/me/progress", responses=AUTH_RESPONSES)

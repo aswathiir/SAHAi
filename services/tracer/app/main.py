@@ -161,6 +161,11 @@ class MasteryOut(BaseModel):
     learner_id: str
     skills: dict[str, float]
     ability: float
+    # Skills backed by at least one graded attempt. A self-report can seed a
+    # skill but never overwrite one of these, and the placement survey has no
+    # way to show the learner which of their answers will be ignored unless
+    # the distinction is on the wire.
+    graded: list[str] = []
 
 
 class ZPDRequest(BaseModel):
@@ -202,6 +207,23 @@ async def _load(db: AsyncSession, learner_id: str) -> dict[str, float]:
     return {r.skill: r.mastery for r in rows}
 
 
+async def _graded(db: AsyncSession, learner_id: str) -> list[str]:
+    """Skills the learner has actually been graded on, cheapest form.
+
+    The mastery row already carries the count, so this needs no join against
+    the observation log.
+    """
+    rows = (
+        await db.execute(
+            select(SkillMastery).where(
+                SkillMastery.learner_id == learner_id,
+                SkillMastery.observations > 0,
+            )
+        )
+    ).scalars()
+    return sorted(r.skill for r in rows)
+
+
 def _tracer_from(skills: dict[str, float]) -> BKTTracer:
     tracer = BKTTracer(SETTINGS)
     tracer.skills = dict(skills)
@@ -215,6 +237,7 @@ async def get_mastery(learner_id: str, db: AsyncSession = Depends(get_db)) -> Ma
         learner_id=learner_id,
         skills=skills,
         ability=_tracer_from(skills).get_ability(),
+        graded=await _graded(db, learner_id),
     )
 
 
@@ -271,6 +294,7 @@ async def observe(req: ObserveRequest, db: AsyncSession = Depends(get_db)) -> Ma
         learner_id=req.learner_id,
         skills=tracer.skills,
         ability=tracer.get_ability(),
+        graded=await _graded(db, req.learner_id),
     )
 
 
@@ -329,6 +353,7 @@ async def placement(
         learner_id=req.learner_id,
         skills=skills,
         ability=_tracer_from(skills).get_ability(),
+        graded=await _graded(db, req.learner_id),
     )
 
 

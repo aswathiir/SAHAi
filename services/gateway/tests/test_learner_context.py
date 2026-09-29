@@ -8,7 +8,13 @@ and failing a turn when the tracer is down.
 
 from __future__ import annotations
 
-from app.main import MASTERY_NEW, MASTERY_SOLID, _learner_context
+# The thresholds and the block itself now live in sahai-core, so the gateway
+# and the training loop cannot drift apart on what "new" or "solid" means.
+# `_learner_context` is still read off `app.main` on purpose: that asserts the
+# gateway actually wired the shared implementation in, which is the thing that
+# broke when the local copy was deleted.
+from app.main import _learner_context
+from sahai_core.learner_context import MASTERY_NEW, MASTERY_SOLID
 
 
 def test_new_skill_asks_for_the_idea_first():
