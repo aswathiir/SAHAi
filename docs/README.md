@@ -13,6 +13,9 @@ Read in order if you are new. Each file is self-contained.
 | 07 | [Operations — Kaggle](07-operations-kaggle.md) | Running training, and the traps that fail silently |
 | 08 | [Team split](08-team-split.md) | Four-way ownership |
 | 09 | [Track A tutorial](09-track-a-tutorial.md) | RL taught from zero: policy gradients, GRPO, LoRA, BKT — every formula derived and tied to code |
+| 13 | [Running it](13-running-it.md) | **Start here to run the stack.** Setup, the memory setting that matters, and the traps |
+| 12 | [The mathematics](12-the-mathematics.md) | Every equation the system computes, tied to the code that computes it |
+| 11 | [Work log — Sep 2026](11-session-log-2026-09.md) | What was tested on the serving side, what broke, what changed |
 | 10 | [Fundamentals guide](10-fundamentals-guide.md) | **Start here to learn Track A.** Paper → formula → code → worked example, repeated for every concept, beginner pace |
 
 ## Two programs, not one
@@ -39,5 +42,5 @@ interface (`services/gateway/app/static/`) served off the gateway. The
 science has started but isn't there yet: a scaled 20-epoch run produced a
 real learning signal every epoch, but held-out solve rate (6.3%) is far below
 training-epoch peaks (45%), and 37% of turns are truncated mid-generation —
-the main open bug. 108 tests pass. A tutor that generalizes is the open item
+the main open bug. 315 tests pass. A tutor that generalizes is the open item
 that gates everything else — see [06-roadmap.md](06-roadmap.md).
