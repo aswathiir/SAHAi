@@ -93,6 +93,10 @@ services:
       SAHAI_BASE_MODEL: ${SAHAI_BASE_MODEL:-Qwen/Qwen2.5-1.5B-Instruct}
       SAHAI_ADAPTER_PATH: ${SAHAI_ADAPTER_PATH:-}
       SAHAI_DEVICE: ${SAHAI_DEVICE:-cpu}
+      # One generation at a time on CPU. A second concurrent turn does not run
+      # twice as fast in parallel — it halves the CPU each gets and both miss
+      # their deadline. Raise this on a GPU host.
+      SAHAI_TUTOR_MAX_CONCURRENT: ${SAHAI_TUTOR_MAX_CONCURRENT:-1}
     volumes:
       - ./artifacts:/srv/artifacts:ro
       - hf-cache:/home/sahai/.cache/huggingface

@@ -113,7 +113,17 @@ class HFBackend(TutorBackend):
                 temperature=temperature,
                 do_sample=temperature > 0,
                 pad_token_id=self.tokenizer.pad_token_id,
-                # Stop before the caller gives up. On CPU (~1.8 tok/s measured)
+                # Stop before the caller gives up. The "~1.8 tok/s" this
+                # comment used to claim was never observed on this host:
+                # measured throughput is ~0.07 tok/s, and the cause is paging,
+                # not compute. Safetensors are mmap'd, so the 3GB of weights
+                # live in page cache rather than anonymous memory (`anon`
+                # 947MB against `file` 3.16GB). Page cache is evicted first
+                # under pressure, so on a 7.65GB Docker VM shared with the ASR
+                # models the weights are faulted back from disk as generation
+                # walks them: 8,807 major faults in one 187s call, ~980 per
+                # token. Freeing 3.4GB by stopping ASR recovered ~35%.
+                # The fix is VM memory, not this cap.
                 # 192 tokens can outrun session's 240s budget, and generation
                 # that finishes after the client has disconnected is work done
                 # for nobody: the learner saw a 500 and the tokens are dropped.
