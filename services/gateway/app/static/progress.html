@@ -9,15 +9,16 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,600;9..144,900&family=Archivo:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --ink:      #0d1030;
-    --ink-2:    #141845;
-    --ink-3:    #1c2158;
-    --cream:    #f2ece1;
-    --cream-dim:#9a99b8;
-    --pink:     #f96167;
-    --pink-dim: #7a2f41;
-    --rule:     #272c66;
-    --ok:       #4ec98a;
+    --ink:      #0f1115;
+    --ink-2:    #161920;
+    --ink-3:    #1f232b;
+    --cream:    #e7e9ec;
+    --cream-dim:#8b929d;
+    --pink:     #7d9cc4;
+    --pink-dim: #3c4a5c;
+    --rule:     #262b34;
+    --ok:       #6a9e85;
+    --bad:      #c47070;
 
     --display: "Fraunces", "Iowan Old Style", Georgia, serif;
     --body: "Archivo", "Helvetica Neue", Helvetica, sans-serif;
@@ -35,7 +36,7 @@
     line-height: 1.5;
     /* Grain: keeps the large ink fields from reading as flat digital black. */
     background-image:
-      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(249,97,103,.13), transparent 70%),
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(125,156,196,.05), transparent 70%),
       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
     min-height: 100vh;
   }
@@ -46,7 +47,7 @@
   header {
     display: flex; align-items: baseline; justify-content: space-between;
     gap: 20px; flex-wrap: wrap;
-    padding: 26px 40px 20px;
+    padding: 22px 28px 18px;
     border-bottom: 1px solid var(--rule);
   }
   .brand {
@@ -107,7 +108,7 @@
     display: flex; align-items: center; justify-content: space-between; gap: 20px;
     text-decoration: none; color: inherit; margin-top: 34px;
     border: 1px solid var(--pink-dim); border-radius: 12px;
-    padding: 20px 24px; background: rgba(249,97,103,.09);
+    padding: 20px 24px; background: rgba(125,156,196,.15);
     transition: border-color .2s, transform .2s;
   }
   #next-up:hover { border-color: var(--pink); transform: translateY(-2px); }
@@ -154,9 +155,9 @@
     display: block;
   }
   .heat i[data-l="1"] { background: var(--pink-dim); }
-  .heat i[data-l="2"] { background: #b0424f; }
-  .heat i[data-l="3"] { background: #dc5159; }
-  .heat i[data-l="4"] { background: var(--pink); box-shadow: 0 0 9px rgba(249,97,103,.45); }
+  .heat i[data-l="2"] { background: #4f6480; }
+  .heat i[data-l="3"] { background: #647fa3; }
+  .heat i[data-l="4"] { background: var(--pink); box-shadow: 0 0 9px rgba(125,156,196,.45); }
   .heat i:hover { outline: 1px solid var(--cream); outline-offset: 1px; }
   .heat i[tabindex] { cursor: pointer; }
   .heat i[tabindex]:focus-visible { outline: 2px solid var(--cream); outline-offset: 1px; }
@@ -189,7 +190,7 @@
     width: 0; transition: width .85s cubic-bezier(.2,.7,.3,1);
   }
   .skill.mastered .pc { color: var(--ok); }
-  .skill.mastered .bar span { background: linear-gradient(90deg, #2f7d5a, var(--ok)); }
+  .skill.mastered .bar span { background: linear-gradient(90deg, #3f6d5c, var(--ok)); }
 
   /* ---- tracks ---- */
   .tracks { display: grid; grid-template-columns: repeat(auto-fit, minmax(285px, 1fr)); gap: 16px; }
@@ -206,7 +207,7 @@
      are real links now. */
   a.skill { text-decoration: none; color: inherit; cursor: pointer;
             padding: 3px 5px; margin: -3px -5px; border-radius: 6px; }
-  a.skill:hover { background: rgba(249,97,103,.08); }
+  a.skill:hover { background: rgba(125,156,196,.11); }
   a.skill:hover .nm { color: var(--pink); }
   .track h3 {
     font-family: var(--display); font-weight: 600; font-size: 19px;
@@ -236,6 +237,21 @@
   .q:first-of-type { border-top: none; }
   .q .nm { font-size: 14px; }
   .opts { display: flex; gap: 6px; flex-wrap: wrap; }
+  .importer { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 6px; }
+  .importer input {
+    flex: 1 1 280px; padding: 9px 11px; border-radius: 8px;
+    border: 1px solid var(--rule); background: transparent;
+    color: var(--cream); font: inherit; font-size: 13.5px;
+  }
+  .importer input:focus { outline: none; border-color: var(--pink); }
+  .prior { list-style: none; padding: 0; margin: 10px 0 0; }
+  .prior li {
+    display: flex; justify-content: space-between; gap: 12px;
+    padding: 7px 0; border-top: 1px solid var(--rule); font-size: 13.5px;
+  }
+  .prior .tech { color: var(--pink); font-size: 12px; }
+  .q.is-graded .nm { color: var(--cream-dim); }
+  .earned { font-size: 12px; color: var(--pink); letter-spacing: .02em; }
   .opts button {
     font-family: var(--body); font-size: 12px; padding: 6px 13px;
     border-radius: 999px; border: 1px solid var(--rule);
@@ -252,7 +268,7 @@
     background: var(--pink); color: #2a0a10; cursor: pointer;
     transition: transform .15s, box-shadow .15s;
   }
-  .cta:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(249,97,103,.3); }
+  .cta:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(125,156,196,.3); }
   .cta:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
 
   .empty {
@@ -263,7 +279,7 @@
   .hidden { display: none !important; }
   .err {
     border-left: 2px solid var(--pink); padding: 9px 14px; margin-top: 18px;
-    font: 400 12px var(--mono); color: var(--pink); background: rgba(249,97,103,.07);
+    font: 400 12px var(--mono); color: var(--pink); background: rgba(125,156,196,.06);
   }
 </style>
 </head>
@@ -341,8 +357,8 @@
       <div class="legend">
         less <i style="background:var(--ink-2);border:1px solid rgba(255,255,255,.06)"></i>
         <i style="background:var(--pink-dim)"></i>
-        <i style="background:#b0424f"></i>
-        <i style="background:#dc5159"></i>
+        <i style="background:#4f6480"></i>
+        <i style="background:#647fa3"></i>
         <i style="background:var(--pink)"></i> more
       </div>
     </section>
@@ -358,6 +374,22 @@
     <section class="reveal" style="animation-delay:.32s">
       <h2>Courses</h2>
       <div class="tracks" id="tracks"></div>
+    </section>
+
+    <section class="reveal" style="animation-delay:.40s">
+      <h2>Work you have already done</h2>
+      <p class="sub">
+        Point this at a public solutions repository and the tutor can refer to
+        what you have solved before. It reads the techniques your code uses and
+        stores those — <strong>never any source</strong>.
+      </p>
+      <div class="importer">
+        <input id="repo-input" type="text" spellcheck="false"
+               placeholder="owner/name  (e.g. neetcode-solutions)" />
+        <button id="import-btn" class="cta">Import</button>
+      </div>
+      <p id="import-status" class="sub"></p>
+      <ul id="prior-list" class="prior"></ul>
     </section>
   </div>
 </main>
@@ -420,17 +452,42 @@ function showErr(msg) {
 /* ---------- placement ---------- */
 const answers = {};
 
+// Skills the learner has been graded on. The server refuses to let a
+// self-report overwrite these, so offering the question and silently
+// discarding the answer is the one thing the form must not do.
+let gradedSkills = new Set();
+
+function askableSkills() {
+  return SKILLS.filter(s => !gradedSkills.has(s));
+}
+
 function renderPlacement() {
-  $('questions').innerHTML = SKILLS.map(s => `
-    <div class="q">
-      <span class="nm">${SKILL_LABELS[s]}</span>
-      <div class="opts" data-skill="${s}">
-        ${LEVELS.map(([v, label]) =>
+  $('questions').innerHTML = SKILLS.map(s => {
+    const graded = gradedSkills.has(s);
+    const opts = graded
+      ? `<span class="earned">Graded — kept from your own work</span>`
+      : LEVELS.map(([v, label]) =>
           `<button type="button" data-v="${v}" aria-pressed="false">${label}</button>`
-        ).join('')}
-      </div>
-    </div>
-  `).join('');
+        ).join('');
+    return `
+    <div class="q${graded ? ' is-graded' : ''}">
+      <span class="nm">${SKILL_LABELS[s]}</span>
+      <div class="opts" data-skill="${s}">${opts}</div>
+    </div>`;
+  }).join('');
+
+  const askable = askableSkills().length;
+  const note = $('retake-note');
+  if (note) {
+    note.textContent = askable === SKILLS.length
+      ? 'Nothing has been graded yet, so every answer here counts.'
+      : `${SKILLS.length - askable} of ${SKILLS.length} skills are already graded and are shown as earned. `
+        + `Your answers below set a starting point for the remaining ${askable}.`;
+  }
+
+  // Everything already graded is answered by evidence, so the button waits
+  // only on the ones still open.
+  $('save-placement').disabled = askable > 0;
 
   $('questions').addEventListener('click', e => {
     const btn = e.target.closest('button[data-v]');
@@ -438,7 +495,8 @@ function renderPlacement() {
     const group = btn.parentElement;
     [...group.children].forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
     answers[group.dataset.skill] = btn.dataset.v;
-    $('save-placement').disabled = Object.keys(answers).length < SKILLS.length;
+    $('save-placement').disabled =
+      Object.keys(answers).length < askableSkills().length;
   });
 }
 
@@ -674,13 +732,59 @@ async function load() {
   }
 }
 
+/* ---------- prior work import ---------- */
+async function loadPriorWork() {
+  try {
+    const rows = await api('/v1/me/prior_work');
+    const list = $('prior-list');
+    if (!list) return;
+    list.innerHTML = (rows || []).map(r =>
+      `<li><span>${r.title}</span><span class="tech">${r.technique}</span></li>`
+    ).join('');
+  } catch (_) { /* nothing imported yet is the normal case, not an error */ }
+}
+
+$('import-btn')?.addEventListener('click', async () => {
+  const btn = $('import-btn');
+  const repo = $('repo-input').value.trim();
+  const status = $('import-status');
+  if (!repo) { status.textContent = 'Enter a repository as owner/name.'; return; }
+  btn.disabled = true;
+  status.textContent = 'Reading the repository…';
+  try {
+    const r = await api('/v1/me/import_repo', {
+      method: 'POST',
+      body: JSON.stringify({ repo }),
+    });
+    status.textContent =
+      `Read ${r.problems_read} problems, recorded ${r.recorded} across `
+      + `${r.skills.length} skills${r.truncated ? ' (first 60 files)' : ''}.`;
+    await loadPriorWork();
+    await load();          // streak, skills and tracks all move on an import
+  } catch (e) {
+    // api() throws with the raw body appended, which reads as
+    // `429 {"detail":"..."}`. Show the sentence, not the envelope.
+    const m = /"detail"\s*:\s*"([^"]+)"/.exec(e.message || '');
+    status.textContent = m ? m[1] : (e.message || 'Import failed.');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 // Nothing per-learner is fetched until identity is settled. Letting the page
 // load first and discovering the 401 per panel produced three simultaneous
 // error banners and a half-rendered record.
 (async () => {
   if (!await requireAuth($('whoami'))) return;
+  // Ask what has been graded before drawing the survey, so the form never
+  // offers a question whose answer the server will throw away.
+  try {
+    const m = await api('/v1/me/mastery');
+    gradedSkills = new Set(m.graded || []);
+  } catch (_) { /* fail open: ask everything rather than block placement */ }
   renderPlacement();
   load();
+  loadPriorWork();
 })();
 </script>
 </body>

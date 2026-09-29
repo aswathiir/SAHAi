@@ -9,9 +9,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,600;9..144,900&family=Archivo:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --ink:#0d1030; --ink-2:#141845; --ink-3:#1c2158; --cream:#f2ece1;
-    --cream-dim:#9a99b8; --pink:#f96167; --pink-dim:#7a2f41; --rule:#272c66;
-    --ok:#4ec98a; --bad:#f96167;
+    --ink:#0f1115; --ink-2:#161920; --ink-3:#1f232b; --cream:#e7e9ec;
+    --cream-dim:#8b929d; --pink:#7d9cc4; --pink-dim:#3c4a5c; --rule:#262b34;
+    --ok:#6a9e85; --bad:#c47070;
     --display:"Fraunces","Iowan Old Style",Georgia,serif;
     --body:"Archivo","Helvetica Neue",Helvetica,sans-serif;
     --mono:"JetBrains Mono","SF Mono",Menlo,monospace;
@@ -21,7 +21,7 @@
     margin:0; font-family:var(--body); font-size:14px; line-height:1.5;
     background:var(--ink); color:var(--cream); min-height:100vh;
     background-image:
-      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(249,97,103,.13), transparent 70%),
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(125,156,196,.05), transparent 70%),
       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
   }
   header {
@@ -79,7 +79,7 @@
   td.v.pass { color:var(--ok); } td.v.fail { color:var(--cream-dim); }
   .hidden { display:none !important; }
   .err { border-left:2px solid var(--pink); padding:9px 14px; margin-bottom:16px;
-         font:400 12px var(--mono); color:var(--pink); background:rgba(249,97,103,.07); }
+         font:400 12px var(--mono); color:var(--pink); background:rgba(125,156,196,.06); }
 </style>
 </head>
 <body>

@@ -9,16 +9,16 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,600;9..144,900&family=Archivo:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --ink:      #0d1030;
-    --ink-2:    #141845;
-    --ink-3:    #1c2158;
-    --cream:    #f2ece1;
-    --cream-dim:#9a99b8;
-    --pink:     #f96167;
-    --pink-dim: #7a2f41;
-    --rule:     #272c66;
-    --ok:       #4ec98a;
-    --bad:      #f96167;
+    --ink:      #0f1115;
+    --ink-2:    #161920;
+    --ink-3:    #1f232b;
+    --cream:    #e7e9ec;
+    --cream-dim:#8b929d;
+    --pink:     #7d9cc4;
+    --pink-dim: #3c4a5c;
+    --rule:     #262b34;
+    --ok:       #6a9e85;
+    --bad:      #c47070;
 
     --display: "Fraunces", "Iowan Old Style", Georgia, serif;
     --body: "Archivo", "Helvetica Neue", Helvetica, sans-serif;
@@ -31,7 +31,7 @@
     margin: 0; font-family: var(--body); font-size: 14px; line-height: 1.5;
     background: var(--ink); color: var(--cream);
     background-image:
-      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(249,97,103,.13), transparent 70%),
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(125,156,196,.05), transparent 70%),
       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
     min-height: 100vh;
   }
@@ -73,11 +73,11 @@
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
     font: 400 11px var(--mono); color: var(--cream-dim);
     border: 1px solid var(--pink-dim); border-radius: 7px;
-    padding: 6px 10px; margin-bottom: 10px; background: rgba(249,97,103,.07);
+    padding: 6px 10px; margin-bottom: 10px; background: rgba(125,156,196,.06);
   }
   #filter-bar a { color: var(--pink); text-decoration: none; border-bottom: 1px solid currentColor; }
   a.mastery-row { display: block; text-decoration: none; color: inherit; border-radius: 6px; padding: 2px 4px; margin-left: -4px; margin-right: -4px; }
-  a.mastery-row:hover { background: rgba(249,97,103,.08); }
+  a.mastery-row:hover { background: rgba(125,156,196,.11); }
   a.mastery-row:hover .label span:first-child { color: var(--pink); }
   #problem-list { display: flex; flex-direction: column; gap: 6px; max-height: 72vh; overflow-y: auto; }
   .problem-item {
@@ -85,7 +85,7 @@
     cursor: pointer; font-size: 13px; transition: border-color .16s, background .16s;
   }
   .problem-item:hover { border-color: var(--cream-dim); }
-  .problem-item.active { border-color: var(--pink); background: rgba(249,97,103,.09); }
+  .problem-item.active { border-color: var(--pink); background: rgba(125,156,196,.15); }
   .chip {
     display: inline-block; font: 400 10px var(--mono); padding: 1px 7px; border-radius: 999px;
     background: var(--ink-3); color: var(--cream-dim); margin-right: 4px; margin-top: 5px;
@@ -103,7 +103,7 @@
     border-radius: 8px; border: none; background: var(--pink); color: #2a0a10;
     cursor: pointer; transition: transform .14s, box-shadow .14s, opacity .14s;
   }
-  button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 5px 16px rgba(249,97,103,.28); }
+  button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 5px 16px rgba(125,156,196,.22); }
   button:disabled { opacity: .38; cursor: not-allowed; transform: none; box-shadow: none; }
   button.secondary { background: transparent; border: 1px solid var(--rule); color: var(--cream-dim); }
   button.secondary:hover:not(:disabled) { border-color: var(--cream-dim); color: var(--cream); box-shadow: none; }
@@ -117,7 +117,7 @@
   #turns { display: flex; flex-direction: column; gap: 9px; max-height: 46vh; overflow-y: auto; padding-right: 4px; }
   .turn { padding: 10px 13px; border-radius: 10px; font-size: 13.5px; max-width: 86%; line-height: 1.5; }
   .turn.student { align-self: flex-end; background: var(--ink-3); border: 1px solid var(--rule); }
-  .turn.tutor { align-self: flex-start; background: rgba(249,97,103,.10); border: 1px solid var(--pink-dim); }
+  .turn.tutor { align-self: flex-start; background: rgba(125,156,196,.10); border: 1px solid var(--pink-dim); }
   .chat-input { display: flex; gap: 8px; align-items: flex-end; }
   .chat-input textarea {
     flex: 1; min-height: 62px; resize: vertical; padding: 10px 12px; font: 400 13.5px var(--body);
@@ -390,12 +390,35 @@ function setStatus(status) {
   pill.style.display = '';
 }
 
+// An unfinished conversation for this problem, if one exists. Sessions live in
+// Postgres and outlive the tab, but the page only ever reattached via a
+// ?session= link from the record page — so returning to a problem the normal
+// way silently started a second conversation and stranded the first.
+async function openSessionFor(problemId) {
+  try {
+    const rows = await api('/v1/me/sessions');
+    return (rows || []).find(
+      r => r.problem_id === problemId && r.status === 'active'
+    ) || null;
+  } catch (_) {
+    return null;   // no open session is the common case, not an error
+  }
+}
+
 document.getElementById('start-btn').addEventListener('click', async () => {
   const p = state.selected;
   const btn = document.getElementById('start-btn');
   btn.disabled = true;
   const epoch = state.epoch;
   try {
+    // Reattach before creating: two live sessions on one problem would split
+    // the learner's history and leave the tutor reading the shorter half.
+    const open = await openSessionFor(p.id);
+    if (open) {
+      if (!stillCurrent(epoch)) return;
+      await resumeSession(open.session_id);
+      return;
+    }
     const session = await api('/v1/sessions', {
       method: 'POST',
       body: JSON.stringify({
@@ -453,6 +476,21 @@ async function sendTurn() {
   turnsBox.appendChild(thinkingDiv);
   turnsBox.scrollTop = turnsBox.scrollHeight;
 
+  // A generation takes around a minute against the model on CPU, and a static
+  // "thinking" label for that long is indistinguishable from a hang — which
+  // is exactly how it was read: learners sent a second message believing the
+  // first had failed. Counting up says the request is alive, and naming the
+  // expected wait once the count passes a few seconds stops the number itself
+  // from becoming alarming.
+  const startedAt = Date.now();
+  const tick = setInterval(() => {
+    const secs = Math.round((Date.now() - startedAt) / 1000);
+    thinkingDiv.textContent = secs < 5
+      ? 'Tutor is thinking…'
+      : `Tutor is thinking… ${secs}s  ·  replies usually take about a minute`;
+  }, 1000);
+  const stopTicking = () => clearInterval(tick);
+
   const epoch = state.epoch;
   try {
     const session = await api(`/v1/sessions/${state.sessionId}/turns`, {
@@ -470,6 +508,10 @@ async function sendTurn() {
     thinkingDiv.textContent = '';
     alert('Message failed: ' + e.message);
   } finally {
+    // Before the epoch guard below: an interval outlives the view it was
+    // drawing into, so a learner who switches problems mid-flight would
+    // otherwise leave it running for the life of the page.
+    stopTicking();
     // The flag always resets — it guards this function, not the view. The DOM
     // writes do not: re-enabling and focusing the composer for a conversation
     // the learner has navigated away from steals focus from the one they are
