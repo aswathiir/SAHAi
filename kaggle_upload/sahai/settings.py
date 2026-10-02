@@ -53,6 +53,31 @@ class TrainingSettings(BaseModel):
     checkpoint_every: int = 100
     max_grad_norm: float = 1.0
 
+    # Early stopping on held-out solve rate.
+    #
+    # Not on the loss. The surrogate is -min(rho*A, clip(rho)*A) with the
+    # advantage z-scored within its group, so advantages sum to zero and
+    # old_log_probs come from the policy that produced the rollouts: rho = 1 and
+    # the reported loss is ~0 at every epoch by construction. Measured over the
+    # v24 run it ranged -0.00096 to +0.00406 and changed sign four times in nine
+    # transitions. There is no curve to converge.
+    #
+    # Not on the reward either. Reward rising while the thing reward exists to
+    # produce falls is the documented failure of this project, not a
+    # hypothetical: v15 -> v16 took held-out solve from 16.3% to 6.2% while mean
+    # reward reached its first positive value. Stopping on reward would stop at
+    # exactly the wrong point.
+    #
+    # `probe_split` is deliberately NOT the split the final evaluation reports
+    # on. Choosing a checkpoint by its score on the test set makes the reported
+    # number a selection artefact; MBPP ships a validation split, so the probe
+    # uses that and `test` stays untouched until the end.
+    eval_every: int = 0          # 0 disables the probe entirely
+    probe_problems: int = 20
+    probe_split: str = "validation"
+    early_stop_patience: int = 3  # probes without improvement before stopping
+    early_stop_min_delta: float = 0.0
+
 
 class TracerSettings(BaseModel):
     p_init: float = 0.3
@@ -178,6 +203,23 @@ class Settings(BaseModel):
                 # Every 5 epochs, so a session that dies at hour 8 still leaves
                 # usable checkpoints instead of nothing.
                 checkpoint_every=5,
+                # Probe every 2 epochs on 20 held-out validation problems.
+                # Costed from the v24 run's measured 0.893 min/problem: five
+                # probes is 1.5h on top of 4.75h training and a 0.9h final
+                # evaluation, so 7.1h against the 12h session cap. Every epoch
+                # would be 8.6h, which leaves too little margin for a run that
+                # has twice been killed by this limit.
+                #
+                # 20 problems cannot prove a difference is real -- at a true
+                # rate near 0.15 it could only resolve an improvement of about
+                # 40 points. It is not being asked to. It has to rank two
+                # checkpoints well enough to prefer one, which is a much weaker
+                # requirement than significance, and it is still a better
+                # criterion than "whichever epoch happened to be last".
+                eval_every=2,
+                probe_problems=20,
+                probe_split="validation",
+                early_stop_patience=3,
             ),
             dataset="mbpp",
             max_problems=200,
