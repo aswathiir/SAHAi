@@ -47,5 +47,5 @@ gap of about half a standard deviation, which this evaluation cannot resolve
 either way. Pedagogy acceptance reached 1.000, and that number should be read
 with care: it comes from a rule judge with no LLM judge behind it, 73% of
 training rollouts scored exactly 1.0, and 88% of those never solved the
-problem. 324 tests pass. A tutor that generalizes is the open item that gates
+problem. 352 tests pass. A tutor that generalizes is the open item that gates
 everything else — see [06-roadmap.md](06-roadmap.md).

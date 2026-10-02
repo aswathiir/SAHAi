@@ -555,6 +555,12 @@ r_sol 0.0098      r_ped 0.0482      leak 0.0144
 `r_ped` supplies five times the usable signal of the term the project exists to
 optimise. 22 of 24 rollouts scored `r_sol = 0.00` exactly.
 
+> **Superseded for the staged config.** These are the runs that discarded
+> partial credit. The fix below reversed the ordering, and `r_sol` now carries
+> the most within-group variance of the three terms. Measured numbers are under
+> *Measured* at the end of this finding; do not plan against the figures in
+> this block.
+
 ### Why this explains everything else
 
 A policy optimises whatever part of its reward it can actually control. `r_ped`
@@ -648,3 +654,112 @@ sign error would otherwise cost a nine-hour run to find.
 Budget after both changes: the reward phase falls from ~35 to ~14 min/epoch,
 so training is ~6.1 h and a 60-problem greedy eval ~0.6 h — **~6.9 h** of the
 12 h cap including the extra forward pass the ratio needs, against 9.6 h before.
+
+### Measured
+
+The staged config ran on 2026-09-29 (kernel v24, 5.65 h: 4.75 h training,
+53.6 min evaluating 60 held-out problems). Provenance confirmed by
+`lora_dropout: 0.0` in the saved adapter config.
+
+**The partial-credit prediction held, and the ordering reversed.** Mean
+within-group variance, the only variance that survives the z-score:
+
+| term | runs A–C (strict `r_sol`) | v24 (partial credit) |
+|---|---|---|
+| `r_sol` | 0.0098 | **0.0481** |
+| `r_ped` | 0.0482 | 0.0150 |
+| leakage | 0.0144 | 0.0552 |
+
+`r_sol` went from supplying a fifth of `r_ped`'s usable signal to supplying
+three times it. The claim above that "teaching that causes a student to solve
+problems has never been trained at all — it has no usable gradient to train
+on" is no longer true as stated: it now has the largest gradient of the three
+terms. `r_ped`'s variance collapsed for the opposite reason, saturation: 234 of
+320 rollouts (73%) scored exactly 1.0.
+
+**Tutor behaviour moved for the first time.** Across ten epochs, tutor turns
+containing a question went 10% → 61% and turns containing code went 27% → 8%,
+mean turn length 574 → 393 characters. Compare v11, where the same measurements
+went 11.7% → 12.6% and 30.5% → 30.2%: nothing. The learning-rate raise from
+2e-5 to 1e-4 is the plausible cause, and group reward spread stayed at
+sd 0.18–0.58 throughout, so there was real signal to learn from.
+
+**Held-out solve still did not follow.** Final evaluation on 60 problems:
+
+| Solve | Partial | Ped | Leak | Reward |
+|---|---|---|---|---|
+| 0.117 | 0.150 | 1.000 | 0.004 | −0.152 |
+
+Per-epoch training solve has no trend — 0.28, 0.01, 0.13, 0.02, 0.21, 0.33,
+0.05, 0.26, 0.07, 0.31, sd 0.126. The asymmetry the finding describes is
+reduced but not gone:
+
+| run | corr(ep, `r_ped`) | corr(ep, leak) | corr(ep, `r_sol`) |
+|---|---|---|---|
+| A | +0.80 | −0.64 | +0.48 |
+| B | +0.99 | −0.80 | +0.54 |
+| C | +0.64 | −0.48 | +0.01 |
+| **D (v24)** | **+0.86** | **−0.73** | **+0.24** |
+
+**`ped_acceptance = 1.000` is a measurement failure, not a result.** It comes
+from the rule judge with `num_judges=0`, so it means "satisfied the rules", not
+"taught well". Of the 234 rollouts scoring exactly 1.0, **207 (88%) never
+solved the problem**. This rollout scored 1.0:
+
+> *"Hum arrays ke liye logic use kar sakta hai, aur unki first occurrence ka
+> index nikalna chahiye. Iske baare mein bahut samajh lenge jaana chaiye."*
+
+Broken grammar, no question, no explanation. A term that a third of rollouts
+saturate has stopped supplying gradient and is close to uncorrelated with
+whether the tutoring worked. Reporting it as a pedagogy score without that
+caveat would be the same error as reading the old `r_ped` curves as learning.
+
+**76% of rollouts still score `r_sol` exactly 0.** Partial credit widened the
+distribution but most attempts still pass no tests at all, so the resolution
+gained is smaller than the variance figures alone suggest.
+
+### Why none of this was stopped at the right epoch
+
+Nothing was watching. `train()` was `for epoch in range(epochs)` with no early
+stopping and no checkpoint selection — grep for either returned zero — and
+`epochs=10` is a wall-clock budget against Kaggle's 12 h session cap
+(`settings.py`: 20 epochs ≈ 16.7 h, killed near epoch 14 with no eval), not a
+convergence criterion. `final_model` was epoch 9 purely because it was last,
+while epoch 5 scored 0.333 and epoch 8 scored 0.073.
+
+**The loss cannot supply that criterion, and never could.** The surrogate is
+`−min(rho·A, clip(rho)·A)` with the advantage z-scored inside its group, so
+advantages sum to zero; `old_log_probs` come from the policy that generated the
+rollouts, so `rho = 1` and the expression reduces to `−mean(A) = 0`. Measured
+across v24, `policy_loss` ran −0.00096 to +0.00406 and changed sign four times
+in nine transitions. It is at zero from epoch 0 and carries no information about
+tutor quality. `kl_loss` went negative in 4 of 10 epochs, which a true KL cannot
+do, confirming it is a signed single-sample estimator rather than a diagnostic.
+
+Reward is no better a criterion: finding 11 above is reward rising to its first
+positive value while held-out solve halved. Stopping on reward stops at the
+Goodhart point by construction.
+
+So the signal has to be held-out solve rate. `sahai/training/early_stop.py`
+now probes 20 problems from MBPP's **validation** split every 2 epochs, keeps
+the best as `output/best_model` with a `selection.json` recording the epoch and
+score, and stops after 3 probes without improvement. The split is deliberately
+not `test`: choosing a checkpoint by its score on the reported split makes that
+score a selection artefact. Costed at the measured 0.893 min/problem, five
+probes add 1.5 h, for 7.1 h against the 12 h cap.
+
+Twenty problems cannot establish significance — at a true rate near 0.15 the
+smallest improvement detectable at 80% power is roughly 40 points. It is not
+asked to. Ranking two checkpoints well enough to prefer one is a far weaker
+requirement than significance, and still better than preferring whichever epoch
+ran last.
+
+### What is still unmeasured
+
+No run has compared the trained tutor against the model it started from.
+Every evaluation so far scored one arm and compared it to a remembered number
+from an earlier run, at `n = 20`, where nothing smaller than a ~40-point
+difference was ever detectable. `sahai/eval/ab_benchmark.py` runs three arms
+— no tutor, the same checkpoint with LoRA disabled, and the trained adapter —
+paired on one problem bank, compared with McNemar's exact test on the problems
+where two arms disagree. It has not been run; it needs the GPU.
