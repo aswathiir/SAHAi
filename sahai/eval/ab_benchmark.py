@@ -161,6 +161,12 @@ def main() -> None:
     ap.add_argument("--out", default="ab_benchmark.json")
     ap.add_argument("--arms", default="unaided,base,trained")
     ap.add_argument(
+        "--device", default="auto",
+        help="auto resolves cuda -> mps -> cpu. settings.device says 'cuda' "
+             "because that is what Kaggle has; auto lets the same script run "
+             "on Apple Silicon without editing settings.",
+    )
+    ap.add_argument(
         "--solve-context", default=None, choices=["full", "hints"],
         help="How tutoring reaches the solve attempt. Sets SAHAI_SOLVE_CONTEXT.",
     )
@@ -175,7 +181,7 @@ def main() -> None:
     import torch
     from sahai.settings import Settings
     from sahai.core.dataset import load_mbpp
-    from sahai.core.models import load_for_inference
+    from sahai.core.models import load_for_inference, resolve_device
     from sahai.agents.tutor import TutorPolicy
     from sahai.agents.student import StudentSimulator, StudentPersona
     from sahai.reward.pedagogy import PedagogyReward
@@ -200,8 +206,10 @@ def main() -> None:
     # `load_for_training`: that attaches a *fresh, untrained* LoRA, which would
     # make the "trained" arm silently identical to the base arm and the whole
     # benchmark a comparison of a model with itself.
+    device = resolve_device(args.device)
+    logger.info("device: %s (requested %s)", device, args.device)
     tutor_model, tutor_tok = load_for_inference(
-        settings.model.tutor, settings.model.dtype, settings.device
+        settings.model.tutor, settings.model.dtype, device
     )
     if args.adapter:
         from peft import PeftModel
@@ -212,7 +220,7 @@ def main() -> None:
         raise SystemExit("--arms includes 'trained' but no --adapter was given")
 
     student_model, student_tok = load_for_inference(
-        settings.model.student, settings.model.dtype, settings.device,
+        settings.model.student, settings.model.dtype, device,
         quantize_4bit=settings.model.student_quantize_4bit,
     )
     persona = StudentPersona(ability_level=2, code_mixing_ratio=0.3,
@@ -269,6 +277,7 @@ def main() -> None:
                   f"p={m['p_value']:.3f}  [{verdict}]")
 
     out = {"n": n, "split": args.split, "adapter": args.adapter,
+           "device": device,
            "solve_context": os.getenv("SAHAI_SOLVE_CONTEXT", "full"),
            "arms": {k: asdict(v) for k, v in results.items()},
            "mcnemar": stats,
