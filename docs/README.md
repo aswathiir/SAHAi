@@ -39,13 +39,16 @@ database, no network and no ability to execute code.
 
 Infrastructure is essentially complete, including a student-facing assessment
 interface (`services/gateway/app/static/`) served off the gateway. The
-science has started but isn't there yet, and a benchmark on 2026-10-02 moved
-the open question. Three arms on 60 paired held-out problems: a student tutored
-by this system solves **0.133**, the same student with an empty dialogue solves
-**0.283** (McNemar p=0.0117), and the trained adapter is indistinguishable from
-the untrained one it came from (p=1.0). Tutoring currently costs the learner
-about 15 points and the training is not the cause. See
-[04-findings.md](04-findings.md) #15.
+science has started but isn't there yet, and two benchmarks on 2026-10-02
+moved the open question. On 60 paired held-out problems a student with **no
+tutor** solves **0.317**, against **0.250** for the best tutored arm and 0.150
+for the untrained tutor. Changing how the transcript reaches the solve attempt
+(tutor hints only, instead of replaying the student's own confusion back at it)
+recovers part of the gap, +0.05 to +0.07, but not significantly (p=0.23), and
+the trained adapter still cannot be shown to beat the untrained one it came
+from (p=0.42 pooled) despite moving pedagogy 0.758 to 0.986 and leakage 0.299
+to 0.045. Tutoring as built does not help this student solve problems. See
+[04-findings.md](04-findings.md) #15 and #16.
 
 The 2026-09-29 run is the first in
 which the tutor's measured behaviour moved: questions rose from 10% to 61% of

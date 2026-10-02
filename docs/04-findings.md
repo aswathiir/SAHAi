@@ -894,3 +894,115 @@ The order of work this implies:
    confused learner, and the finding may be a fact about that roleplay rather
    than about tutoring. A student that performs worse after being helped is not
    a model of a human learner, and the project's claims are about humans.
+
+## 16. The framing was part of the harm, but not all of it
+
+Run on 2026-10-02 (kernel `sahai-a-b-benchmark` v2, ~3 h, Tesla T4). Two passes
+over the same 60 held-out problems under the **same fixed solve prompt**, so
+the only difference between passes is how the tutoring reaches the solve
+attempt. Running `hints` alone would have confounded the framing with the
+prompt fixes landed beside it, which is how v14 produced a result nothing could
+be attributed to.
+
+| arm | framing | solve | partial |
+|---|---|---|---|
+| **unaided** | — | **0.317** (19/60) | **0.356** |
+| base | full | 0.150 (9/60) | 0.172 |
+| trained | full | 0.183 (11/60) | 0.222 |
+| base | hints | 0.200 (12/60) | 0.239 |
+| trained | hints | 0.250 (15/60) | 0.328 |
+
+### The prompt fixes were real
+
+Every arm rose against finding 15, which used the truncated 80-character
+statement and told the control it had received hints it never got:
+
+```
+unaided       0.283 -> 0.317   (+0.034)
+base (full)   0.117 -> 0.150   (+0.033)
+trained(full) 0.133 -> 0.183   (+0.050)
+```
+
+### The headline survives
+
+No tutor still beats every tutored arm, on every point estimate:
+
+| comparison | discordant | p | reading |
+|---|---|---|---|
+| unaided → base (full) | base 3, unaided 13 | **0.0213** | unaided better |
+| unaided → trained (full) | trained 3, unaided 11 | 0.0574 | not resolvable |
+| unaided → base (hints) | base 1, unaided 8 | **0.0391** | unaided better |
+| unaided → trained (hints) | trained 4, unaided 8 | 0.3877 | not resolvable |
+
+### The framing hypothesis is supported in direction and unconfirmed in fact
+
+| arm | full → hints | discordant | p |
+|---|---|---|---|
+| base | +0.050 | hints 7, full 4 | 0.5488 |
+| trained | +0.067 | hints 9, full 5 | 0.4240 |
+| pooled | — | hints 16, full 9 | 0.2295 |
+
+Both arms move the same way and the gap to unaided narrows for the trained
+tutor from −0.133 (p = 0.057) to −0.067 (p = 0.388). That is consistent with
+the mechanism in finding 15 — the student being conditioned on its own
+expressed confusion — but **p = 0.23 is not evidence for it**. The stated test
+was "if the gap closes under `hints`, the harm was the framing". The gap
+narrowed; it did not close, and the narrowing is itself within noise.
+
+**Losing significance is not gaining parity.** `trained(hints)` versus unaided
+is p = 0.388 with a point estimate of −0.067 and discordant counts of 4 against
+8. The correct statement is "no longer detectable at n = 60", not "no longer
+harmful".
+
+### The training now points the right way, and still cannot be shown to work
+
+| framing | base → trained | discordant | p |
+|---|---|---|---|
+| full | +0.033 | trained 7, base 5 | 0.7744 |
+| hints | +0.050 | trained 8, base 5 | 0.5811 |
+| pooled | — | trained 15, base 10 | 0.4244 |
+
+Finding 15 had this at 5 against 4, p = 1.0. Four comparisons across two runs
+now all favour the trained adapter and not one of them is significant. The
+pooled figures are descriptive only: the comparisons share problems, so they
+are not independent and the pooled p is not a valid test.
+
+### What it would take to settle either question
+
+McNemar depends on the discordant pairs, and about 20% of problems were
+discordant here.
+
+* Framing (16:9): significant at roughly three times the discordant count, so
+  **~180 problems per arm**.
+* Unaided versus `trained(hints)` (4:8 against): **~180 problems per arm**.
+
+At the measured 0.893 min/problem a 180-problem arm is 2.7 h, so a four-arm
+design is ~11 h and does not fit one session alongside the unaided arm. Either
+split across two sessions, or accept that the remaining effects are smaller
+than this evaluation can see.
+
+### Where that leaves the project
+
+Three things are now measured rather than argued:
+
+1. **Tutoring, as built, does not help this student solve problems.** The best
+   tutored arm sits 6.7 points below no tutoring, and the two untrained arms
+   are significantly below it.
+2. **The solve prompt was carrying real defects**, worth +3 to +5 points once
+   fixed, and they had been invisible for six runs because no run had ever
+   included an untutored arm.
+3. **The training moves tutor behaviour hard and outcomes not at all.** Finding
+   15 measured pedagogy 0.758 → 0.986 and leakage 0.299 → 0.045 between the
+   same two arms whose solve rates differ by 0.033, p = 0.77.
+
+The reward consequence from finding 15 stands. `r_sol − alpha` is the only term
+that pays for teaching, and if a dialogue lowers `r_sol` relative to no
+dialogue then that term is negative for tutoring in general — a thing no policy
+over tutor text can fix, because the tutor cannot choose to be absent.
+
+The next question is no longer about the prompt. It is whether a 1.5B model
+roleplaying a confused learner can be helped by anything at all, because a
+student that performs worse after assistance is not a model of a human learner,
+and the project's claims are about humans. Transcripts for all 300 arm-problems
+are now saved beside their outcomes in the benchmark output, so that question
+can be examined on evidence rather than on hypotheses about framing.
