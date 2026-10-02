@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import random
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -157,6 +158,50 @@ class StudentSimulator:
         # over this text.
         return drop_dangling_promise(text) or text
 
+    def _solve_context(self, dialogue: Dialogue) -> list[dict[str, str]]:
+        """How the tutoring reaches the solution attempt.
+
+        `SAHAI_SOLVE_CONTEXT` selects the framing:
+
+        * `full` (default, and what every run to date used) replays the whole
+          transcript, mapping the student's own turns to `assistant` and the
+          tutor's to `user`.
+        * `hints` passes only the tutor's turns, as a single user message.
+
+        Why this is a parameter rather than a fix. The 2026-10-02 benchmark
+        measured, on 60 paired problems, that a tutored student solves 0.133
+        against 0.283 for the same student with an empty dialogue
+        (McNemar p=0.0117). Under `full`, the model about to write code has its
+        own hedging in its assistant history: across 1002 student turns in the
+        v24 rollouts, 20% express confusion and 28% claim an understanding the
+        solve rate does not support. A chat model conditions heavily on its own
+        prior assistant turns, so it is being asked to write a solution
+        immediately after telling itself it does not understand the problem.
+
+        That is a hypothesis with a mechanism, not a measurement. The
+        alternatives -- context length, Hinglish code-mixing, the tutor's hints
+        being actively misleading -- are not excluded by anything measured so
+        far. `hints` exists so the two can be compared on the same problems
+        instead of argued about, and the default is unchanged so existing
+        results stay comparable until that comparison is run.
+        """
+        mode = os.getenv("SAHAI_SOLVE_CONTEXT", "full").lower()
+
+        if mode == "hints":
+            hints = [t.content for t in dialogue.turns if t.role == "tutor"]
+            if not hints:
+                return []
+            body = "\n\n".join(f"Hint {i}: {h}" for i, h in enumerate(hints, 1))
+            return [{"role": "user", "content": f"Your tutor told you:\n\n{body}"}]
+
+        return [
+            {
+                "role": "assistant" if t.role == "student" else "user",
+                "content": t.content,
+            }
+            for t in dialogue.turns
+        ]
+
     def attempt_solution(self, dialogue: Dialogue, problem: Problem) -> str:
         """The student's post-tutoring solution attempt — decoded **greedily**.
 
@@ -178,17 +223,41 @@ class StudentSimulator:
         its within-group variance now comes from what the tutor said. It is
         also ~4x cheaper, because one 512-token generation replaces four.
         """
+        # Three defects, found by the 2026-10-02 benchmark and fixed here.
+        #
+        # 1. The prompt asserted tutoring had happened even when the dialogue
+        #    was empty: "you just received tutoring", "based on the hints you
+        #    received". The unaided arm of a benchmark is exactly the case with
+        #    no hints, so the control was being told to use hints that did not
+        #    exist. That disadvantaged the control, which makes the measured
+        #    result conservative rather than inflated, but it is still wrong.
+        # 2. Only `problem.title` reached the prompt, and title is
+        #    `row["text"][:80]` — the description truncated at 80 characters,
+        #    frequently mid-clause. The student was solving from a cut-off
+        #    statement while the tutor saw the whole thing.
+        # 3. See `_solve_context` below for the dialogue-framing defect, which
+        #    is the one that plausibly explains the benchmark result.
+        tutored = bool(dialogue.turns)
+        opening = (
+            "You are a student who has just been tutored on this problem."
+            if tutored
+            else "You are a student solving this problem on your own."
+        )
+        guidance = (
+            "Use the hints you were given, and write a Python solution."
+            if tutored
+            else "Write a Python solution."
+        )
         system = (
-            f"You are a student who just received tutoring on: {problem.title}.\n"
+            f"{opening}\n"
             f"Your ability level is {self.persona.ability_level}/5.\n"
-            f"Based on the hints you received, write a Python solution.\n"
+            f"Problem: {problem.description}\n"
+            f"{guidance}\n"
             f"Only output the function implementation, nothing else.\n"
             f"Signature: {problem.function_signature}"
         )
         messages = [{"role": "system", "content": system}]
-        for turn in dialogue.turns:
-            role = "assistant" if turn.role == "student" else "user"
-            messages.append({"role": role, "content": turn.content})
+        messages.extend(self._solve_context(dialogue))
         messages.append({"role": "user", "content": "Now write your solution:"})
 
         text = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)

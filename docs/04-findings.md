@@ -763,3 +763,134 @@ difference was ever detectable. `sahai/eval/ab_benchmark.py` runs three arms
 — no tutor, the same checkpoint with LoRA disabled, and the trained adapter —
 paired on one problem bank, compared with McNemar's exact test on the problems
 where two arms disagree. It has not been run; it needs the GPU.
+
+## 15. Tutoring makes the student worse, and the training is not the reason
+
+Run on 2026-10-02 (kernel `sahai-a-b-benchmark` v1, Tesla T4 sm_75, 92.4 min).
+Three arms, 60 held-out MBPP test problems, **the same problems in the same
+order for every arm**, compared with McNemar's exact test. The adapter is v24's
+`final_model` (`lora_dropout 0.0`), which is the last epoch rather than a
+checkpoint selected on held-out score; early stopping landed after that run.
+
+| arm | solve | partial | ped | leak | min |
+|---|---|---|---|---|---|
+| **unaided** (empty dialogue) | **0.283** | **0.339** | — | 0.000 | 8.5 |
+| base (same weights, LoRA off) | 0.117 | 0.128 | 0.758 | 0.299 | 40.3 |
+| trained (v24 adapter) | 0.133 | 0.183 | 0.986 | 0.045 | 41.9 |
+
+| comparison | discordant | p | reading |
+|---|---|---|---|
+| unaided → trained | trained 1, unaided 10 | **0.0117** | unaided better |
+| unaided → base | base 1, unaided 11 | **0.0063** | unaided better |
+| base → trained | trained 5, base 4 | 1.0000 | not resolvable |
+
+**A student tutored by this system solves fewer problems than the same student
+left alone.** 17 of 60 against 8 of 60. On ten problems the student solved it
+unaided and failed after tutoring; the reverse happened once.
+
+**The training is not what caused it.** `base` and `trained` are indis-
+tinguishable on solve (5 discordant against 4, p = 1.0). Both are worse than no
+tutor. The harm is in the tutoring loop, not in the adapter.
+
+**And the training did work, at what it optimises.** Pedagogy 0.758 → 0.986 and
+leakage 0.299 → 0.045 between the same two arms. GRPO moved the terms it
+controls, hard and in the intended direction, with no effect on the outcome.
+Finding 14 inferred that from correlations across runs; this measures it
+directly, in one session, on one problem set.
+
+### Why this is not a measurement artefact
+
+The `base` tutor **leaks the answer at 0.299 and still solves 0.117**, against
+0.283 for an empty dialogue. Leakage hands over the solution, so it should
+raise solve rate. The dialogue is costing more than a leaked answer gains.
+Partial credit gives the same ordering (0.339 / 0.128 / 0.183), so it is not an
+artefact of the strict pass threshold either.
+
+### The pairing is what found it
+
+The effect is 15 points. The two-proportion minimum detectable difference at
+n = 60 and a true rate near 0.15 is **+22.3 points**, so an unpaired comparison
+would have returned nothing and the result would have read as "no difference
+detected". McNemar found it at p = 0.0117 by looking only at the 11 problems
+where the arms disagreed. Every earlier evaluation in this project was
+unpaired and at n = 20.
+
+### It is the presence of a dialogue, not its content
+
+Across the 320 v24 rollouts, nothing about *what was said* predicts whether the
+student then solved the problem:
+
+```
+corr(r_ped,        solved) = +0.050
+corr(leakage,      solved) = +0.013
+corr(dialogue len, solved) = -0.086
+```
+
+Splitting rather than correlating says the same: rollouts with `leak > 0.1`
+solved 0.087, rollouts with `leak <= 0.1` solved 0.105. Being told the answer
+is worth nothing measurable.
+
+So the benchmark's gap is not "the tutoring was bad". A dialogue of any kind in
+the context costs about 15 points, and its quality moves that by roughly
+nothing.
+
+### Three defects in the prompt the student solves from
+
+Found by reading `StudentSimulator.attempt_solution` after the result came in.
+None were visible while every run tutored every attempt, which is how they
+survived six runs.
+
+1. **The prompt asserted tutoring that had not happened.** It opened with "you
+   just received tutoring" and "based on the hints you received" regardless of
+   whether the dialogue was empty. The control arm of a benchmark is exactly
+   the no-hints case. This disadvantaged the control, so the measured result is
+   conservative, but it is still wrong and is now conditional on
+   `bool(dialogue.turns)`.
+2. **The student solved from a truncated problem statement.** Only
+   `problem.title` reached the prompt, and `title` is `row["text"][:80]` — the
+   description cut at 80 characters, often mid-clause — while the tutor saw
+   `problem.description` in full. Now fixed to the full description.
+3. **The student's own confusion is replayed into its assistant history.**
+   The transcript is mapped `student -> assistant`, `tutor -> user`, so the
+   model about to write code has its own hedging as its previous assistant
+   turns. Across 1002 student turns in the v24 rollouts, **20% express
+   confusion** ("I don't understand", "samajh nahi aaya") and **28% claim an
+   understanding the solve rate does not support**. A chat model conditions
+   heavily on its own prior output, and this one is asked to produce a solution
+   immediately after telling itself it does not understand the problem.
+
+(3) is a hypothesis with a mechanism, not a measurement. Context length,
+Hinglish code-mixing, and hints that are actively misleading are not excluded
+by anything measured so far. `SAHAI_SOLVE_CONTEXT=hints` now passes only the
+tutor's turns, as a single user message, so the two framings can be compared on
+the same problems. The default stays `full` so existing results remain
+comparable until that comparison has been run.
+
+### What this means for the project
+
+The reward is `r_SAHAI = (r_sol - alpha) + (r_ped - 1)*lambda - gamma*L`, and
+`r_sol - alpha` is the only term that rewards teaching. If a dialogue reliably
+*lowers* `r_sol` relative to no dialogue, that term is negative for tutoring in
+general, and no policy over tutor text can fix it: the tutor cannot choose to
+be absent. The reward is then maximised by saying as little as possible, which
+is consistent with mean turn length falling 574 -> 393 characters over v24.
+
+The order of work this implies:
+
+1. **Re-run the benchmark with `--solve-context hints`.** If the gap closes,
+   the harm was the framing and the project's premise survives. If it does not,
+   the problem is the simulated student rather than the prompt. This is one
+   T4 session and it gates everything below it.
+2. **Keep the dialogues.** The first run produced a significant result it could
+   not explain, because only scores were saved and diagnosis had to borrow
+   training rollouts from a different problem set. `ab_benchmark` now dumps
+   every transcript next to its outcome.
+3. **Do not tune the reward until (1) is answered.** Every historical gain came
+   from removing a distortion in the rule-based channel, and the one attempt to
+   add an incentive was gamed inside a single run. Tuning `lambda` or `gamma`
+   while the outcome term is negative by construction would optimise a
+   quantity that cannot reward teaching.
+4. **Re-examine the student.** This measures a 1.5B model roleplaying a
+   confused learner, and the finding may be a fact about that roleplay rather
+   than about tutoring. A student that performs worse after being helped is not
+   a model of a human learner, and the project's claims are about humans.

@@ -54,6 +54,11 @@ class ArmResult:
     r_ped: list[float] = field(default_factory=list)
     leak: list[float] = field(default_factory=list)
     seconds: float = 0.0
+    # The transcript behind each outcome. The first run of this benchmark
+    # produced a significant result it could not explain, because only the
+    # scores were kept and the dialogues were thrown away; diagnosing it meant
+    # borrowing training rollouts from a different problem set.
+    dialogues: list[dict] = field(default_factory=list)
 
     @property
     def solve_rate(self) -> float:
@@ -132,9 +137,17 @@ def run(problems, tutor, student, evaluator, pedagogy, arm: str) -> ArmResult:
                 problem_text=f"{problem.title} {problem.description}",
             ) if tutor is not None else 0.0
         )
-        logger.info("[%s] %d/%d %s solved=%d partial=%.2f",
+        res.dialogues.append({
+            "problem_id": problem.id,
+            "solved": res.solved[-1],
+            "partial": res.partial[-1],
+            "turns": [
+                {"role": t.role, "content": t.content} for t in dialogue.turns
+            ],
+        })
+        logger.info("[%s] %d/%d %s solved=%d partial=%.2f turns=%d",
                     arm, i, len(problems.problems), problem.id,
-                    res.solved[-1], res.partial[-1])
+                    res.solved[-1], res.partial[-1], len(dialogue.turns))
 
     res.seconds = time.time() - t0
     return res
@@ -147,9 +160,17 @@ def main() -> None:
     ap.add_argument("--split", default="test")
     ap.add_argument("--out", default="ab_benchmark.json")
     ap.add_argument("--arms", default="unaided,base,trained")
+    ap.add_argument(
+        "--solve-context", default=None, choices=["full", "hints"],
+        help="How tutoring reaches the solve attempt. Sets SAHAI_SOLVE_CONTEXT.",
+    )
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    if args.solve_context:
+        os.environ["SAHAI_SOLVE_CONTEXT"] = args.solve_context
+    logger.info("solve context framing: %s",
+                os.getenv("SAHAI_SOLVE_CONTEXT", "full"))
 
     import torch
     from sahai.settings import Settings
@@ -248,6 +269,7 @@ def main() -> None:
                   f"p={m['p_value']:.3f}  [{verdict}]")
 
     out = {"n": n, "split": args.split, "adapter": args.adapter,
+           "solve_context": os.getenv("SAHAI_SOLVE_CONTEXT", "full"),
            "arms": {k: asdict(v) for k, v in results.items()},
            "mcnemar": stats,
            "min_detectable_at_0.15": min_detectable(n, 0.15)}

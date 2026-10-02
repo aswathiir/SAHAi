@@ -39,7 +39,15 @@ database, no network and no ability to execute code.
 
 Infrastructure is essentially complete, including a student-facing assessment
 interface (`services/gateway/app/static/`) served off the gateway. The
-science has started but isn't there yet. The 2026-09-29 run is the first in
+science has started but isn't there yet, and a benchmark on 2026-10-02 moved
+the open question. Three arms on 60 paired held-out problems: a student tutored
+by this system solves **0.133**, the same student with an empty dialogue solves
+**0.283** (McNemar p=0.0117), and the trained adapter is indistinguishable from
+the untrained one it came from (p=1.0). Tutoring currently costs the learner
+about 15 points and the training is not the cause. See
+[04-findings.md](04-findings.md) #15.
+
+The 2026-09-29 run is the first in
 which the tutor's measured behaviour moved: questions rose from 10% to 61% of
 turns and code fell from 27% to 8% across ten epochs. Held-out solve rate did
 not follow, at 0.117 on 60 problems against a best-so-far of 0.163 on 20 — a
@@ -47,5 +55,5 @@ gap of about half a standard deviation, which this evaluation cannot resolve
 either way. Pedagogy acceptance reached 1.000, and that number should be read
 with care: it comes from a rule judge with no LLM judge behind it, 73% of
 training rollouts scored exactly 1.0, and 88% of those never solved the
-problem. 352 tests pass. A tutor that generalizes is the open item that gates
+problem. 363 tests pass. A tutor that generalizes is the open item that gates
 everything else — see [06-roadmap.md](06-roadmap.md).
