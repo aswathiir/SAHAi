@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import torch
 
 from sahai.core.dialogue import DialogueEngine
+from sahai.training.early_stop import EarlyStopper
 from sahai.reward.combined import SAHAIReward
 from sahai.reward.leakage import LeakageEstimator
 from sahai.reward.solve import CodeVerifier, SolveReward, tutor_code_solves
@@ -51,6 +52,9 @@ class TrainMetrics:
     # Fraction of attempts passing every test. `mean_solve_rate` is partial
     # credit now; this is the series that lines up with runs before that.
     mean_solved: float = 0.0
+    # Strict solve rate on the held-out probe split, present only on the epochs
+    # where the probe ran. This, not `policy_loss`, is the stopping signal.
+    probe_solve: float | None = None
 
 
 class GRPOTrainer:
@@ -255,6 +259,11 @@ class GRPOTrainer:
         output_dir = Path(self.settings.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         step = 0
+        epoch = -1
+        cfg = self.settings.training
+        stopper = EarlyStopper(
+            patience=cfg.early_stop_patience, min_delta=cfg.early_stop_min_delta
+        )
 
         for epoch in range(self.settings.training.epochs):
             batch_size = self.settings.training.batch_size
@@ -326,7 +335,36 @@ class GRPOTrainer:
             if step % self.settings.training.checkpoint_every == 0:
                 self._checkpoint(output_dir, epoch, step)
 
+            # Probe, select, and possibly stop. Deliberately after the BKT
+            # update above so the probe sees the same learner state the next
+            # epoch's curriculum will.
+            if cfg.eval_every and (epoch + 1) % cfg.eval_every == 0:
+                score = self._probe()
+                if score is not None:
+                    metrics.probe_solve = score
+                    self._write_metrics(output_dir, all_metrics)
+                    d = stopper.observe(epoch, score)
+                    if d.improved:
+                        logger.info("Probe solve %.3f is a new best", score)
+                        self._save_best(output_dir, epoch, score)
+                    else:
+                        logger.info(
+                            "Probe solve %.3f does not improve on %.3f "
+                            "(%d/%d probes without improvement)",
+                            score, d.best_score, d.stale, cfg.early_stop_patience,
+                        )
+                    if d.should_stop:
+                        logger.info(
+                            "Early stop at epoch %d: %d probes without improvement",
+                            epoch, d.stale,
+                        )
+                        break
+
         self._checkpoint(output_dir, epoch, step)
+
+        # The final-epoch weights are not necessarily the best ones, and
+        # nothing used to say so.
+        logger.info("Checkpoint selection: %s", stopper.summary(epoch))
         return all_metrics
 
     def _write_metrics(self, output_dir: Path, metrics: list[TrainMetrics]) -> None:
@@ -419,3 +457,84 @@ class GRPOTrainer:
         self.tutor.model.save_pretrained(path)
         self.tutor.tokenizer.save_pretrained(path)
         logger.info(f"Checkpoint saved: {path}")
+
+    def _probe_bank(self) -> ProblemBank | None:
+        """Held-out problems for early stopping, loaded once.
+
+        A different split from the one the final evaluation reports on. Picking
+        a checkpoint by its score on the test set turns that score into a
+        selection artefact rather than a held-out measurement.
+        """
+        if getattr(self, "_probe_cache", None) is not None:
+            return self._probe_cache
+        cfg = self.settings.training
+        try:
+            from sahai.core.dataset import load_mbpp
+
+            self._probe_cache = load_mbpp(
+                split=cfg.probe_split, max_problems=cfg.probe_problems
+            )
+            logger.info(
+                "Probe set: %d problems from the '%s' split",
+                len(self._probe_cache.problems), cfg.probe_split,
+            )
+        except Exception as exc:  # noqa: BLE001 - a probe is not a precondition
+            logger.warning(
+                "Could not load the '%s' split (%s); early stopping disabled",
+                cfg.probe_split, type(exc).__name__,
+            )
+            self._probe_cache = None
+        return self._probe_cache
+
+    def _probe(self) -> float | None:
+        """Strict solve rate on held-out problems, for the stopping decision.
+
+        Returns the all-or-nothing rate, not partial credit, because that is
+        the series every earlier run is comparable on.
+
+        Two pieces of state have to survive this untouched. The tutor goes back
+        to train() afterwards, and the student's BKT skills are snapshotted and
+        restored: the probe runs dialogues, and letting those update the
+        learner model would feed held-out problems back into the curriculum the
+        next epoch samples from.
+        """
+        bank = self._probe_bank()
+        if not bank or not bank.problems:
+            return None
+
+        saved_skills = dict(self.student.tracer.skills)
+        was_training = self.tutor.model.training
+        self.tutor.model.eval()
+        solved = 0
+        try:
+            with torch.no_grad():
+                for problem in bank.problems:
+                    dialogue = self.dialogue_engine.run(self.tutor, self.student, problem)
+                    outcome = self.solve_reward.compute(self.student, dialogue, problem)
+                    solved += 1 if outcome.solved >= 1.0 else 0
+        finally:
+            self.student.tracer.skills = saved_skills
+            if was_training:
+                self.tutor.model.train()
+
+        return solved / len(bank.problems)
+
+    def _save_best(self, output_dir: Path, epoch: int, score: float) -> None:
+        path = output_dir / "best_model"
+        path.mkdir(parents=True, exist_ok=True)
+        self.tutor.model.save_pretrained(path)
+        self.tutor.tokenizer.save_pretrained(path)
+        (path / "selection.json").write_text(
+            json.dumps(
+                {
+                    "epoch": epoch,
+                    "probe_solve": score,
+                    "probe_split": self.settings.training.probe_split,
+                    "probe_problems": self.settings.training.probe_problems,
+                    "criterion": "strict held-out solve rate, maximised",
+                },
+                indent=2,
+            )
+        )
+        logger.info("New best (probe solve=%.3f at epoch %d) saved to %s",
+                    score, epoch, path)
