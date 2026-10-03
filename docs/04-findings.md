@@ -1071,3 +1071,91 @@ The honest form of the next run is a paired one: same configuration, same
 seeds, `mu_correct` at 0 and at some positive value, compared on held-out solve
 rate with the benchmark that exists. Anything less and the term joins the list
 of changes whose effect was never established.
+
+## 18. The correctness term: inconclusive, and the experiment was not paired
+
+Two runs on 2026-10-03, `mu_correct` 0.0 and 0.5, a Qwen2.5-7B judge in 4-bit
+at 5.07 GB, ~7.9 h each. Both selected epoch 3 by early stopping, so neither
+shipped its final epoch.
+
+### The experiment was confounded before it started
+
+`settings.seed` has existed since the beginning and was **applied nowhere in
+the training path**. `zpd_sample` draws randomly inside its difficulty window
+and both agents sample their turns, so the two arms drew **different problems
+in epoch 0, before a single gradient step**. Verified directly: the epoch-0
+problem lists differ and so do the per-rollout `r_ped` values.
+
+Any difference between the arms therefore carries training nondeterminism as
+well as `mu_correct`. `seed_everything` now covers `random`, torch, CUDA and
+numpy; GPU reductions remain non-bitwise-reproducible, so runs are comparable
+rather than identical.
+
+### The term was paid for and went down
+
+Recomputed from the rollout dumps, since `metrics.json` dropped the fields (see
+below):
+
+| | correctness, first 3 → last 3 | Δ |
+|---|---|---|
+| control (μ=0) | +0.273 → +0.276 | +0.003 |
+| treatment (μ=0.5) | +0.622 → +0.333 | **−0.288** |
+
+The judge fired on 72–97% of rollouts in both arms, so this is not a coverage
+failure. The treatment was rewarded 0.5 per unit of correctness and the policy
+drove it **down**, while both arms moved the terms they always move: `r_ped`
+0.78 → 0.97, leakage 0.44 → 0.11.
+
+The reading that fits is that `r_ped` at weight 1.0 is cheaper to satisfy than
+correctness at 0.5, because `r_ped` is a deterministic function of the tutor's
+own text and correctness requires being right about something the tutor does
+not control. Given the choice the policy took the cheap term, which is the same
+preference every run has shown.
+
+### Held-out, paired on one bank
+
+| arm | solve | partial |
+|---|---|---|
+| **unaided** | **0.367** | **0.433** |
+| control μ=0.0 | 0.167 | 0.194 |
+| treatment μ=0.5 | 0.250 | 0.306 |
+
+| comparison | discordant | p |
+|---|---|---|
+| control → treatment | treatment 10, control 5 | 0.3018 |
+| unaided → control | control 2, unaided **14** | **0.0042** |
+| unaided → treatment | treatment 2, unaided 9 | 0.0654 |
+
+The treatment is +0.083 above the control and that is **not resolvable at
+n=60**. The gap to no tutoring narrows from −0.200 (p=0.0042) to −0.117
+(p=0.0654), which is a loss of significance rather than a demonstration of
+parity: the point estimate is still negative and still favours no tutor.
+
+### What this does and does not establish
+
+It does not establish that the correctness term helps. The direction is
+favourable, the effect is inside the noise band, and the arms were not paired,
+so even the direction carries a confound. The pre-registered falsification was
+"correctness climbs while solve does not"; what happened instead is that
+correctness fell, which the falsification did not anticipate and which is
+weaker evidence for the term than the failure case would have been.
+
+It does re-establish, for the fourth independent measurement, that **tutoring
+as built costs the learner**: 0.367 unaided against 0.250 for the better of the
+two tutored arms, with the control significantly worse at p=0.0042.
+
+The term should not be kept or removed on this data. The run that would decide
+it is the same pair with the seed fix in place, which is now a real pairing
+rather than a nominal one. Until then `mu_correct` stays 0.0.
+
+### A reporting bug that nearly voided the result
+
+The first read of the treatment arm showed `mean_correctness 0.000` and
+coverage 0% on every epoch, which reads as the judge never firing. The judge
+fired on 81% of rollouts. Both `_write_metrics` and the notebook's final cell
+serialised hand-kept lists of keys fixed before `mean_solved`,
+`mean_correctness`, `correctness_coverage` and `probe_solve` existed, and the
+notebook's write clobbered the trainer's. Everything was computed, used in the
+reward, and dropped on the way to disk; only the rollout dumps preserved it.
+Both writers now serialise the dataclass whole, with a test asserting every
+field this experiment needs is declared on `TrainMetrics`.

@@ -26,6 +26,29 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def seed_everything(seed: int) -> None:
+    """Seed every source of randomness a run touches.
+
+    Python's `random` drives `zpd_sample`; torch drives both agents' sampled
+    turns. Numpy is seeded too because transformers reaches for it in places
+    this code does not control directly. CUDA gets its own call, and determinism
+    is still not guaranteed on GPU -- cuBLAS reductions are not bitwise
+    reproducible -- so this makes runs comparable, not identical.
+    """
+    import random
+
+    random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    try:
+        import numpy as np
+
+        np.random.seed(seed)
+    except ImportError:  # pragma: no cover
+        pass
+
+
 @dataclass
 class Rollout:
     problem: Problem
@@ -102,6 +125,16 @@ class GRPOTrainer:
             solution_corpus=[p.solution for p in problem_bank.problems]
         )
         self.sahai_reward = SAHAIReward(settings.reward)
+
+        # settings.seed existed from the beginning and was applied nowhere in
+        # the training path. zpd_sample draws randomly within its difficulty
+        # window and both agents sample their turns, so two runs of the same
+        # configuration saw different problems from epoch 0 onward. The
+        # 2026-10-03 paired experiment was not paired: its control and
+        # treatment arms drew different problems in their first epoch, before
+        # a single gradient step, which makes any difference between them
+        # unattributable to the one setting that was supposed to differ.
+        seed_everything(settings.seed)
 
         self.optimizer = torch.optim.AdamW(
             filter(lambda p: p.requires_grad, self.tutor.model.parameters()),

@@ -39,7 +39,17 @@ database, no network and no ability to execute code.
 
 Infrastructure is essentially complete, including a student-facing assessment
 interface (`services/gateway/app/static/`) served off the gateway. The
-science has started but isn't there yet, and two benchmarks on 2026-10-02
+science has started but isn't there yet. A correctness term judged by
+Qwen2.5-7B was built, measured and run as a two-arm experiment on 2026-10-03;
+it is **inconclusive** and the experiment was confounded, because `settings.seed`
+was applied nowhere in the training path and the arms drew different problems
+before a single gradient step. The term was rewarded at 0.5 and the policy drove
+it *down*, 0.622 to 0.333. Held-out, the treatment beats the control by +0.083
+(p=0.30, not resolvable) and both remain below no tutoring at all: **0.367
+unaided against 0.250** for the better arm, control significantly worse at
+p=0.0042. See [04-findings.md](04-findings.md) #18.
+
+Two benchmarks on 2026-10-02
 moved the open question. On 60 paired held-out problems a student with **no
 tutor** solves **0.317**, against **0.250** for the best tutored arm and 0.150
 for the untrained tutor. Changing how the transcript reaches the solve attempt
