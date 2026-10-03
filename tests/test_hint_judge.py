@@ -160,3 +160,51 @@ class TestGrounding:
         src = pathlib.Path("sahai/reward/hint_judge.py").read_text()
         assert "do_sample=False" in src
         assert "max_new_tokens=self.max_new_tokens" in src
+
+
+class TestTrainerIntegration:
+    """grpo.py by source: it imports torch, which this venv does not have."""
+
+    @staticmethod
+    def _src():
+        return pathlib.Path("sahai/training/grpo.py").read_text()
+
+    def test_the_trainer_accepts_a_judge(self):
+        assert "hint_judge=None" in self._src()
+
+    def test_the_judge_replaces_the_vocabulary_detector_when_present(self):
+        """Both return [-1, 1] with the same meaning. The vocabulary detector
+        fires on 10% of dialogues, the 7B judge on 38-72%."""
+        src = self._src()
+        assert "if self.hint_judge is not None and self.hint_judge.available:" in src
+        assert "else:" in src
+        assert "evaluate_correctness(rollout.dialogue, rollout.problem)" in src
+
+    def test_an_absent_judge_falls_back_rather_than_failing(self):
+        """A judge that will not load must cost the term, never the run."""
+        from sahai.reward.hint_judge import HintJudge
+
+        assert HintJudge(None, None).available is False
+
+
+class TestJudgeSettings:
+    def test_mu_correct_is_still_off(self):
+        """Enabling it is a training decision with a measured cost, not a
+        default. The project's record on new reward terms is that they get
+        gamed, so the configuration is set explicitly for the run that tests
+        it."""
+        from sahai.settings import Settings
+
+        assert Settings.kaggle().reward.mu_correct == 0.0
+
+    def test_judge_defaults_to_empty_so_the_fallback_is_the_ast_detector(self):
+        from sahai.settings import Settings
+
+        assert Settings.kaggle().reward.hint_judge_model == ""
+
+    def test_four_bit_is_the_default_for_the_judge(self):
+        """7B in bfloat16 is ~15.2 GB against a T4's 15.6 and leaves no room
+        for activations; 4-bit is ~4.6 GB."""
+        from sahai.settings import Settings
+
+        assert Settings.kaggle().reward.hint_judge_4bit is True

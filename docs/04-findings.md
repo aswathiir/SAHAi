@@ -1006,3 +1006,68 @@ student that performs worse after assistance is not a model of a human learner,
 and the project's claims are about humans. Transcripts for all 300 arm-problems
 are now saved beside their outcomes in the benchmark output, so that question
 can be examined on evidence rather than on hypotheses about framing.
+
+## 17. A 7B judge sees what the outcome sees; a 1.5B one does not
+
+Measured 2026-10-03 (kernel `sahai-judge-validation`, Qwen2.5-7B-Instruct in
+4-bit on a T4, 9.7 min) against the same 180 transcripts the 1.5B judge saw.
+Judging fixed dialogues rather than generating new ones holds everything
+constant except the judge.
+
+| | 1.5B | 7B |
+|---|---|---|
+| coverage, base | 83% | 72% |
+| coverage, trained | 85% | **38%** |
+| variance, trained | 0.607 | 0.270 |
+| corr(score, solved), base | −0.023 | **+0.160** |
+| corr(score, solved), trained | +0.152 | **+0.369** |
+| LOST mean | +0.545 | **+0.091** |
+| WON mean | +0.500 | +0.500 |
+| **WON − LOST gap** | **−0.045** | **+0.409** |
+
+The gap is the test. A judge that ranks the dialogues where tutoring rescued a
+problem above the ones where tutoring destroyed one is measuring something; a
+judge that cannot tell them apart is a target to be optimised, which is the
+v16 failure in a more sophisticated form. The 1.5B judge scored the harmful
+dialogues *higher* than the helpful ones. The 7B judge separates them by 0.409,
+and on the trained arm its positive scores solve at 0.526 against 0.000 for its
+negative ones.
+
+**Lower coverage is the 7B judge being right, not worse.** It calls 73% of the
+trained tutor's turns NEUTRAL, and finding #15 measured that tutor asking a
+question in 65% of its turns. A question is not a technical claim and should
+not be scored as one. The 1.5B judge's 85% was overconfident labelling, which
+is also why its verdicts did not track anything.
+
+### The prompt was the first judge's problem, not the model
+
+Worth recording separately because it nearly killed the approach. The first
+prompt asked "does this message contain a statement that is factually wrong?",
+listed MISLEADING first among the options, and stated no prior. It returned
+MISLEADING for 109 of 109 turns: a constant, variance 0.0000, and no gradient
+at any weight. The same 1.5B model on the same turns, asked to pick a label
+rather than answer a leading question, with NEUTRAL listed first and an
+explicit prior that most messages are neutral, returned a spread. Three
+regression tests pin all three properties.
+
+### What it would cost to train on
+
+A 7B judge in 4-bit is 4.6 GB against a T4's 15.6, and the v24 run measured
+3.64 GB for tutor and student together, so the budget is roughly 11.4 GB with
+4.2 GB of headroom. At the measured 2.1 s per turn and ~128 tutor turns per
+epoch it adds about 4.5 min per epoch, or 45 min across ten, against 4.75 h of
+training. bitsandbytes being CUDA-only is why this cannot be done on the M4,
+where a 3B judge alone drove the machine to 15 GB of 16 GB swap.
+
+`mu_correct` is still 0.0 and `hint_judge_model` still empty. The validation
+says the term is now worth trying, not that it works: a judge that correlates
+at +0.369 on 60 problems is a reason to run the experiment, and the experiment
+is the thing that decides. The project's record is that every reward term
+added to the channel the policy controls has been gamed, and this one is only
+partly outside that channel -- it is anchored to the reference solution, but
+read through a model that the policy's output can influence.
+
+The honest form of the next run is a paired one: same configuration, same
+seeds, `mu_correct` at 0 and at some positive value, compared on held-out solve
+rate with the benchmark that exists. Anything less and the term joins the list
+of changes whose effect was never established.

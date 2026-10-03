@@ -75,12 +75,19 @@ class GRPOTrainer:
         student: StudentSimulator,
         pedagogy_reward: PedagogyReward,
         problem_bank: ProblemBank,
+        hint_judge=None,
     ):
         self.settings = settings
         self.tutor = tutor
         self.student = student
         self.pedagogy_reward = pedagogy_reward
         self.problem_bank = problem_bank
+        # Optional. When present it replaces the technique-vocabulary detector
+        # for the correctness term: both return a score in [-1, 1] with the
+        # same meaning, but the vocabulary one fires on 10% of dialogues and a
+        # 7B judge on 38-72%, with a WON-minus-LOST gap of +0.409 against the
+        # vocabulary detector's untestable sparsity. See docs/04-findings.md.
+        self.hint_judge = hint_judge
 
         self.dialogue_engine = DialogueEngine(max_turns=settings.training.max_turns)
         self.verifier = CodeVerifier(
@@ -140,9 +147,14 @@ class GRPOTrainer:
                 problem_text=f"{rollout.problem.title} {rollout.problem.description}",
                 tutor_code_solves=self._tutor_code_solves(rollout),
             )
-            outcome_c = evaluate_correctness(rollout.dialogue, rollout.problem)
-            rollout.correctness = outcome_c.score
-            rollout.correctness_claims = outcome_c.claims
+            if self.hint_judge is not None and self.hint_judge.available:
+                judged = self.hint_judge.evaluate(rollout.dialogue, rollout.problem)
+                rollout.correctness = judged.score
+                rollout.correctness_claims = judged.judged
+            else:
+                outcome_c = evaluate_correctness(rollout.dialogue, rollout.problem)
+                rollout.correctness = outcome_c.score
+                rollout.correctness_claims = outcome_c.claims
             components = self.sahai_reward.compute(
                 rollout.r_sol, rollout.r_ped, rollout.leakage, ability,
                 correctness=rollout.correctness,

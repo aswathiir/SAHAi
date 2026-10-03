@@ -48,7 +48,33 @@ class RewardSettings(BaseModel):
     # variance, and within-group variance is the entire GRPO gradient.
     #
     # Raise this only with a detector whose coverage has been measured first.
+    #
+    # Measured 2026-10-03 with Qwen2.5-7B-Instruct in 4-bit, judging the same
+    # 180 transcripts:
+    #
+    #                        1.5B judge   7B judge
+    #   coverage, trained         85%        38%
+    #   corr(score, solved)     +0.152     +0.369
+    #   WON minus LOST gap      -0.045     +0.409
+    #
+    # The 7B judge ranks the dialogues where tutoring rescued a problem well
+    # above the ones where it destroyed one, which is the test both earlier
+    # detectors failed and the only one that distinguishes a measurement from
+    # a target. Its lower coverage is not a regression: the trained tutor asks
+    # a question in 65% of turns and the 7B judge calls 73% of them NEUTRAL,
+    # which agrees. The 1.5B judge's 85% was overconfident labelling.
+    #
+    # Still 0.0 here. Enabling it is a training decision with a cost -- a 7B
+    # judge in 4-bit is 4.6 GB of a T4's 15.6, and roughly 4.5 min per epoch --
+    # and the project's record on new reward terms is that they get gamed. Set
+    # it explicitly for the run that tests it, the way SAHAI_LEARNER_CONTEXT
+    # is set, so the configuration is recorded rather than inferred.
     mu_correct: float = 0.0
+    # Judge used for the correctness term when mu_correct > 0. Empty disables
+    # it and falls back to the AST technique detector, which is trustworthy
+    # and fires on 10% of dialogues.
+    hint_judge_model: str = ""
+    hint_judge_4bit: bool = True
     num_solve_samples: int = 8
     num_judges: int = 2
     hard_penalty: bool = True
