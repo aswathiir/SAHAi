@@ -32,6 +32,23 @@ class ModelSettings(BaseModel):
 class RewardSettings(BaseModel):
     lambda_ped: float = 1.0
     gamma_leak: float = 0.5
+    # Weight on the correctness term (sahai/reward/correctness.py).
+    #
+    # 0.0, and the default is the finding. The term was built, wired and then
+    # measured against 120 real dialogues before being switched on, because
+    # adding an incentive to the channel the policy already controls is the
+    # move that cost v16 (held-out solve 16.3% -> 6.2%).
+    #
+    # It fires on 10% of dialogues (20% with the recommending-verb requirement
+    # relaxed) and correlates with solving at +0.098 on one arm and -0.117 on
+    # the other -- opposite signs, which is noise. There are 16 in-vocabulary
+    # technique mentions across roughly 150 tutor turns, because the trained
+    # tutor asks questions in 65% of turns and names a technique almost never.
+    # A term that is 0.0 for nine rollouts in ten contributes no within-group
+    # variance, and within-group variance is the entire GRPO gradient.
+    #
+    # Raise this only with a detector whose coverage has been measured first.
+    mu_correct: float = 0.0
     num_solve_samples: int = 8
     num_judges: int = 2
     hard_penalty: bool = True

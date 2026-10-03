@@ -11,6 +11,7 @@ import torch
 from sahai.core.dialogue import DialogueEngine
 from sahai.training.early_stop import EarlyStopper
 from sahai.reward.combined import SAHAIReward
+from sahai.reward.correctness import evaluate as evaluate_correctness
 from sahai.reward.leakage import LeakageEstimator
 from sahai.reward.solve import CodeVerifier, SolveReward, tutor_code_solves
 
@@ -35,6 +36,11 @@ class Rollout:
     solved: float = 0.0
     r_ped: float = 0.0
     leakage: float = 0.0
+    # Agreement between the tutor's technical claims and the reference
+    # solution. Recorded even when mu_correct is 0 so a run reports this
+    # term's coverage instead of leaving it to be guessed at.
+    correctness: float = 0.0
+    correctness_claims: int = 0
     reward: float = 0.0
     advantage: float = 0.0
 
@@ -52,6 +58,10 @@ class TrainMetrics:
     # Fraction of attempts passing every test. `mean_solve_rate` is partial
     # credit now; this is the series that lines up with runs before that.
     mean_solved: float = 0.0
+    mean_correctness: float = 0.0
+    # Share of rollouts in which the tutor made any checkable claim. If this
+    # stays near 0.10 the correctness term is inert whatever its weight.
+    correctness_coverage: float = 0.0
     # Strict solve rate on the held-out probe split, present only on the epochs
     # where the probe ran. This, not `policy_loss`, is the stopping signal.
     probe_solve: float | None = None
@@ -130,8 +140,12 @@ class GRPOTrainer:
                 problem_text=f"{rollout.problem.title} {rollout.problem.description}",
                 tutor_code_solves=self._tutor_code_solves(rollout),
             )
+            outcome_c = evaluate_correctness(rollout.dialogue, rollout.problem)
+            rollout.correctness = outcome_c.score
+            rollout.correctness_claims = outcome_c.claims
             components = self.sahai_reward.compute(
-                rollout.r_sol, rollout.r_ped, rollout.leakage, ability
+                rollout.r_sol, rollout.r_ped, rollout.leakage, ability,
+                correctness=rollout.correctness,
             )
             rollout.reward = components.r_sahai
 
@@ -310,6 +324,10 @@ class GRPOTrainer:
                 mean_solve_rate=sum(r.r_sol for r in rollouts) / len(rollouts),
                 mean_ped_rate=sum(r.r_ped for r in rollouts) / len(rollouts),
                 mean_leakage=sum(r.leakage for r in rollouts) / len(rollouts),
+                mean_correctness=sum(r.correctness for r in rollouts) / len(rollouts),
+                correctness_coverage=sum(
+                    1 for r in rollouts if r.correctness_claims > 0
+                ) / len(rollouts),
                 mean_solved=sum(r.solved for r in rollouts) / len(rollouts),
             )
             all_metrics.append(metrics)
@@ -413,6 +431,8 @@ class GRPOTrainer:
                     "solved": r.solved,
                     "r_ped": r.r_ped,
                     "leakage": r.leakage,
+                    "correctness": r.correctness,
+                    "correctness_claims": r.correctness_claims,
                     "reward": r.reward,
                     "advantage": r.advantage,
                     "turns": [
