@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -404,20 +404,12 @@ class GRPOTrainer:
         A multi-hour run that is killed at hour 8 would otherwise leave no
         metrics at all — rewriting each epoch means whatever finished is kept.
         """
-        payload = [
-            {
-                "epoch": m.epoch,
-                "step": m.step,
-                "policy_loss": m.policy_loss,
-                "kl_loss": m.kl_loss,
-                "mean_reward": m.mean_reward,
-                "mean_solve_rate": m.mean_solve_rate,
-                "mean_solved": m.mean_solved,
-                "mean_ped_rate": m.mean_ped_rate,
-                "mean_leakage": m.mean_leakage,
-            }
-            for m in metrics
-        ]
+        # asdict, not a hand-kept list of keys. The previous form named every
+        # field explicitly and silently dropped any added later: mean_solved,
+        # mean_correctness, correctness_coverage and probe_solve were all
+        # computed correctly during the 2026-10-03 run and none reached the
+        # file, which made a working experiment look like it had not applied.
+        payload = [asdict(m) for m in metrics]
         (output_dir / "metrics.json").write_text(json.dumps(payload, indent=2))
 
     def _dump_rollouts(self, output_dir: Path, epoch: int, rollouts: list[Rollout]) -> None:

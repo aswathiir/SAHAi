@@ -150,3 +150,42 @@ class TestTrainerWiring:
         probe_block = src[src.index("if cfg.eval_every"):src.index("self._checkpoint(output_dir, epoch, step)\n\n")]
         assert "policy_loss" not in probe_block
         assert "mean_reward" not in probe_block
+
+
+class TestMetricsSerialisation:
+    """Regression: a hand-kept field list silently discarded a whole experiment.
+
+    During the 2026-10-03 correctness run, mean_correctness and
+    correctness_coverage were computed correctly on every rollout and none of
+    them reached metrics.json, because both the trainer and the notebook
+    serialised an explicit list of keys written before those fields existed.
+    The run looked like the treatment had never applied. It had.
+    """
+
+    @staticmethod
+    def _src():
+        return pathlib.Path("sahai/training/grpo.py").read_text()
+
+    def test_metrics_are_serialised_whole(self):
+        src = self._src()
+        assert "asdict(m) for m in metrics" in src
+
+    def test_no_hand_kept_key_list_remains(self):
+        block = self._src()
+        block = block[block.index("def _write_metrics"):]
+        block = block[:block.index("\n    def ", 10)]
+        assert '"mean_leakage": m.mean_leakage' not in block
+        assert '"epoch": m.epoch' not in block
+
+    def test_every_trainmetrics_field_would_round_trip(self):
+        """asdict covers whatever the dataclass declares, including fields
+        added after this test was written."""
+        import dataclasses
+        import re
+
+        src = self._src()
+        body = src[src.index("class TrainMetrics"):src.index("class GRPOTrainer")]
+        declared = set(re.findall(r"^    (\w+):", body, re.M))
+        for expected in ("mean_correctness", "correctness_coverage",
+                         "probe_solve", "mean_solved"):
+            assert expected in declared, f"{expected} missing from TrainMetrics"
