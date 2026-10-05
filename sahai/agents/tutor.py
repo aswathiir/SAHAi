@@ -111,7 +111,13 @@ class TutorPolicy:
     def compute_log_probs(
         self, dialogue: Dialogue, problem: Problem
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        messages = self._build_messages(dialogue, problem)
+        # The same prompt `generate` used, reconstructed from what the dialogue
+        # recorded. GRPO's ratio is only a ratio if both sides condition on the
+        # same thing; building the prompt without the learner block here while
+        # generation used it made rho meaningless.
+        messages = self._build_messages(
+            dialogue, problem, getattr(dialogue, "learner_context", "")
+        )
         text = self.tokenizer.apply_chat_template(messages, tokenize=False)
         encoding = self.tokenizer(text, return_tensors="pt").to(self.model.device)
         input_ids = encoding["input_ids"]

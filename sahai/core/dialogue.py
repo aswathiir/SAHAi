@@ -52,6 +52,18 @@ class Turn:
 class Dialogue:
     problem_id: str
     turns: list[Turn] = field(default_factory=list)
+    # The learner block the tutor was conditioned on when these turns were
+    # generated. Recorded on the dialogue because the dialogue is the record
+    # of what happened, and because GRPO has to score these turns under the
+    # same prompt that produced them.
+    #
+    # Without this, `generate` built the system prompt with the block and
+    # `compute_log_probs` rebuilt it without, so the importance ratio compared
+    # two different conditionings: rho stopped being a ratio of one
+    # distribution and the clipped surrogate was invalid. Dormant while
+    # SAHAI_LEARNER_CONTEXT defaulted off, and silently wrong the moment the
+    # experiment it exists for was run.
+    learner_context: str = ""
 
     def add(self, role: str, content: str, complete: bool = True) -> None:
         self.turns.append(Turn(role=role, content=content, complete=complete))
@@ -108,6 +120,8 @@ class DialogueEngine:
                 context = learner_context(problem.skills, tracer.skills)
             except Exception:  # noqa: BLE001 - personalisation is not a precondition
                 context = ""
+
+        dialogue.learner_context = context
 
         for _ in range(self.max_turns):
             tutor_msg = tutor.generate(dialogue, problem, context)
