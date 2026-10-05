@@ -56,10 +56,15 @@ class TestScoring:
         out = evaluate(dlg(("tutor", "Try using a heap for this.")), FakeProblem(HEAP))
         assert out.score == 1.0 and out.correct == ["heaps"]
 
-    def test_a_wrong_claim_scores_negative(self):
-        """The failure the benchmark caught: confident, specific, wrong."""
+    def test_an_uncorroborated_claim_is_not_punished(self):
+        """Most problems admit several approaches: 2 of 11 measured passing
+        solutions used a different technique than their reference. Scoring
+        those negative pays the tutor to recommend only what the dataset
+        happens to contain."""
         out = evaluate(dlg(("tutor", "You should use a heap here.")), FakeProblem(SORT))
-        assert out.score == -1.0 and out.wrong == ["heaps"]
+        assert out.score == 0.0
+        assert out.uncorroborated == ["heaps"]
+        assert out.claims == 1
 
     def test_silence_is_neutral_not_safe(self):
         """A penalty-only term would make saying nothing optimal, and the
@@ -73,7 +78,7 @@ class TestScoring:
             dlg(("tutor", "Try sorting the list."), ("tutor", "You could use a heap.")),
             FakeProblem(SORT),
         )
-        assert out.score == 0.0 and out.claims == 2
+        assert out.score == 0.5 and out.claims == 2
 
     def test_only_tutor_turns_are_scored(self):
         """The student guessing wrong is not the tutor being wrong."""
@@ -84,13 +89,14 @@ class TestScoring:
         out = evaluate(dlg(("tutor", "Use a heap.")), FakeProblem("def ("))
         assert out.score == 0.0
 
-    def test_score_is_bounded(self):
+    def test_score_is_bounded_and_never_negative(self):
+        """[0,1], not [-1,1]: absence from one reference is not refutation."""
         for sol in (HEAP, SORT):
             out = evaluate(
                 dlg(("tutor", "Use a heap and sorting and binary search.")),
                 FakeProblem(sol),
             )
-            assert -1.0 <= out.score <= 1.0
+            assert 0.0 <= out.score <= 1.0
 
 
 class TestRewardIntegration:
@@ -103,7 +109,7 @@ class TestRewardIntegration:
     def test_zero_weight_leaves_the_reward_identical(self):
         r = SAHAIReward(RewardSettings())
         a = r.compute(0.5, 1.0, 0.0, 0.3, correctness=0.0).r_sahai
-        b = r.compute(0.5, 1.0, 0.0, 0.3, correctness=-1.0).r_sahai
+        b = r.compute(0.5, 1.0, 0.0, 0.3, correctness=1.0).r_sahai
         assert a == b, "with mu_correct=0 the term must not move the reward"
 
     def test_a_nonzero_weight_moves_it_in_the_right_direction(self):
@@ -112,13 +118,12 @@ class TestRewardIntegration:
         r = SAHAIReward(s)
         right = r.compute(0.5, 1.0, 0.0, 0.3, correctness=1.0).r_sahai
         quiet = r.compute(0.5, 1.0, 0.0, 0.3, correctness=0.0).r_sahai
-        wrong = r.compute(0.5, 1.0, 0.0, 0.3, correctness=-1.0).r_sahai
-        assert right > quiet > wrong
+        assert right > quiet
 
     def test_the_component_is_recorded_even_when_unweighted(self):
         """So a run reports the term's coverage instead of hiding it."""
-        c = SAHAIReward(RewardSettings()).compute(0.5, 1.0, 0.0, 0.3, correctness=-1.0)
-        assert c.correctness == -1.0
+        c = SAHAIReward(RewardSettings()).compute(0.5, 1.0, 0.0, 0.3, correctness=1.0)
+        assert c.correctness == 1.0
 
     def test_the_hard_penalty_still_short_circuits(self):
         s = RewardSettings()

@@ -41,17 +41,23 @@ class ScriptedJudge(HintJudge):
 
 class TestParsing:
     def test_plain_verdicts(self):
-        assert parse_verdict("CORRECT") == "CORRECT"
-        assert parse_verdict("MISLEADING") == "MISLEADING"
+        assert parse_verdict("HELPFUL") == "HELPFUL"
+        assert parse_verdict("WRONG") == "WRONG"
         assert parse_verdict("NEUTRAL") == "NEUTRAL"
 
-    def test_surrounding_noise_is_tolerated(self):
-        assert parse_verdict("  correct.\n") == "CORRECT"
-        assert parse_verdict("Answer: MISLEADING") == "MISLEADING"
+    def test_the_first_prompts_labels_still_parse(self):
+        """Verdicts stored by the 2026-10-03 validation must stay readable."""
+        assert parse_verdict("CORRECT") == "CORRECT"
+        assert parse_verdict("MISLEADING") == "MISLEADING"
 
-    def test_misleading_wins_when_both_words_appear(self):
-        """A model emitting 'MISLEADING, not correct' must not read as CORRECT."""
+    def test_surrounding_noise_is_tolerated(self):
+        assert parse_verdict("  helpful.\n") == "HELPFUL"
+        assert parse_verdict("Answer: WRONG") == "WRONG"
+
+    def test_a_negative_verdict_wins_when_both_words_appear(self):
+        """A model emitting 'WRONG, not helpful' must not read as HELPFUL."""
         assert parse_verdict("MISLEADING, not correct") == "MISLEADING"
+        assert parse_verdict("WRONG, not helpful") == "WRONG"
 
     def test_junk_defaults_to_neutral_not_misleading(self):
         """An unparseable generation must cost coverage, never invent a
@@ -63,12 +69,12 @@ class TestParsing:
 
 class TestScoring:
     def test_all_correct_scores_one(self):
-        j = ScriptedJudge(["CORRECT", "CORRECT"])
+        j = ScriptedJudge(["HELPFUL", "HELPFUL"])
         out = j.evaluate(dlg(("tutor", "a"), ("tutor", "b")), FakeProblem())
         assert out.score == 1.0 and out.judged == 2
 
     def test_all_misleading_scores_minus_one(self):
-        j = ScriptedJudge(["MISLEADING"])
+        j = ScriptedJudge(["WRONG"])
         assert j.evaluate(dlg(("tutor", "a")), FakeProblem()).score == -1.0
 
     def test_neutral_only_is_zero_not_negative(self):
@@ -81,17 +87,17 @@ class TestScoring:
 
     def test_neutral_turns_do_not_dilute_the_score(self):
         """One correct claim among three questions is still a correct claim."""
-        j = ScriptedJudge(["NEUTRAL", "CORRECT", "NEUTRAL"])
+        j = ScriptedJudge(["NEUTRAL", "HELPFUL", "NEUTRAL"])
         out = j.evaluate(dlg(("tutor", "a"), ("tutor", "b"), ("tutor", "c")),
                          FakeProblem())
         assert out.score == 1.0 and out.judged == 1
 
     def test_mixed_averages(self):
-        j = ScriptedJudge(["CORRECT", "MISLEADING"])
+        j = ScriptedJudge(["HELPFUL", "WRONG"])
         assert j.evaluate(dlg(("tutor", "a"), ("tutor", "b")), FakeProblem()).score == 0.0
 
     def test_only_tutor_turns_are_judged(self):
-        j = ScriptedJudge(["MISLEADING"])
+        j = ScriptedJudge(["WRONG"])
         out = j.evaluate(dlg(("student", "Should I use a heap?"), ("tutor", "x")),
                          FakeProblem())
         assert j.seen == ["x"]
@@ -103,7 +109,7 @@ class TestScoring:
         assert j.seen == ["real"]
 
     def test_score_is_bounded(self):
-        for script in (["CORRECT"] * 5, ["MISLEADING"] * 5, ["CORRECT", "MISLEADING"] * 3):
+        for script in (["HELPFUL"] * 5, ["WRONG"] * 5, ["HELPFUL", "WRONG"] * 3):
             j = ScriptedJudge(script)
             d = dlg(*[("tutor", str(i)) for i in range(len(script))])
             assert -1.0 <= j.evaluate(d, FakeProblem()).score <= 1.0
@@ -144,11 +150,19 @@ class TestGrounding:
         assert "Does the tutor" not in PROMPT
         assert "factually wrong about" not in PROMPT
 
-    def test_neutral_is_offered_before_misleading(self):
+    def test_neutral_is_offered_before_the_negative_label(self):
         """Option order moved the verdict on its own."""
         from sahai.reward.hint_judge import PROMPT
 
-        assert PROMPT.index("NEUTRAL -") < PROMPT.index("MISLEADING -")
+        assert PROMPT.index("NEUTRAL -") < PROMPT.index("WRONG -")
+
+    def test_the_prompt_says_the_reference_is_not_the_only_answer(self):
+        """18% of measured passing solutions used a different technique than
+        their reference. A judge anchored on it calls those wrong."""
+        from sahai.reward.hint_judge import PROMPT
+
+        assert "not the only one" in PROMPT
+        assert "would also work is HELPFUL" in PROMPT
 
     def test_the_prompt_states_a_prior(self):
         """Without it the judge labels everything non-neutral."""

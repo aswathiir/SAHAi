@@ -23,6 +23,20 @@ to measure its coverage and its agreement with outcomes *before* training on
 it, and to keep measuring after. `mu_correct` stays 0.0 until those numbers
 exist, exactly as it did for the vocabulary detector.
 
+**One reference is not the only correct answer.** The prompt constrains WRONG
+rather than encouraging HELPFUL, and the labels were renamed to make it harder to slip back:
+"CORRECT" invites the judge to check agreement with the solution shown, while
+"HELPFUL" asks whether the advice leads somewhere that works. Measured on 23
+passing student solutions, 2 of the 11 with a detectable technique used a
+different one than their reference -- `opposite_Signs` is `(x ^ y) < 0` in the
+dataset and `x * y < 0` in a solution that passes every test. A judge anchored
+on the reference calls the second wrong.
+
+Phrasing this as three sentences urging HELPFUL collapsed the 1.5B judge the
+other way -- every turn HELPFUL, variance 0.0000, exactly as useless as the
+first prompt's every-turn-MISLEADING. The caveat is now a single clause
+narrowing when WRONG applies, which leaves the NEUTRAL prior intact.
+
 **It is a judgement, not a fact.** `correctness.py` compares against an AST
 and is wrong only where its vocabulary is thin. This is a 1.5B-class model
 reading another 1.5B-class model, and its verdicts carry that model's errors.
@@ -51,14 +65,18 @@ if TYPE_CHECKING:
 # than answer a leading yes/no question, returns a spread. Three things fixed
 # it, and all three matter: no leading question, NEUTRAL listed first, and an
 # explicit prior that most messages are neutral.
-VERDICTS = ("MISLEADING", "CORRECT", "NEUTRAL")
+VERDICTS = ("MISLEADING", "WRONG", "HELPFUL", "CORRECT", "NEUTRAL")
+# MISLEADING/CORRECT are the first prompt's labels, kept so a stored
+# verdict from the 2026-10-03 validation still parses.
+_GOOD = {"HELPFUL", "CORRECT"}
+_BAD = {"WRONG", "MISLEADING"}
 
 PROMPT = """Classify ONE tutor message.
 
 PROBLEM:
 {description}
 
-A KNOWN-CORRECT SOLUTION:
+ONE SOLUTION THAT WORKS (there may be others):
 {solution}
 
 TUTOR MESSAGE:
@@ -67,13 +85,17 @@ TUTOR MESSAGE:
 Which label fits the tutor message best?
 
 NEUTRAL - asks a question, encourages, or says nothing technical
-CORRECT - makes a technical statement that agrees with the known-correct solution
-MISLEADING - makes a technical statement that contradicts it or points elsewhere
+HELPFUL - makes a technical claim that would lead to a working solution
+WRONG - makes a technical claim that is false, or would lead to a solution \
+that does not pass
 
-Most tutor messages are NEUTRAL. Only use CORRECT or MISLEADING when the \
-message makes a definite technical claim.
+Most tutor messages are NEUTRAL. Only use HELPFUL or WRONG when the message \
+makes a definite technical claim.
 
-Reply with exactly one word: NEUTRAL, CORRECT, or MISLEADING."""
+Use WRONG only for a claim that is false or that leads to a solution failing \
+the tests. A different approach that would also work is not WRONG.
+
+Reply with exactly one word: NEUTRAL, HELPFUL, or WRONG."""
 
 
 @dataclass
@@ -91,7 +113,7 @@ class JudgeOutcome:
     @property
     def judged(self) -> int:
         """Turns that produced a non-NEUTRAL verdict, i.e. real coverage."""
-        return sum(1 for v in self.verdicts if v in ("CORRECT", "MISLEADING"))
+        return sum(1 for v in self.verdicts if v in _GOOD | _BAD)
 
 
 def parse_verdict(text: str) -> str:
@@ -159,8 +181,8 @@ class HintJudge:
                 continue
             verdicts.append(self.judge_turn(turn.content, problem))
 
-        good = sum(1 for v in verdicts if v == "CORRECT")
-        bad = sum(1 for v in verdicts if v == "MISLEADING")
+        good = sum(1 for v in verdicts if v in _GOOD)
+        bad = sum(1 for v in verdicts if v in _BAD)
         total = good + bad
         score = 0.0 if total == 0 else (good - bad) / total
         return JudgeOutcome(score=score, verdicts=verdicts)
