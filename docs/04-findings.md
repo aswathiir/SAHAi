@@ -1324,3 +1324,77 @@ and the whole prize is 0.273 — against a paired evaluation at n=60 that
 resolves about 0.15. The experiment has been trying to detect an effect of a
 size comparable to its own resolution, on top of a deficit larger than the
 prize.
+
+## 21. The dataset layer: skills from the wrong place, and dead training groups
+
+Two defects, both found by auditing downward rather than by a failing run.
+
+### Skills were read from the description, never from the solution
+
+`_tag_skills` keyword-matched the problem *text*. `general` was the fallthrough
+when nothing matched, and it was **22% of the bank** — BKT was tracking
+per-learner mastery on a label that carries no information, and `alpha`, the
+ability baseline `r_sol − alpha` subtracts, averaged over it.
+
+An AST technique detector already existed in `sahai_core`, already tested, and
+was never consulted. The two passes disagree in both directions:
+
+| | keyword (description) | AST (solution) |
+|---|---|---|
+| `hash_maps` | 32 | 14 |
+| `recursion` | 3 | **12** |
+| `sorting` | 18 | 17 |
+
+Keywords over-trigger: "count" and "unique" appear in descriptions of problems
+solved with a plain loop. The AST under-triggers: it finds no technique at all
+in **74%** of MBPP solutions, because most of them are a loop or an expression.
+Neither replaces the other, so tags are now their union.
+
+| | before | after |
+|---|---|---|
+| `general` as the only tag | 44/198 (22%) | **35/198 (18%)** |
+| mean skills per problem | 1.0 | **1.44** |
+| skills with ≥10 problems | 5/15 | **7/15** |
+
+`recursion` goes 3 → 14, `sorting` 18 → 30, `binary_search` 4 → 7. Still thin
+at the tail — `graphs` has one problem and `trees` two — so per-skill mastery
+on those remains an estimate from almost nothing. That is a property of MBPP,
+not of the tagger.
+
+### Unsolvable problems were costing whole training groups
+
+A problem whose reference solution fails its own tests is not noise, it is a
+**dead group**. Every rollout in it scores `r_sol = 0` whatever the tutor said,
+so the group has no reward variance, every z-scored advantage in it is exactly
+zero, and it contributes nothing to the gradient while consuming a full
+generation budget of eight dialogues.
+
+After the verifier fix in finding #20 that is 10 of 198 training problems
+(5%) and 5 of 60 held-out (8%). Before it, 29 and 9. So roughly **one epoch in
+twenty was spent on groups that could not teach anything**, and before the
+verifier fix it was closer to one in seven.
+
+`load_mbpp(validate=True)` executes every reference and drops the failures,
+returning what it dropped rather than filtering silently. It is **off by
+default**: it costs three subprocesses per problem, and every number this
+project has reported was measured without it, so enabling it silently would
+make new runs incomparable with old ones. Training should set it.
+
+With it on, the maximum achievable solve rate is 1.000 for the first time —
+188/198 training and 55/60 held-out problems, all of them winnable.
+
+### What is still wrong with this dataset
+
+Three things that filtering cannot fix, all of which argue the benchmark is
+mismatched to the research question rather than merely dirty:
+
+* **30% of solutions are three lines or fewer.** There is nothing to tutor in
+  `def is_upper(s): return s.upper()`, and a four-turn Socratic dialogue about
+  it can only add noise. This predicts the verbosity finding (#15) directly.
+* **`r_sol` has three or four levels, not a continuum.** 197 of 198 problems
+  have exactly three asserts, so partial credit can only take {0, ⅓, ⅔, 1}. The
+  partial-credit change in #14 bought resolution, but far less than it appeared
+  to.
+* **70% of problems sit at difficulty 1.** A low-ability learner targets
+  difficulty ~1, where most of the bank already is, so the ZPD curriculum is
+  close to drawing an easy problem at random.

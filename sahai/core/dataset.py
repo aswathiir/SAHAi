@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import ast
+import logging
 import re
 from typing import Any
 
 from sahai.core.data import Problem, ProblemBank, TestCase
+
+logger = logging.getLogger(__name__)
 
 SKILL_KEYWORDS: dict[str, list[str]] = {
     "arrays": ["array", "list", "element", "subarray", "matrix", "rotate", "flatten"],
@@ -28,13 +31,62 @@ SKILL_KEYWORDS: dict[str, list[str]] = {
 }
 
 
-def _tag_skills(text: str) -> list[str]:
+def _ast_skills(code: str) -> set[str]:
+    """Techniques the reference solution structurally uses.
+
+    Imported lazily and defensively: this module is loaded in places that do
+    not have libs/ on the path, and a missing detector should cost the extra
+    tags rather than the dataset.
+    """
+    try:
+        from sahai_core.techniques import TECHNIQUE_SKILLS, techniques_used
+    except ImportError:  # pragma: no cover - import plumbing
+        import sys
+        from pathlib import Path as _P
+
+        libs = _P(__file__).resolve().parents[2] / "libs" / "sahai-core"
+        if libs.is_dir():
+            sys.path.insert(0, str(libs))
+        try:
+            from sahai_core.techniques import TECHNIQUE_SKILLS, techniques_used
+        except ImportError:
+            return set()
+    try:
+        return {
+            TECHNIQUE_SKILLS[t]
+            for t in techniques_used(code)
+            if t in TECHNIQUE_SKILLS
+        }
+    except Exception:  # noqa: BLE001 - an unparseable solution loses its tags only
+        return set()
+
+
+def _tag_skills(text: str, code: str = "") -> list[str]:
+    """Domain from the wording, technique from the solution.
+
+    The two disagree in both directions and each catches what the other
+    misses. Measured over 198 training problems: the keyword pass tags
+    `hash_maps` 32 times against the AST's 14, because "count" and "unique"
+    appear in descriptions of problems solved with a plain loop; the AST finds
+    `recursion` 12 times against the keyword pass's 3, because the word
+    "recursive" rarely appears in a problem that needs it.
+
+    Neither alone is enough. The AST finds no technique at all in 74% of these
+    problems -- most MBPP solutions are a loop or an expression -- so it cannot
+    replace the keyword pass, only sharpen it.
+
+    `general` stays as the fallback, but it is now reached only when the
+    wording matches nothing *and* the solution uses nothing identifiable. It
+    was 22% of the bank before this.
+    """
     text_lower = text.lower()
-    skills = []
-    for skill, keywords in SKILL_KEYWORDS.items():
-        if any(kw in text_lower for kw in keywords):
-            skills.append(skill)
-    return skills or ["general"]
+    skills = {
+        skill
+        for skill, keywords in SKILL_KEYWORDS.items()
+        if any(kw in text_lower for kw in keywords)
+    }
+    skills |= _ast_skills(code)
+    return sorted(skills) or ["general"]
 
 
 def _parse_assert(assertion: str) -> tuple[str, dict[str, Any], Any] | None:
@@ -163,7 +215,50 @@ def _estimate_difficulty(code: str, text: str) -> int:
     return max(1, min(5, round(score / 1.6)))
 
 
-def load_mbpp(split: str = "train", max_problems: int | None = None) -> ProblemBank:
+def drop_unsolvable(problems: list, timeout: int = 10) -> tuple[list, list]:
+    """Split a bank into problems whose own reference solution passes, and those
+    whose does not.
+
+    A problem whose reference fails its own tests is worse than noise for GRPO.
+    Every rollout in its group scores `r_sol = 0` whatever the tutor said, so
+    the group has zero reward variance, the z-scored advantage is zero for all
+    eight members, and the group contributes no gradient at all. It costs a
+    full generation budget to learn nothing.
+
+    Measured on MBPP after the verifier's json-normalisation fix: 5 of 60
+    held-out and 10 of 198 training problems still fail, down from 9 and 29.
+    What remains is dataset quality rather than harness bugs -- references that
+    raise, and asserts whose expected value does not match what the function
+    returns.
+
+    Returns (kept, dropped) rather than filtering in place, because which
+    problems were discarded is worth logging and occasionally worth inspecting.
+    """
+    from sahai.reward.solve import CodeVerifier
+
+    verifier = CodeVerifier(timeout=timeout)
+    kept, dropped = [], []
+    for p in problems:
+        try:
+            ok = verifier.verify(p.solution, p) >= 1.0
+        except Exception:  # noqa: BLE001 - an exploding reference is still unsolvable
+            ok = False
+        (kept if ok else dropped).append(p)
+    return kept, dropped
+
+
+def load_mbpp(
+    split: str = "train",
+    max_problems: int | None = None,
+    validate: bool = False,
+) -> ProblemBank:
+    """`validate=True` executes every reference solution and drops the failures.
+
+    Off by default because it costs three subprocesses per problem and because
+    every number this project has reported was measured without it; turning it
+    on silently would make new runs incomparable with old ones. Training should
+    set it, since a group that cannot vary teaches nothing.
+    """
     from datasets import load_dataset
 
     ds = load_dataset("google-research-datasets/mbpp", split=split, trust_remote_code=True)
@@ -190,13 +285,23 @@ def load_mbpp(split: str = "train", max_problems: int | None = None) -> ProblemB
             title=row["text"][:80],
             description=row["text"],
             difficulty=_estimate_difficulty(row["code"], row["text"]),
-            skills=_tag_skills(row["text"]),
+            skills=_tag_skills(row["text"], row["code"]),
             function_name=func_name,
             function_signature=_extract_function_signature(row["code"]),
             test_cases=test_cases,
             solution=row["code"],
         )
         problems.append(problem)
+
+    if validate:
+        problems, dropped = drop_unsolvable(problems)
+        if dropped:
+            logger.warning(
+                "dropped %d of %d %s problems whose reference solution fails "
+                "its own tests (they would contribute zero gradient): %s",
+                len(dropped), len(dropped) + len(problems), split,
+                ", ".join(p.id for p in dropped[:12]),
+            )
 
     return ProblemBank(problems=problems)
 
@@ -241,7 +346,7 @@ def load_apps(split: str = "train", difficulty: str = "interview", max_problems:
             title=row["question"][:80] if row.get("question") else f"APPS Problem {i}",
             description=row.get("question", ""),
             difficulty={"introductory": 1, "interview": 2, "competition": 4}.get(difficulty, 2),
-            skills=_tag_skills(row.get("question", "")),
+            skills=_tag_skills(row.get("question", ""), row.get("solutions", "")),
             function_name="solution",
             function_signature="def solution():",
             test_cases=test_cases,
