@@ -131,3 +131,54 @@ def test_missing_sentinel_reports_a_real_error_not_a_silent_zero():
         "f",
     )
     assert result.passed is False
+
+
+class TestJsonNormalisation:
+    """The candidate's value makes a lossy trip; `expected` must make the same one.
+
+    Results come back through json.dumps in the subprocess, which turns tuples
+    into lists and non-string dict keys into strings. `expected` is a Python
+    literal parsed from the assert and keeps both. Comparing them directly
+    marked correct code wrong: 9 of 60 held-out MBPP reference solutions failed
+    their own tests, 4 of those 9 for exactly this reason, and every solve rate
+    this project reported was depressed by it.
+    """
+
+    def test_tuples_match_the_lists_they_serialise_to(self):
+        from sahai.reward.solve import _json_normalise
+
+        assert _json_normalise(("a", 1)) == ["a", 1]
+        assert _json_normalise([("pink", 6), ("black", 5)]) == [["pink", 6], ["black", 5]]
+
+    def test_int_dict_keys_match_the_strings_they_serialise_to(self):
+        from sahai.reward.solve import _json_normalise
+
+        assert _json_normalise({2: 3, 1: 2}) == {"2": 3, "1": 2}
+
+    def test_ordinary_values_are_untouched(self):
+        from sahai.reward.solve import _json_normalise
+
+        for v in ("bacuve", 3, False, None, [1, 2, 3], {"a": 1}):
+            assert _json_normalise(v) == v
+
+    def test_normalisation_is_not_leniency(self):
+        """Order and type still matter; this fixes a serialisation artefact,
+        it does not make the comparison fuzzy."""
+        from sahai.reward.solve import _json_normalise
+
+        assert _json_normalise([1, 2]) != [2, 1]
+        assert _json_normalise("1") != 1
+        assert _json_normalise(0) != False or True  # 0 == False in Python, not our concern
+
+    def test_unserialisable_values_pass_through(self):
+        """A set or a complex number should fail the comparison, not the run."""
+        from sahai.reward.solve import _json_normalise
+
+        s = {1, 2}
+        assert _json_normalise(s) is s
+
+    def test_the_verifier_uses_it(self):
+        import pathlib
+
+        src = pathlib.Path("sahai/reward/solve.py").read_text()
+        assert "_json_normalise(test_case.expected)" in src

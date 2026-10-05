@@ -37,6 +37,26 @@ _SENTINEL = "__SAHAI_RESULT__"
 _SAMPLES_VARY = False
 
 
+def _json_normalise(value):
+    """Put a Python literal through the same lossy trip the candidate takes.
+
+    The candidate's return value is serialised with json.dumps in the
+    subprocess and parsed back here, so tuples have become lists and non-string
+    dict keys have become strings. `expected` never made that trip. Sending it
+    through the same one is what makes the comparison fair.
+
+    Returns the value unchanged if it cannot be serialised -- sets and complex
+    numbers among others -- so an exotic expected value fails the comparison
+    rather than the run.
+    """
+    import json
+
+    try:
+        return json.loads(json.dumps(value))
+    except (TypeError, ValueError):
+        return value
+
+
 class CodeVerifier:
     def __init__(self, timeout: int = 10, memory_mb: int = 256):
         self.timeout = timeout
@@ -79,7 +99,24 @@ class CodeVerifier:
             import json
 
             output = json.loads(payload)
-            passed = output == test_case.expected
+            # Compare both sides *after* the same JSON round-trip.
+            #
+            # The candidate's value reaches us through json.dumps, which is not
+            # type-preserving: a tuple arrives as a list and an int dict key
+            # arrives as a string. `expected` is a Python literal parsed from
+            # the assert, so it keeps its tuples and int keys, and comparing
+            # the two directly marked correct code wrong.
+            #
+            # Measured on MBPP: 9 of 60 held-out reference solutions failed
+            # their own tests, and 4 of those 9 were this. Every solve rate
+            # this project has ever reported was depressed by it, including
+            # the unaided baselines the tutored arms are judged against.
+            #
+            # Normalising `expected` the same way makes the comparison
+            # type-consistent rather than lenient: [1,2] still does not equal
+            # [2,1], and "1" still does not equal 1 unless both sides came
+            # from a dict key.
+            passed = output == _json_normalise(test_case.expected)
             return ExecutionResult(passed=passed, output=str(output))
         except (json.JSONDecodeError, ValueError):
             return ExecutionResult(

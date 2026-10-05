@@ -1238,3 +1238,89 @@ the better arm, both tutored arms significantly worse (p = 0.021, p = 0.035).
 That result has survived two platforms, two student precisions, three solve
 prompts, two framings, early stopping, and a correctness term. The reward is
 not missing a term. Something earlier than the reward is wrong.
+
+## 20. The student can be helped, and the verifier was failing correct code
+
+Two results from the bottom-up audit on 2026-10-05, one about the environment
+and one about the instrument measuring it.
+
+### The ceiling test
+
+A synthetic transcript hands the student the reference solution verbatim and
+asks it to write the solution out. Nothing a tutor could say beats being given
+the answer, so this is the ceiling any tutor is competing for.
+
+| arm | solve |
+|---|---|
+| unaided (nothing given) | 0.400 |
+| **oracle (solution handed over)** | **0.633** |
+
+Paired, +0.233, oracle won 20, unaided won 6, **p = 0.009**.
+
+**The student can use a dialogue.** That settles the stronger hypothesis from
+finding #19's close: the environment is not dead, and `r_sol − alpha` does have
+headroom for a reward to find. It is just not much headroom, and no tutor
+trained here has come close to it.
+
+It also fails 17 of 55 winnable problems **with the correct solution in front
+of it**. A 1.5B model asked to copy code it has just been shown succeeds about
+seven times in ten. That is the real ceiling, and it is a property of the
+student, not of any tutor.
+
+### The verifier was marking correct solutions wrong
+
+Found while asking why the oracle arm failed: on the held-out split, **9 of 60
+reference solutions failed their own tests**. The maximum achievable solve rate
+was never 1.0; it was 0.850.
+
+Four of the nine were one bug. The candidate's return value is serialised with
+`json.dumps` in the subprocess and parsed back, so a tuple arrives as a list
+and an int dict key arrives as a string. `expected` is a Python literal parsed
+from the assert and keeps both. The comparison was between a value that had
+made a lossy round-trip and one that had not:
+
+```
+expected [('pink', 6), ('black', 5)]      <- tuples
+got      [['pink', 6], ['black', 5]]      <- lists, after json
+```
+
+`_json_normalise` now sends `expected` through the same round-trip. It is not
+leniency -- `[1,2]` still does not equal `[2,1]` and `"1"` still does not equal
+`1` -- it makes the comparison type-consistent.
+
+| split | reference failures before | after | max achievable |
+|---|---|---|---|
+| test | 9/60 (15%) | **5/60 (8%)** | 0.850 → **0.917** |
+| train | 29/198 (15%) | **10/198 (5%)** | 0.854 → **0.949** |
+
+The remaining five on the held-out split are MBPP data problems rather than
+harness ones: two reference solutions raise, and three have expected values
+that do not correspond to what the function returns.
+
+**Every solve rate this project has reported was depressed by this**, including
+the unaided baselines the tutored arms were judged against. The direction of
+findings #15 to #19 does not change -- the bug applied equally to every arm and
+all those comparisons were paired on one bank -- but the absolute numbers were
+all too low, and `r_sol` was returning 0 during training for 15% of problems no
+matter what the tutor did.
+
+### What the headroom actually is
+
+On the 55 problems that are winnable after the fix:
+
+| | solve |
+|---|---|
+| ceiling (oracle) | **0.691** |
+| unaided baseline | 0.418 |
+| v2 control | 0.218 |
+| v2 treatment | 0.200 |
+
+The total headroom for a perfect tutor is **+0.273**. Every tutor trained so
+far sits roughly 0.2 *below* the unaided baseline, so they are not competing
+for that headroom, they are destroying value that exists without them.
+
+Two things follow. A tutor would have to recover 0.2 before gaining anything,
+and the whole prize is 0.273 — against a paired evaluation at n=60 that
+resolves about 0.15. The experiment has been trying to detect an effect of a
+size comparable to its own resolution, on top of a deficit larger than the
+prize.

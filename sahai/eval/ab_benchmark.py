@@ -120,7 +120,25 @@ def run(problems, tutor, student, evaluator, pedagogy, arm: str) -> ArmResult:
     t0 = time.time()
 
     for i, problem in enumerate(problems.problems, 1):
-        if tutor is None:
+        if arm == "oracle":
+            # A ceiling probe, not a tutor. The transcript hands over the
+            # reference solution verbatim, so the student has only to copy it.
+            #
+            # This exists to separate two explanations of the same measurement.
+            # Five runs say tutoring lowers solve rate. That is consistent with
+            # "this tutor is bad" and equally with "this student cannot use a
+            # dialogue at all", and no amount of reward engineering helps in
+            # the second case. If solve here does not approach 1.0, the
+            # environment carries no signal for any method to find, because
+            # nothing a tutor could possibly say beats being given the answer.
+            dialogue = Dialogue(problem_id=problem.id)
+            dialogue.add("student", "I do not know how to start this one.")
+            dialogue.add(
+                "tutor",
+                "Here is a correct solution. Study it, then write it out:\n\n"
+                f"```python\n{problem.solution.strip()}\n```",
+            )
+        elif tutor is None:
             # Empty transcript, not a short one: the student sees the problem
             # and nothing else. `problem_id` is required on Dialogue.
             dialogue = Dialogue(problem_id=problem.id)
@@ -130,7 +148,9 @@ def run(problems, tutor, student, evaluator, pedagogy, arm: str) -> ArmResult:
         outcome = evaluator.solve_reward.compute(student, dialogue, problem)
         res.solved.append(1 if outcome.solved >= 1.0 else 0)
         res.partial.append(float(outcome.score))
-        res.r_ped.append(pedagogy.evaluate(dialogue) if tutor is not None else float("nan"))
+        res.r_ped.append(
+            pedagogy.evaluate(dialogue) if tutor is not None else float("nan")
+        )
         res.leak.append(
             evaluator.leakage_estimator.estimate(
                 dialogue, problem.solution,
@@ -216,8 +236,8 @@ def main() -> None:
         tutor_model = PeftModel.from_pretrained(tutor_model, args.adapter)
         tutor_model.eval()
         logger.info("loaded adapter from %s", args.adapter)
-    elif "trained" in args.arms:
-        raise SystemExit("--arms includes 'trained' but no --adapter was given")
+    elif "trained" in args.arms or "base" in args.arms:
+        raise SystemExit("--arms needs a model arm but no --adapter was given")
 
     student_model, student_tok = load_for_inference(
         settings.model.student, settings.model.dtype, device,
@@ -238,7 +258,7 @@ def main() -> None:
         student.tracer.reset()
         torch.manual_seed(settings.seed)
 
-        if arm == "unaided":
+        if arm in ("unaided", "oracle"):
             tutor = None
         else:
             tutor = TutorPolicy(tutor_model, tutor_tok,

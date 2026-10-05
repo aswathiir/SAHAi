@@ -39,7 +39,19 @@ database, no network and no ability to execute code.
 
 Infrastructure is essentially complete, including a student-facing assessment
 interface (`services/gateway/app/static/`) served off the gateway. The
-science has started but isn't there yet. A correctness term judged by
+science has started but isn't there yet, and a bottom-up audit on 2026-10-05
+moved two things. **The verifier was marking correct code wrong**: 9 of 60
+held-out reference solutions failed their own tests because the candidate's
+value made a lossy `json` round-trip and `expected` did not, so tuples were
+compared against lists. Fixed; held-out reference failures 15% to 8%, and the
+maximum achievable solve rate was never 1.0 but 0.850, now 0.917. **The student
+can be helped**: handed the reference solution it reaches 0.633 against 0.400
+unaided (p=0.009), so the environment does carry signal — but it still fails 17
+of 55 problems with the answer in front of it, and every tutor trained so far
+sits about 0.2 *below* the unaided baseline rather than competing for the 0.273
+of headroom that exists. See [04-findings.md](04-findings.md) #20.
+
+A correctness term judged by
 Qwen2.5-7B was built, validated against outcomes, and run as a properly paired
 two-arm experiment on 2026-10-04. **It does nothing**: held-out solve differs by
 +0.017 on 60 paired problems, eleven discordant pairs split six to five,

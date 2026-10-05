@@ -71,3 +71,41 @@ class TestMinDetectable:
     def test_sixty_problems_still_cannot_resolve_ten_points(self):
         """Why the v24 result is not evidence either way."""
         assert min_detectable(60, 0.15) > 0.10
+
+
+class TestOracleArm:
+    """The ceiling probe: a transcript that hands over the reference solution.
+
+    Separates "this tutor is bad" from "this student cannot use a dialogue".
+    Five runs show tutoring lowering solve rate and both readings fit; only
+    this one distinguishes them, because nothing a tutor could say beats being
+    given the answer outright.
+    """
+
+    @staticmethod
+    def _src():
+        import pathlib
+        return pathlib.Path("sahai/eval/ab_benchmark.py").read_text()
+
+    def test_the_oracle_transcript_contains_the_solution(self):
+        src = self._src()
+        block = src[src.index('if arm == "oracle":'):src.index('elif tutor is None:')]
+        assert "problem.solution" in block
+
+    def test_the_oracle_arm_runs_no_tutor(self):
+        """It must not generate a dialogue; the transcript is synthetic, so the
+        arm measures the student's ability to copy, nothing else."""
+        src = self._src()
+        assert 'if arm in ("unaided", "oracle"):' in src
+        assert "tutor = None" in src
+
+    def test_oracle_is_checked_before_the_no_tutor_branch(self):
+        """Both arms pass tutor=None, so ordering decides which transcript is
+        built. Reversed, oracle would silently become a second unaided arm."""
+        src = self._src()
+        assert src.index('if arm == "oracle":') < src.index("elif tutor is None:")
+
+    def test_a_model_arm_without_an_adapter_is_refused(self):
+        """oracle and unaided need no adapter; base and trained do."""
+        src = self._src()
+        assert '"trained" in args.arms or "base" in args.arms' in src
