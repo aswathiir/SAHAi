@@ -66,26 +66,32 @@
 \begin{abstract}
 Competence at solving a programming problem does not confer competence at
 teaching one, and the two pull against each other: the fastest route to a
-correct submission is to disclose the answer. We describe SAHAi, which trains a small
-(1.5B-parameter) tutor policy by critic-free reinforcement learning against
-a simulated student, using no corpus of human tutoring dialogue.
+correct submission is to disclose the answer. We describe SAHAi, which trains a
+small (1.5B-parameter) tutor policy by critic-free reinforcement learning
+against a simulated student, using no corpus of human tutoring dialogue.
 Supervision comes from the student's execution-verified downstream success,
 penalised for solution leakage and for non-pedagogical behaviour, with an
 explicit Bayesian learner model supplying the ability baseline and driving
-curriculum selection. We also describe the deployed interactive system
-built around the trained policy. Our central result is negative and
-stated as such: the best held-out solve rate, $17.5\%$ over 20 unseen
-problems, is the highest recorded across seven runs but is statistically
-indistinguishable from the previous best of $16.3\%$ at the dispersion the
-evaluation set permits. We explain why, and the explanation is the paper's
-main contribution. Whatever the tutor can score from its own output dominates the usable
-gradient by roughly five to one over the outcome the system exists to
-optimise, so the estimator trains the former and reads the latter as noise.
-A second result is sharper: scoring pedagogy as a conjunction of judge
-verdicts, which is how the source specification defines it, collapses the
-advantage estimate to zero and halts learning outright. Both findings
-transfer to any system porting a reward designed for PPO onto a criticless
-algorithm.
+curriculum selection. Our central result is negative, and stronger than we
+first reported it: on 60 held-out problems compared pairwise, a student
+tutored by the trained policy solves $0.217$ against $0.367$ for the same
+student given no dialogue at all (McNemar, $p{=}0.035$). Tutoring does not
+fail to help; it costs the learner. The result survives two accelerators, two
+student precisions, three solve prompts, two transcript framings and the
+addition of a correctness term, and the trained adapter is never
+distinguishable from the untrained checkpoint it came from. We give the
+mechanism. Every reward term the policy can compute from its own output is
+driven to its ceiling (pedagogy $0.76$ to $0.97$, leakage $0.44$ to
+$0.09$) while the outcome term never moves, and harm scales with how much
+the tutor says, $\mathrm{corr}=-0.17$, with the quietest third of tutoring
+outscoring the most verbose. An oracle arm that hands the student the
+reference solution reaches only $0.633$, so the entire prize available to a
+perfect tutor is $0.273$, against an evaluation that resolves about $0.15$.
+We also report two instrumentation defects that depressed every number this
+project has published: a verifier that marked $15\%$ of reference solutions
+wrong by comparing a JSON round-tripped value against a Python literal, and a
+seed that was never applied, which silently unpaired an experiment built to be
+paired.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -333,8 +339,8 @@ Tutor policy      & Qwen2.5-1.5B-Instruct + LoRA~\cite{lora} \\
 Adapter           & rank 8, $\alpha=16$, $q/k/v/o$ projections \\
 Student simulator & Qwen2.5-1.5B-Instruct, 4-bit, frozen \\
 Judge             & rule-based, 3 graded checks \\
-Problem bank      & MBPP~\cite{mbpp} train split; 198 loaded \\
-Held-out set      & 20 unseen problems \\
+Problem bank      & MBPP~\cite{mbpp} train split; 198 loaded, 188 solvable \\
+Held-out set      & 60 unseen problems (20 before v24) \\
 Epochs            & 10 \\
 Batch             & 4 problems $\times$ $G=8$ $=32$ rollouts/epoch \\
 Total rollouts    & 320 dialogues \\
@@ -453,46 +459,114 @@ meant to do. The policy now measurably moves away from the base model.
 Even so, Fig.~\ref{fig:curves} should not be read as evidence of learning
 to teach, for reasons developed in Sec.~\ref{sec:channel}.
 
-\subsection{Held-out evaluation}
+\subsection{Held-out evaluation: the controlled comparison}
+\label{sec:controlled}
+
+Every evaluation before this one scored a single arm and compared it against a
+number remembered from an earlier run, at $n{=}20$, unpaired. At that size and
+a true rate near $0.15$, a two-proportion test cannot detect an improvement
+smaller than roughly $40$ points; no difference this project has ever reported
+was that large. We therefore re-ran the comparison with every arm on the same
+problems in the same order, compared with McNemar's exact test on the problems
+where two arms disagree, which discards the problems both arms solve and both
+arms miss because neither carries information about which arm is better.
 
 \begin{table}[t]
-\caption{Held-out results on 20 unseen problems}
-\label{tab:heldout}
+\caption{Three arms, 60 held-out problems, paired}
+\label{tab:threearm}
 \centering
 \small
-\begin{tabular}{lr}
+\begin{tabular}{lrrrr}
 \toprule
-\textbf{Metric} & \textbf{Value} \\
+\textbf{Arm} & \textbf{Solve} & \textbf{Partial} & \textbf{Ped} & \textbf{Leak} \\
 \midrule
-Solve rate                   & 0.175 \\
-Pedagogy acceptance          & 1.000 \\
-Leakage rate                 & 0.000 \\
-Mean $r_{\mathrm{SAHAI}}$    & $-0.125$ \\
-Estimated s.d.\ of the mean ($n{=}20$) & $\approx0.085$ \\
+No tutor (empty dialogue)   & \textbf{0.367} & \textbf{0.433} & ---   & 0.000 \\
+Base checkpoint, LoRA off   & 0.200          & 0.217          & 0.888 & 0.164 \\
+Trained adapter             & 0.217          & 0.233          & 0.913 & 0.125 \\
+Oracle (solution disclosed) & \textit{0.633} & \textit{0.678} & ---   & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:heldout} supports three observations, in descending order
-of importance.
+\begin{table}[t]
+\caption{Paired comparisons (McNemar, exact, $n{=}60$)}
+\label{tab:mcnemar}
+\centering
+\small
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Comparison} & \textbf{$\Delta$} & \textbf{Discordant} & \textbf{$p$} \\
+\midrule
+Base $\rightarrow$ trained      & $+0.017$ & 6:5   & $1.000$ \\
+No tutor $\rightarrow$ base     & $-0.167$ & 3:13  & $\mathbf{0.021}$ \\
+No tutor $\rightarrow$ trained  & $-0.150$ & 3:12  & $\mathbf{0.035}$ \\
+No tutor $\rightarrow$ oracle   & $+0.233$ & 20:6  & $\mathbf{0.009}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-First, \textbf{$17.5\%$ is the highest held-out solve rate recorded, and it
-is not a distinguishable improvement.} Against the previous best of
-$16.3\%$ the difference is $0.15$ standard deviations at the estimated
-$n{=}20$ dispersion; against the immediately preceding configuration's
-$13.8\%$, $0.45$. In problem terms the run solved roughly $3.5$
-problem-equivalents against $3.3$ and $2.8$. The direction is consistent
-across the last three configurations, but at this set size consistency is
-not evidence, and we make no claim of improvement.
+Three readings, in descending order of importance.
 
-Second, \textbf{pedagogy and leakage are degenerate at evaluation.} All 20
-problems scored $r_{\mathrm{ped}}{=}1.00$ and $L{=}0.00$ exactly, with no
-variance at all. This is the predicted consequence of narrowing the pedagogy term
-to three answer-giving checks (Sec.~\ref{sec:hack}), and means held-out
-reward is now carried entirely by $r_{\mathrm{sol}}$. It also means
-teaching \emph{quality} is presently unmeasured by anything except
-downstream solve rate. Third, mean held-out reward remains negative: the
-tutor is still scored below the ability baseline it is credited against.
+First, \textbf{tutoring costs the learner, significantly.} A student given an
+empty dialogue solves $0.367$; the same student after four turns of tutoring
+solves $0.217$. On thirteen problems the student solved it alone and failed
+after tutoring, against three the other way. This is not a failure to improve,
+which is what we reported previously; it is active harm, and it was invisible
+for six runs because no run had ever included an untutored arm.
+
+Second, \textbf{the training is not the cause and not the cure.} Base and
+trained differ by $+0.017$ with eleven discordant pairs split six to five,
+$p{=}1.000$. The two adapters agree on 49 of 60 problems. Yet they differ
+enormously on what they were trained for: pedagogy $0.888$ against $0.913$ and
+leakage $0.164$ against $0.125$, with the full training trajectory moving
+pedagogy $0.76\rightarrow0.97$ and leakage $0.44\rightarrow0.09$. The
+optimiser works. What it optimises is disconnected from the outcome.
+
+Third, \textbf{the prize is small and the instrument is coarse.} The oracle arm
+discloses the reference solution outright, so no tutor can beat it; it reaches
+$0.633$. The entire headroom available to a perfect tutor is therefore $0.273$,
+and a paired evaluation at $n{=}60$ resolves about $0.15$. The experiment has
+been attempting to detect an effect of a size comparable to its own resolution,
+on top of a deficit larger than the prize.
+
+The oracle arm carries a fourth observation that bounds everything above: the
+student fails $17$ of $55$ winnable problems \emph{with the correct solution in
+front of it}. A 1.5B model asked to reproduce code it has just been shown
+succeeds about seven times in ten, and that, not any property of the tutor, is
+the ceiling the system is working under.
+
+\subsection{Two instrumentation defects}
+\label{sec:instrument}
+
+Both were found by asking why a result looked the way it did, not by a test
+failing, and both depressed numbers this project has already published.
+
+\textbf{The verifier marked correct solutions wrong.} The candidate's return
+value is serialised with \texttt{json.dumps} in the sandbox and parsed back, so
+a tuple arrives as a list and an integer dictionary key arrives as a string.
+The expected value is a Python literal parsed from the problem's assertion and
+makes no such trip. Comparing them directly failed $9$ of $60$ held-out
+reference solutions against their own tests, so the maximum achievable solve rate
+was never $1.0$ but $0.850$. Normalising both sides through the same round-trip
+reduces that to $5$ of $60$, and $29$ of $198$ training problems to $10$. The
+residual is dataset quality: two references raise, three have expected values
+that do not match what the function returns.
+
+The consequence for training is worse than for evaluation. A problem whose
+reference fails its own tests gives $r_{\mathrm{sol}}{=}0$ to every rollout in
+its group regardless of what the tutor said, so the group has no reward
+variance, every advantage in \eqref{eq:adv} is exactly zero, and it contributes
+no gradient while consuming a full generation budget. Roughly one training
+group in seven was dead before this fix, and one in twenty after.
+
+\textbf{The seed was never applied.} \texttt{settings.seed} existed from the
+first commit and was read nowhere in the training path. Problem selection draws
+randomly within its difficulty window, so two runs of an identical
+configuration took different problems in epoch 0, before any gradient step. A
+two-arm experiment we had built specifically to isolate one reward coefficient
+was therefore not paired, and we report its result as uninterpretable rather
+than as evidence. The repeat with seeding applied is
+Sec.~\ref{sec:correctness}.
 
 \subsection{Run history}
 
@@ -619,9 +693,27 @@ $\mathrm{corr}(\text{epoch},r_{\mathrm{sol}})$ was $+0.48/+0.54/+0.01$. On
 retained rollout records, mean \emph{within-group} variance, which is the
 only variance \eqref{eq:adv} converts into gradient, was $0.0482$ for
 $r_{\mathrm{ped}}$ against $0.0098$ for $r_{\mathrm{sol}}$, with 22 of 24
-rollouts scoring $r_{\mathrm{sol}}$ exactly $0.00$. The pedagogy term
+rollouts scoring $r_{\mathrm{sol}}{=}0.00$ exactly. The pedagogy term
 supplied roughly five times the usable signal of the term the project
 exists to optimise.
+
+\textbf{That ordering has since reversed, and the reversal is not a
+vindication.} Scoring $r_{\mathrm{sol}}$ as the fraction of tests passed
+rather than as an all-or-nothing gate was predicted to restore resolution to
+the outcome term, and it did: measured over a later run, within-group variance
+is $0.0481$ for $r_{\mathrm{sol}}$ against $0.0150$ for $r_{\mathrm{ped}}$, a
+three-to-one advantage in the opposite direction. $r_{\mathrm{ped}}$ collapsed
+for its own reason, saturation, with 234 of 320 rollouts scoring exactly
+$1.0$ and 207 of those never solving the problem.
+
+The outcome term now carries the most gradient of the three and held-out solve
+still does not move. Gradient starvation was a real defect and fixing it was
+necessary; it was not what was preventing learning. Two caveats keep this from
+being as strong as it looks. $76\%$ of rollouts still score
+$r_{\mathrm{sol}}{=}0$ exactly, so the distribution is wider rather than
+continuous, and $197$ of $198$ training problems carry exactly three
+assertions, so partial credit can only take four values. The ``continuous''
+outcome term has four levels.
 
 A policy optimises whatever part of its reward it can control, which is
 what the pattern in Sec.~\ref{sec:results} reflects. Gains came from
@@ -636,22 +728,103 @@ allowing for this, the variation remains dominated by which problems were
 drawn rather than by policy state.
 
 %=======================================================================
+\subsection{What the transcripts show}
+\label{sec:transcripts}
+
+The aggregate result says tutoring costs the learner; the transcripts say why,
+and the answer is not that the tutor is vague. It is confidently and
+specifically wrong. Asked about the volume of a triangular prism it opens with
+Heron's formula, and the student commits to a signature the problem does not
+want. Shown a student's broken string-splitting function it replies
+``Great job revising your function! Your updated version looks good now''
+about code that fails its tests.
+
+Harm scales with how much is said. Across 60 dialogues,
+$\mathrm{corr}(\text{tutor characters},\text{solved})=-0.17$. On the problems
+where tutoring turned a solved problem unsolved the tutor produced $1443$
+characters on average; where tutoring rescued a problem, $450$. Split into
+terciles by tutor verbosity, solve rate runs $0.350$, $0.200$, $0.200$, and
+the quietest third \emph{exceeds} the $0.317$ untutored baseline measured in
+the same run. Tutoring is non-harmful only when the tutor says almost nothing.
+
+Nothing in the reward asks whether what the tutor says is true. The three
+pedagogy checks are all negative: no dangling promises, no code blocks, no
+solution patterns. Leakage asks only whether the answer escaped. A tutor
+that confidently recommends an inapplicable technique satisfies every one of
+them and scores $r_{\mathrm{ped}}{=}1.000$.
+
+\subsection{Adding a correctness term does not help}
+\label{sec:correctness}
+
+We added the missing term. Agreement between the tutor's technical claims and
+the problem's reference solution is scored by a 7B judge in 4-bit, and the
+judge was validated before any policy trained against it: on $180$ saved
+transcripts it ranks dialogues where tutoring rescued a problem $+0.409$ above
+those where tutoring destroyed one, where a 1.5B judge scored the harmful ones
+\emph{higher} and was discarded for it.
+
+Two arms, identical in seed, problems, epochs, judge and early stopping,
+differing only in the weight on that term. Both selected epoch 1 by early
+stopping on a validation split disjoint from the test set.
+
+\begin{table}[t]
+\caption{Correctness term, paired arms}
+\label{tab:correctness}
+\centering
+\small
+\begin{tabular}{lrr}
+\toprule
+ & \textbf{$\mu{=}0$} & \textbf{$\mu{=}0.5$} \\
+\midrule
+Correctness, first 2 epochs $\rightarrow$ last 2 & $+0.177\rightarrow+0.570$ & $+0.276\rightarrow+0.552$ \\
+Change                                           & $\mathbf{+0.393}$ & $+0.276$ \\
+Held-out solve                                   & $0.218$ & $0.200$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{The arm that was not paid for correctness improved it more than the arm
+that was.} Coverage was $72$--$88\%$ in both, so this is not sparsity.
+Correctness rises during training whether rewarded or not, as a by-product of
+leakage falling: a tutor making fewer claims of any kind makes fewer wrong
+ones. Held-out, the two adapters are indistinguishable
+(Table~\ref{tab:mcnemar}).
+
+We registered the falsification before the run: if correctness climbed while
+held-out solve did not, the term should be removed rather than retuned. It
+fails more completely than that, since it did not drive its own metric better
+than an arm ignoring it. The coefficient is $0$ in the released configuration.
+
+One design point generalises. Both the correctness term and the judge
+originally scored the tutor against the reference solution's \emph{approach},
+which punishes a tutor for recommending a different approach that also works.
+Of 23 student solutions that pass every test, 11 had a detectable technique on
+both sides and 2 used a different one: \texttt{opposite\_Signs} is
+$(x \oplus y) < 0$ in the dataset and $x \cdot y < 0$ in a passing solution.
+This repeats a mistake already made and already fixed elsewhere in the
+system. Leakage was once token overlap against the reference and scored
+$0.000$ for a tutor that wrote a complete working solution by a different
+algorithm, and was fixed by executing the code instead of comparing it.
+Removing the anchoring halves the judge's discrimination, $+0.409$ to $+0.212$,
+because the verdicts move from \textsc{neutral} to \textsc{helpful} rather than
+out of \textsc{wrong}. We keep the unanchored version and report the cost: a
+diagnostic that is wrong about $18\%$ of valid advice is worse than one that is
+blurry.
+
 \section{Threats to Validity}
 \label{sec:threats}
 %=======================================================================
 
-\textbf{There is no baseline, so the headline number is uninterpretable in
-absolute terms.} Every run is reported as a solve rate after tutoring, and
-none is reported against a control. The two controls that matter are the
-untrained base policy under the same prompt, and no dialogue at all. Without
-the second in particular, we cannot say what fraction of the $17.5\%$ the
-simulated student would have solved unaided, and therefore cannot attribute
-any of it to tutoring. The evaluation harness supports multiple models and
-its comparison routine is written for several reports, but only the trained
-policy has ever been passed to it. This is the cheapest missing measurement
-in the project, requiring no training and only a second evaluation pass.
-Until it exists, Table~\ref{tab:heldout} should be read as a
-within-project trend rather than as a level.
+\textbf{The baselines now exist, and they are what changed the paper.} Earlier
+versions of this report carried, in this position, the admission that no run
+had ever been compared against a control, and that the headline solve rate was
+therefore uninterpretable in absolute terms. Both controls have since been
+measured, the untrained checkpoint under the same prompt and the student with
+no dialogue at all, and the result is Sec.~\ref{sec:controlled}. We leave the
+admission on the record because it was correct and because the sign of the
+conclusion changed when it was addressed: a number that looked like weak
+progress was a deficit against doing nothing. No measurement in this paper is
+now reported without the arm it should be compared against.
 
 \textbf{The evaluation set cannot resolve the comparisons made with it.}
 Bootstrapping a 20-problem mean: at a true solve rate of $0.10$ the
@@ -710,42 +883,93 @@ improves learning, and the learner-state layer has never been exercised by
 a real cohort.
 
 %=======================================================================
+\subsection{Threats introduced by this revision}
+
+Three limitations are specific to the results added here and are not covered by
+the threats above.
+
+\textbf{The correctness experiment is a single pair of runs.} Both arms were
+seeded identically and drew the same problems through epoch 4, diverging
+thereafter because a different reward produces a different policy and therefore
+a different curriculum, which is the treatment propagating, not a confound,
+but it does mean the arms are not problem-matched late in training. One pair
+cannot separate a null effect from an effect smaller than run-to-run variance,
+and we have not characterised that variance because doing so costs a run per
+sample.
+
+\textbf{The oracle ceiling is a lower bound on what a tutor could achieve, not
+an upper bound on what a better student could.} It measures this student's
+ability to reproduce code it has been shown. A stronger student would raise
+both the ceiling and the untutored baseline, and we do not know which moves
+more; the headroom of $0.273$ is a property of the pair, not of tutoring.
+
+\textbf{The judge is a 7B model reading a 1.5B model.} Its verdicts carry its
+own errors, and we have validated it only against outcome agreement on 180
+transcripts from one adapter. We report its discrimination
+($+0.212$ after the anchoring fix) rather than treating its labels as ground
+truth, and we do not train against it.
+
 \section{Conclusion and Future Work}
 %=======================================================================
 
 We have described an end-to-end system that trains a programming tutor by
 critic-free reinforcement learning against a simulated, knowledge-traced
 student, with execution-verified outcome supervision. The pipeline runs,
-produces a non-zero learning signal every epoch, moves the policy
-measurably away from its initialisation, and drives measured leakage down
-by a factor of four across a run. The serving half is built and running: six
-services with code execution isolated from scoring by construction, a
-learner workspace with voice input, a persistent Bayesian learner model
-driving placement and curriculum from an append-only log, and a turn
-adaptation layer built on failures read out of the training transcripts.
+produces a non-zero learning signal every epoch, moves the policy measurably
+away from its initialisation, and drives measured leakage down by a factor of
+four across a run. The serving half is built and running: six services with
+code execution isolated from scoring by construction, a learner workspace with
+voice input, a persistent Bayesian learner model driving placement and
+curriculum from an append-only log, and a turn adaptation layer built on
+failures read out of the training transcripts.
 
-The tutor has not been shown to teach better. The best held-out solve rate,
-$17.5\%$ on 20 problems, is not separable from the earlier runs at this
-evaluation size. The reward terms that improve are the terms the policy
-controls directly, while the term encoding the objective carries roughly a
-fifth of the usable gradient and remains dominated by problem-draw
-variance. Diagnosing that asymmetry, rather than the solve rate itself, is
-what this run contributes.
+\textbf{The tutor does not teach better, and we can now say something sharper
+than that: it teaches worse than no tutor.} On 60 held-out problems compared
+pairwise, a tutored student solves $0.217$ against $0.367$ untutored
+($p{=}0.035$), and the untrained checkpoint is significantly worse still
+($p{=}0.021$). The result has survived two accelerators, two student
+precisions, three solve prompts, two transcript framings, early stopping, and
+the addition of a correctness term, and in none of those comparisons is the
+trained adapter distinguishable from the untrained one it came from.
 
-Immediate work follows in order. First, measure the two missing baselines:
-the untrained policy, and the student attempting each held-out problem with
-no dialogue. Neither needs a training run, and without them no solve rate in
-this report has a reference point. Second, re-run with the staged
-configuration, verifying from the log that the clipped surrogate, greedy
-partial-credit $r_{\mathrm{sol}}$, difficulty-targeted curriculum and
-60-problem evaluation are all active; the provenance discrepancy currently
-makes the headline number unattributable. Third, wire the
-assistance-corrected effect probe, which greedy decoding has made cheap,
-and which is the causal version of the same question a baseline answers
-descriptively. Fourth, price conceptual leakage, the largest remaining hole
-in the reward. Reward changes should be
-made one per run: the single occasion on which three were changed together
-produced a net-negative result attributable to none of them.
+The explanation is the contribution. Every term the policy can compute from its
+own text is driven to its ceiling while the outcome term does not move, and the
+harm is proportional to how much the tutor says: the quietest third of tutoring
+outscores the untutored baseline and the most verbose third is $15$ points
+below it. The reward never asked whether a hint was true, and adding a term
+that does, validated against outcomes before training, which no previous term
+was, changed nothing, with the unrewarded arm improving on that very metric
+more than the rewarded one.
+
+We also report that two instrumentation defects depressed every number this
+project has published. A verifier compared a JSON round-tripped value against a
+Python literal and failed $15\%$ of reference solutions against their own
+tests; a seed declared at the first commit was applied nowhere, which unpaired
+an experiment built to be paired. We have fixed both and re-reported the
+affected results rather than leaving the earlier ones standing.
+
+What we would do next follows from the oracle arm. Disclosing the reference
+solution outright lifts the student only to $0.633$, and it still fails $17$ of
+$55$ winnable problems with the answer in front of it. The entire headroom
+available to a perfect tutor is $0.273$ against an evaluation that resolves
+about $0.15$, and $30\%$ of this benchmark's solutions are three lines or
+fewer, with $197$ of $198$ problems carrying exactly three assertions. There is
+very little to teach in \texttt{def is\_upper(s): return s.upper()}, and a
+four-turn Socratic dialogue about it can only add noise. The binding constraint
+is therefore the task and the student, not the reward or the optimiser. A
+benchmark with multi-step solutions, several valid approaches per problem, and
+enough test cases to make partial credit continuous would give the method
+something to find; the present one does not.
+
+We state the methodological lesson plainly because it cost us more than the
+modelling did. Every substantive correction in this paper came from a
+measurement someone had assumed rather than checked: an untutored arm nobody
+had run, a reference solution nobody had executed, a seed nobody had traced, a
+judge prompt that returned a constant. Reward changes should be made one per
+run. The single occasion on which three were changed together produced a
+net-negative result attributable to none of them. Every new reward term
+should be measured against the outcome before a policy is trained against it,
+not after.
 
 %=======================================================================
 \begin{thebibliography}{99}
