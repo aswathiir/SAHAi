@@ -1398,3 +1398,73 @@ mismatched to the research question rather than merely dirty:
 * **70% of problems sit at difficulty 1.** A low-ability learner targets
   difficulty ~1, where most of the bank already is, so the ZPD curriculum is
   close to drawing an easy problem at random.
+
+## 22. Not punishing valid alternatives costs half the judge's discrimination
+
+The correctness term and the hint judge both anchored on the reference
+solution's *approach*, which punishes a tutor for recommending a different
+approach that also works. Measured: of 23 student solutions that pass every
+test, 11 had a detectable technique on both sides and **2 of those 11 (18%)
+used a different one** — `opposite_Signs` is `(x ^ y) < 0` in the dataset and
+`x * y < 0` in a passing solution.
+
+This repeats a mistake the project already fixed once. Leakage was token
+overlap against the reference until it "scored 0.000 for a tutor that wrote a
+complete working solution, because it chose a different algorithm". The fix
+there was execution, not comparison.
+
+### The fix works and it is not free
+
+Both prompts measured on the same 180 transcripts with the same 7B judge:
+
+| | anchored on the reference | multi-approach |
+|---|---|---|
+| coverage, base | 72% | 87% |
+| coverage, trained | 38% | 58% |
+| variance, trained | 0.2697 | 0.3489 |
+| corr(score, solved), trained | **+0.369** | +0.129 |
+| LOST dialogues | **+0.091** | +0.455 |
+| WON dialogues | +0.500 | +0.667 |
+| **WON − LOST gap** | **+0.409** | **+0.212** |
+
+The gap halved and the correlation fell by two thirds. The verdict counts say
+why:
+
+| | anchored | multi-approach |
+|---|---|---|
+| HELPFUL (base) | 49% | 65% |
+| NEUTRAL (base) | 33% | 19% |
+| WRONG (base) | 18% | 16% |
+
+**`WRONG` barely moved** (16→14 on base, 4→4 on trained). The shift is
+`NEUTRAL → HELPFUL`: told that a different approach can still be right, the
+judge began endorsing claims it had previously declined to label. Dialogues
+where tutoring turned a solved problem unsolved now score **+0.455** against
++0.091 — the judge is calling harmful tutoring helpful.
+
+### Which is right
+
+Both readings are defensible and neither is settled by this data.
+
+The anchored prompt discriminated better, and some of that was real. It also
+penalised deviation from the reference, which in a weak tutor correlates with
+confusion rather than with originality, so an unknown part of its +0.409 was
+measuring conformity rather than correctness. That part is spurious and would
+have paid a trained tutor to recommend only what the dataset contains.
+
+The multi-approach prompt is correct about what it is measuring and worse at
+measuring it. Its leniency is not a tuning problem: `WRONG` did not move, so
+making the caveat stricter would not recover the gap, it would only move
+`HELPFUL` back to `NEUTRAL` and reduce coverage.
+
+The shipped default is the multi-approach prompt, because the alternative is
+known to punish correct teaching and the judge's current role is diagnostic
+rather than gradient — `mu_correct` is 0.0 and finding #19 showed the term does
+nothing at either weight. A diagnostic that is wrong about 18% of valid advice
+is worse than one that is blurry.
+
+If the judge is ever used as a gradient, neither prompt is adequate. The
+principled version is the one that fixed leakage: verify rather than compare.
+For a hint that would mean turning the advice into code and running it, which
+is tractable for "use a heap" and not for "what does the first element tell
+you" — and the latter is 58% of what this tutor says.

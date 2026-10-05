@@ -84,8 +84,10 @@ def validate(judge, dialogues: dict, problems: dict, arms: list[str]) -> dict:
             "n": len(rows),
             "seconds": time.time() - t0,
             "turns_judged": len(verdicts),
-            "verdict_counts": {v: verdicts.count(v)
-                               for v in ("CORRECT", "MISLEADING", "NEUTRAL")},
+            # Counted from what actually came back. A hardcoded label list
+            # reported all zeros after the labels were renamed, which hid a
+            # judge that had collapsed to a single verdict.
+            "verdict_counts": {v: verdicts.count(v) for v in sorted(set(verdicts))},
             "coverage": covered / n,
             "mean_score": st.mean(x) if x else 0.0,
             "variance": st.pvariance(x) if len(x) > 1 else 0.0,

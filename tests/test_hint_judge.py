@@ -158,11 +158,23 @@ class TestGrounding:
 
     def test_the_prompt_says_the_reference_is_not_the_only_answer(self):
         """18% of measured passing solutions used a different technique than
-        their reference. A judge anchored on it calls those wrong."""
+        their reference. A judge anchored on it calls those wrong.
+
+        Asserts the invariant rather than the phrasing: the prompt must present
+        the solution as one of several and must tell the judge that a working
+        alternative is not WRONG. The exact wording has changed once already --
+        the first version urged HELPFUL in three sentences and collapsed the
+        1.5B judge to every-turn-HELPFUL -- so pinning the sentence rather than
+        the property just breaks the test on the next revision."""
         from sahai.reward.hint_judge import PROMPT
 
-        assert "not the only one" in PROMPT
-        assert "would also work is HELPFUL" in PROMPT
+        low = PROMPT.lower()
+        assert "there may be others" in low or "not the only" in low, (
+            "the prompt must present the solution as one of several"
+        )
+        assert "would also work is not wrong" in low, (
+            "the prompt must say a working alternative is not WRONG"
+        )
 
     def test_the_prompt_states_a_prior(self):
         """Without it the judge labels everything non-neutral."""

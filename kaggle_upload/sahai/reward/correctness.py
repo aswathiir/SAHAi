@@ -37,9 +37,20 @@ Known limits, stated rather than discovered later:
 * Negation is not parsed. "This is not a binary search problem" reads as a
   binary search claim. Measured on the v24 rollouts below, negated mentions are
   rare, but they are miscounted when they occur.
-* A technique absent from the reference solution is not always wrong -- most
-  problems admit several approaches. This measures agreement with *one* known
-  good solution, which is a proxy for correctness and not correctness itself.
+* A technique absent from the reference solution is **not** evidence that it is
+  wrong, and the scoring below reflects that. Measured on 23 passing student
+  solutions, 2 of the 11 where both sides had a detectable technique used a
+  different one: `opposite_Signs` is `(x ^ y) < 0` in the reference and
+  `x * y < 0` in a solution that passes every test. Scoring the second as
+  MISLEADING would punish correct tutoring.
+
+  This repeats a mistake the project already made and already fixed. Leakage
+  was once token overlap against the reference and "scored 0.000 for a tutor
+  that wrote a complete working solution, because it chose a different
+  algorithm than the reference -- so it was measuring plagiarism, not leakage"
+  (findings, leakage). The fix there was to execute the code instead of
+  comparing it. The same principle applies here: agreement with one reference
+  is evidence *for* a claim, never against it.
 """
 
 from __future__ import annotations
@@ -81,12 +92,17 @@ class CorrectnessOutcome:
     """
 
     score: float
+    # Claims the reference solution corroborates.
     correct: list[str]
-    wrong: list[str]
+    # Claims it does not. Named for symmetry with `correct` and kept for the
+    # dumps, but these do not lower the score: a problem the reference solves
+    # with XOR can be solved with multiplication, and the tutor recommending
+    # the second is not wrong.
+    uncorroborated: list[str]
 
     @property
     def claims(self) -> int:
-        return len(self.correct) + len(self.wrong)
+        return len(self.correct) + len(self.uncorroborated)
 
 
 # Phrases that mark a recommendation rather than a passing mention. Without
@@ -120,14 +136,20 @@ def claimed_techniques(text: str) -> set[str]:
 def evaluate(dialogue: Dialogue, problem: Problem) -> CorrectnessOutcome:
     """Score the tutor's technical claims against the reference solution.
 
-    Returns a value in [-1, 1]:
+    Returns a value in [0, 1]: the share of technique claims that the
+    reference solution corroborates, and 0.0 when the tutor made no checkable
+    claim at all.
 
-        (correct - wrong) / (correct + wrong)
+    **Not [-1, 1], and that is the point.** A claim the reference does not
+    corroborate is unverified, not refuted: most problems admit several
+    approaches, and 18% of measured passing solutions used a different
+    technique set than their reference. Scoring those -1 would pay the tutor
+    to recommend only the approach that happens to be in the dataset, which is
+    teaching the dataset rather than the subject.
 
-    with 0.0 when the tutor made no checkable claim at all. Dividing by the
-    number of claims rather than by the number of turns is deliberate: a tutor
-    that makes one correct claim should not be scored down for the turns in
-    which it asked a question instead.
+    Dividing by the number of claims rather than by turns is deliberate: a
+    tutor that makes one corroborated claim should not be scored down for the
+    turns in which it asked a question instead.
     """
     # Parseability is checked separately and first. `techniques_used` catches
     # SyntaxError itself and returns an empty set, which is indistinguishable
@@ -158,4 +180,7 @@ def evaluate(dialogue: Dialogue, problem: Problem) -> CorrectnessOutcome:
     total = len(correct) + len(wrong)
     if total == 0:
         return CorrectnessOutcome(0.0, correct, wrong)
-    return CorrectnessOutcome((len(correct) - len(wrong)) / total, correct, wrong)
+    # Corroborated share, not (correct - wrong). `wrong` is retained in the
+    # outcome because an uncorroborated claim is still worth seeing in the
+    # rollout dumps; it just does not count against the tutor.
+    return CorrectnessOutcome(len(correct) / total, correct, wrong)
