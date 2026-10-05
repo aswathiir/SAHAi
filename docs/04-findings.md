@@ -1159,3 +1159,82 @@ notebook's write clobbered the trainer's. Everything was computed, used in the
 reward, and dropped on the way to disk; only the rollout dumps preserved it.
 Both writers now serialise the dataclass whole, with a test asserting every
 field this experiment needs is declared on `TrainMetrics`.
+
+## 19. The correctness term does nothing, measured properly this time
+
+Reran 2026-10-04 with `seed_everything` in place, `mu_correct` 0.0 against 0.5,
+Qwen2.5-7B judge in 4-bit, ~7.9 h each. Both arms stopped at 8 epochs by early
+stopping and both selected **epoch 1**.
+
+### The pairing is real now
+
+Epoch 0 is identical across arms: same four problems in the same order, same
+per-rollout `r_ped`, same `solved`. Finding #18's arms differed here, before a
+gradient step, which is what made that comparison unattributable.
+
+Pairing holds through epoch 4 and diverges from epoch 5. That divergence is the
+treatment working, not a defect: a different reward produces a different policy,
+which produces different BKT updates, which moves the ZPD draw. Identical
+curricula past the point where the arms genuinely differ would mean the
+treatment was doing nothing at all.
+
+### The unpaid arm improved correctness more than the paid one
+
+| | correctness, first 2 → last 2 | Δ |
+|---|---|---|
+| control (μ=0, **not rewarded for it**) | +0.177 → +0.570 | **+0.393** |
+| treatment (μ=0.5, rewarded for it) | +0.276 → +0.552 | +0.276 |
+
+Coverage sat at 72–88% in both arms, so this is not the sparsity that killed
+the vocabulary detector. Correctness rises during training whether or not it is
+paid for, as a by-product of leakage falling and `r_ped` climbing: a tutor
+making fewer claims of any kind makes fewer wrong ones. Weighting it at 0.5
+bought nothing, and the arm that was paid improved *less*.
+
+### Held-out, paired on one bank of 60
+
+| arm | solve | partial | ped | leak |
+|---|---|---|---|---|
+| **unaided (no tutor)** | **0.367** | **0.433** | — | 0.000 |
+| control μ=0.0 | 0.200 | 0.217 | 0.888 | 0.164 |
+| treatment μ=0.5 | 0.217 | 0.233 | 0.913 | 0.125 |
+
+| comparison | discordant | p | |
+|---|---|---|---|
+| control → treatment | treatment 6, control 5 | **1.0000** | no effect |
+| unaided → control | control 3, unaided 13 | **0.0213** | unaided better |
+| unaided → treatment | treatment 3, unaided 12 | **0.0352** | unaided better |
+
+`p = 1.0000` on eleven discordant pairs split six to five is as null as this
+test produces. The two adapters agree on 49 of 60 problems. The held-out eval
+inside each run reported the same solve rate for both arms to three decimals.
+
+### The falsification fires
+
+The condition written into the notebook before the run was: *if
+`mean_correctness` climbs while held-out solve does not, that is the v16
+pattern and the term should be removed rather than retuned.* Correctness
+climbed in both arms. Held-out solve did not move. The term is removed, not
+retuned, and `mu_correct` stays 0.0 as a measured conclusion rather than a
+precaution.
+
+It fails more completely than the falsification anticipated. The condition
+assumed the term would at least drive its own metric; it did not even do that
+better than an arm ignoring it.
+
+### What was worth building anyway
+
+The judge is the only reward signal in this project ever validated against
+outcomes *before* being trained on (finding #17, WON−LOST gap +0.409). It keeps
+its place as a diagnostic: it reads dialogues the policy is not paid to
+influence, which is exactly what made this experiment readable. The failure is
+of the term, not of measuring first — measuring first is what turned eight
+plausible GPU hours into a defensible negative.
+
+### Fifth independent measurement of the headline
+
+Tutoring as built costs the learner, now at **0.367 unaided against 0.217** for
+the better arm, both tutored arms significantly worse (p = 0.021, p = 0.035).
+That result has survived two platforms, two student precisions, three solve
+prompts, two framings, early stopping, and a correctness term. The reward is
+not missing a term. Something earlier than the reward is wrong.

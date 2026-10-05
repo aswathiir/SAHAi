@@ -40,14 +40,14 @@ database, no network and no ability to execute code.
 Infrastructure is essentially complete, including a student-facing assessment
 interface (`services/gateway/app/static/`) served off the gateway. The
 science has started but isn't there yet. A correctness term judged by
-Qwen2.5-7B was built, measured and run as a two-arm experiment on 2026-10-03;
-it is **inconclusive** and the experiment was confounded, because `settings.seed`
-was applied nowhere in the training path and the arms drew different problems
-before a single gradient step. The term was rewarded at 0.5 and the policy drove
-it *down*, 0.622 to 0.333. Held-out, the treatment beats the control by +0.083
-(p=0.30, not resolvable) and both remain below no tutoring at all: **0.367
-unaided against 0.250** for the better arm, control significantly worse at
-p=0.0042. See [04-findings.md](04-findings.md) #18.
+Qwen2.5-7B was built, validated against outcomes, and run as a properly paired
+two-arm experiment on 2026-10-04. **It does nothing**: held-out solve differs by
++0.017 on 60 paired problems, eleven discordant pairs split six to five,
+p=1.0000, and the arm *not* rewarded for correctness improved correctness more
+than the arm that was (+0.393 against +0.276). Both tutored arms remain
+significantly below no tutoring at all: **0.367 unaided against 0.217** for the
+better arm (p=0.021, p=0.035). The term is removed rather than retuned. See
+[04-findings.md](04-findings.md) #18 and #19.
 
 Two benchmarks on 2026-10-02
 moved the open question. On 60 paired held-out problems a student with **no
