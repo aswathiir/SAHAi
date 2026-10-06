@@ -72,26 +72,32 @@ against a simulated student, using no corpus of human tutoring dialogue.
 Supervision comes from the student's execution-verified downstream success,
 penalised for solution leakage and for non-pedagogical behaviour, with an
 explicit Bayesian learner model supplying the ability baseline and driving
-curriculum selection. Our central result is negative, and stronger than we
-first reported it: on 60 held-out problems compared pairwise, a student
-tutored by the trained policy solves $0.217$ against $0.367$ for the same
-student given no dialogue at all (McNemar, $p{=}0.035$). Tutoring does not
-fail to help; it costs the learner. The result survives two accelerators, two
-student precisions, three solve prompts, two transcript framings and the
-addition of a correctness term, and the trained adapter is never
-distinguishable from the untrained checkpoint it came from. We give the
-mechanism. Every reward term the policy can compute from its own output is
-driven to its ceiling (pedagogy $0.76$ to $0.97$, leakage $0.44$ to
-$0.09$) while the outcome term never moves, and harm scales with how much
-the tutor says, $\mathrm{corr}=-0.17$, with the quietest third of tutoring
-outscoring the most verbose. An oracle arm that hands the student the
-reference solution reaches only $0.633$, so the entire prize available to a
-perfect tutor is $0.273$, against an evaluation that resolves about $0.15$.
-We also report two instrumentation defects that depressed every number this
-project has published: a verifier that marked $15\%$ of reference solutions
-wrong by comparing a JSON round-tripped value against a Python literal, and a
-seed that was never applied, which silently unpaired an experiment built to be
-paired.
+curriculum selection. Our central result is negative, and the most useful part of it is a
+negative result about our own measurement. On 60 held-out problems compared
+pairwise, a tutored student solved $0.183$ against $0.367$ for the same student
+given no dialogue at all (McNemar, $p{=}0.0074$), which we reported in five
+forms as evidence that tutoring costs the learner. It does not. Replaying the
+same transcripts, with the same tutor turns, while omitting the student's own
+replies from the context of its final attempt lifts that arm to $0.350$ and
+removes the deficit entirely ($p{=}1.0$). The harm was an artefact of
+conditioning a chat model on its own recorded confusion immediately before
+asking it to write code. What survives is weaker and better supported:
+tutoring as built neither helps nor harms, and training is inert. The trained
+and untrained adapters score identically once the framing is corrected
+($0.350$ against $0.350$, $p{=}1.0$), and the one comparison in which training
+ever looked beneficial ($p{=}0.035$) measured its partial immunity to the
+artefact rather than better teaching. We give the mechanism for the inertia:
+every reward term the policy can compute from its own output is driven to its
+ceiling (pedagogy $0.76$ to $0.97$, leakage $0.44$ to $0.09$) while the outcome
+term never moves. We further report four instrumentation defects that depressed
+every number this project has published, two of them found while auditing why
+an oracle arm fails at all: a verifier that marked $15\%$ of reference
+solutions wrong through a JSON round trip, a seed that was never applied, an
+entry point read from the first function a reference defines rather than the
+one its tests call, and an extraction step that discarded a correct solution
+whenever the student's function name differed in case. Correcting the last two
+raises the oracle ceiling from $0.633$ to $0.783$ and more than doubles the
+headroom available to a tutor, from $0.267$ to $0.417$.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -472,18 +478,22 @@ where two arms disagree, which discards the problems both arms solve and both
 arms miss because neither carries information about which arm is better.
 
 \begin{table}[t]
-\caption{Three arms, 60 held-out problems, paired}
+\caption{Four arms, 60 held-out problems, paired, under both transcript
+framings. The two framings differ only in whether the student's own replies
+appear in the context of its final attempt.}
 \label{tab:threearm}
 \centering
 \small
 \begin{tabular}{lrrrr}
 \toprule
-\textbf{Arm} & \textbf{Solve} & \textbf{Partial} & \textbf{Ped} & \textbf{Leak} \\
+ & \multicolumn{2}{c}{\textbf{Solve}} & & \\
+\cmidrule(lr){2-3}
+\textbf{Arm} & \textbf{Full} & \textbf{Hints} & \textbf{Ped} & \textbf{Leak} \\
 \midrule
-No tutor (empty dialogue)   & \textbf{0.367} & \textbf{0.433} & ---   & 0.000 \\
-Base checkpoint, LoRA off   & 0.200          & 0.217          & 0.888 & 0.164 \\
-Trained adapter             & 0.217          & 0.233          & 0.913 & 0.125 \\
-Oracle (solution disclosed) & \textit{0.633} & \textit{0.678} & ---   & --- \\
+No tutor (empty dialogue)       & 0.367 & 0.367 & ---   & 0.000 \\
+Base checkpoint, LoRA off       & 0.183 & \textbf{0.350} & 0.888 & 0.164 \\
+Trained adapter                 & 0.333 & \textbf{0.350} & 0.913 & 0.125 \\
+Oracle (solution disclosed)     & \multicolumn{2}{c}{\textit{0.783}} & ---   & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -497,45 +507,74 @@ Oracle (solution disclosed) & \textit{0.633} & \textit{0.678} & ---   & --- \\
 \toprule
 \textbf{Comparison} & \textbf{$\Delta$} & \textbf{Discordant} & \textbf{$p$} \\
 \midrule
-Base $\rightarrow$ trained      & $+0.017$ & 6:5   & $1.000$ \\
-No tutor $\rightarrow$ base     & $-0.167$ & 3:13  & $\mathbf{0.021}$ \\
-No tutor $\rightarrow$ trained  & $-0.150$ & 3:12  & $\mathbf{0.035}$ \\
-No tutor $\rightarrow$ oracle   & $+0.233$ & 20:6  & $\mathbf{0.009}$ \\
+\multicolumn{4}{l}{\emph{Full framing: the student's own replies are replayed}} \\
+No tutor $\rightarrow$ base     & $-0.184$ & 2:13  & $\mathbf{0.0074}$ \\
+No tutor $\rightarrow$ trained  & $-0.034$ & 9:11  & $0.824$ \\
+Base $\rightarrow$ trained      & $+0.150$ & 12:3  & $\mathbf{0.035}$ \\
+\midrule
+\multicolumn{4}{l}{\emph{Hints framing: only the tutor's turns are replayed}} \\
+No tutor $\rightarrow$ base     & $-0.017$ & 7:8   & $1.000$ \\
+No tutor $\rightarrow$ trained  & $-0.017$ & 6:7   & $1.000$ \\
+Base $\rightarrow$ trained      & $0.000$  & 5:5   & $1.000$ \\
+\midrule
+No tutor $\rightarrow$ oracle   & $+0.417$ & 28:3  & $\mathbf{<0.0001}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Three readings, in descending order of importance.
+Four readings, in descending order of importance.
 
-First, \textbf{tutoring costs the learner, significantly.} A student given an
-empty dialogue solves $0.367$; the same student after four turns of tutoring
-solves $0.217$. On thirteen problems the student solved it alone and failed
-after tutoring, against three the other way. This is not a failure to improve,
-which is what we reported previously; it is active harm, and it was invisible
-for six runs because no run had ever included an untutored arm.
+First, \textbf{the harm we reported was ours, not the tutor's.} Under the full
+framing a tutored student solves $0.183$ against $0.367$ untutored, thirteen
+problems lost against two gained, $p{=}0.0074$. That is the result this project
+reported in five forms. Replaying the identical transcripts while omitting the
+student's own replies from the context of its final attempt lifts the same arm
+to $0.350$, seven discordant one way and eight the other, $p{=}1.000$. No
+tutoring changed. What changed is that the model stopped being conditioned on
+its own recorded confusion immediately before being asked to write code, and
+$20\%$ of student turns express exactly that. The deficit was an artefact of
+how the transcript was replayed, and we had carried it for six runs.
 
-Second, \textbf{the training is not the cause and not the cure.} Base and
-trained differ by $+0.017$ with eleven discordant pairs split six to five,
-$p{=}1.000$. The two adapters agree on 49 of 60 problems. Yet they differ
-enormously on what they were trained for: pedagogy $0.888$ against $0.913$ and
-leakage $0.164$ against $0.125$, with the full training trajectory moving
-pedagogy $0.76\rightarrow0.97$ and leakage $0.44\rightarrow0.09$. The
-optimiser works. What it optimises is disconnected from the outcome.
+Second, \textbf{training is inert, and the one result suggesting otherwise was
+the artefact again.} Under the corrected framing the trained and untrained
+adapters both score $0.350$, five discordant pairs each way, $p{=}1.000$. Under
+the broken framing the trained adapter beat the untrained one at $p{=}0.035$,
+and the natural reading was that training helped a little. It did not. The
+trained policy elicits student turns that hedge less, which interacts less
+badly with a replay that feeds those turns back, so what that comparison
+measured was partial immunity to our own instrument.
 
-Third, \textbf{the prize is small and the instrument is coarse.} The oracle arm
-discloses the reference solution outright, so no tutor can beat it; it reaches
-$0.633$. The entire headroom available to a perfect tutor is therefore $0.273$,
-and a paired evaluation at $n{=}60$ resolves about $0.15$. The experiment has
-been attempting to detect an effect of a size comparable to its own resolution,
-on top of a deficit larger than the prize.
+Third, \textbf{the mechanism for the inertia is unchanged and is not in
+dispute.} Every term the policy can compute from its own output saturates:
+pedagogy moves $0.76\rightarrow0.97$ and leakage $0.44\rightarrow0.09$ across
+training, ending at $0.913$ and $0.125$ against the untrained $0.888$ and
+$0.164$. The outcome term does not move. The optimiser works; what it optimises
+is disconnected from what the system is for. Correcting the framing does not
+address this, because it changes how the outcome is measured and not how
+strongly the outcome is weighed.
 
-The oracle arm carries a fourth observation that bounds everything above: the
-student fails $17$ of $55$ winnable problems \emph{with the correct solution in
-front of it}. A 1.5B model asked to reproduce code it has just been shown
-succeeds about seven times in ten, and that, not any property of the tutor, is
-the ceiling the system is working under.
+Fourth, \textbf{the prize is more than twice what we previously stated.} The
+oracle arm discloses the reference solution, so no tutor can beat it. We
+reported it at $0.633$. Two defects described in
+Section~\ref{sec:instrument} accounted for nine of its twenty-two failures, and
+with those corrected it reaches $0.783$, twenty-eight problems gained against
+three lost relative to no tutoring, $p<0.0001$. The headroom available to a
+tutor is therefore $0.417$ rather than $0.273$, against a paired evaluation at
+$n{=}60$ that resolves about $0.15$. The student can use what is in the
+dialogue, decisively, and the earlier conclusion that it could barely do so was
+measuring our extraction code.
 
-\subsection{Two instrumentation defects}
+A caveat on precision. The student's final attempt is decoded greedily, so
+replaying a saved transcript should reproduce its recorded outcome exactly. It
+reproduces $57$ of $60$ in both arms. The residual is nondeterminism in GPU
+reductions rather than a difference in logic, and it puts a noise floor of
+roughly three problems on any single arm. The framing effect on the untrained
+arm is twelve gained against two lost and sits far outside that floor; the
+effect on the trained arm is seven against six and sits entirely inside it,
+which is why we read the trained arm as unaffected by framing rather than as
+mildly improved by it.
+
+\subsection{Four instrumentation defects}
 \label{sec:instrument}
 
 Both were found by asking why a result looked the way it did, not by a test
@@ -548,9 +587,9 @@ The expected value is a Python literal parsed from the problem's assertion and
 makes no such trip. Comparing them directly failed $9$ of $60$ held-out
 reference solutions against their own tests, so the maximum achievable solve rate
 was never $1.0$ but $0.850$. Normalising both sides through the same round-trip
-reduces that to $5$ of $60$, and $29$ of $198$ training problems to $10$. The
-residual is dataset quality: two references raise, three have expected values
-that do not match what the function returns.
+reduces that to $5$ of $60$, and $29$ of $198$ training problems to $10$. We
+attributed the residual to dataset quality. That was wrong, and the next defect
+is what it actually was.
 
 The consequence for training is worse than for evaluation. A problem whose
 reference fails its own tests gives $r_{\mathrm{sol}}{=}0$ to every rollout in
@@ -567,6 +606,40 @@ two-arm experiment we had built specifically to isolate one reward coefficient
 was therefore not paired, and we report its result as uninterpretable rather
 than as evidence. The repeat with seeding applied is
 Sec.~\ref{sec:correctness}.
+
+\textbf{The entry point was the wrong function.} Each problem's callable name
+was taken from the first function its reference solution defines. The name the
+tests call was already available, parsed out of the assertion and then
+discarded. These disagree whenever a reference opens with a helper, which on
+this dataset is common: one reference defines a greatest-common-divisor routine
+over two integers before the function the tests call, which takes a list.
+
+The field is not cosmetic. The verifier calls it, so it executed the helper and
+compared its return value against the entry point's expected value, which is
+why those references failed their own tests. It is also interpolated into the
+student's prompt as the signature to implement, so on one problem the student
+was asked for a digit-reversal routine while scoring called a predicate about
+that routine. No output could pass. Five of sixty held-out problems and six of
+$198$ training problems were therefore unwinnable in every arm, and they sat in
+the denominator of every solve rate we have reported. Reading the entry point
+from the assertions takes references passing their own tests to $60$ of $60$
+held out and $194$ of $198$ in training.
+
+The oracle arm shows the cost most clearly, because it pastes the reference
+into the dialogue: it was displaying correct code for a function the verifier
+never called.
+
+\textbf{A correct solution was discarded over its name.} The step that recovers
+code from the student's reply checked for the literal text of the expected
+definition and, failing that, replaced the entire reply with a stub that fails
+by construction. Every name mismatch we observed was styling rather than
+refusal: this dataset uses mixed case for several functions and the student
+writes snake case. On the oracle arm, where a correct solution sits in front of
+the student, this fired on five of sixty problems and three were otherwise
+correct. Binding the student's last defined function to the expected name,
+which preserves recursion in a way renaming would not, recovers exactly those
+three. Together with the entry-point fix this takes the oracle arm from $0.633$
+to $0.783$.
 
 \subsection{Run history}
 
@@ -731,7 +804,7 @@ drawn rather than by policy state.
 \subsection{What the transcripts show}
 \label{sec:transcripts}
 
-The aggregate result says tutoring costs the learner; the transcripts say why,
+The aggregate result says tutoring does not help; the transcripts say why,
 and the answer is not that the tutor is vague. It is confidently and
 specifically wrong. Asked about the volume of a triangular prism it opens with
 Heron's formula, and the student commits to a signature the problem does not
@@ -885,8 +958,28 @@ a real cohort.
 %=======================================================================
 \subsection{Threats introduced by this revision}
 
-Three limitations are specific to the results added here and are not covered by
+Five limitations are specific to the results added here and are not covered by
 the threats above.
+
+\textbf{The corrected framing is itself a choice, and it was never trained
+against.} Removing the student's own replies from the context of its final
+attempt is not obviously the right reconstruction of what a tutored learner
+knows; it is one of two we implemented, and the better one is the one that
+scored higher, which is a weak basis for calling it correct. A learner who has
+been tutored has in fact said things, and a measurement that pretends otherwise
+may be discarding signal along with the artefact. What we can defend is
+narrower than our headline: the two framings disagree by more than the effect
+every arm of this project was built to detect, so no conclusion that does not
+state its framing is interpretable. Every policy reported here was trained with
+the outcome term computed under the framing we now believe is distorting, so
+none of them has been optimised against a clean reward, and we have not yet run
+the retrain that would say whether that matters.
+
+\textbf{Two of the four instrumentation defects were found in the same
+afternoon, by auditing one arm.} Both came from asking why the oracle arm fails
+at all, a question we had not asked for six runs. We have no reason to believe
+the audit is complete, and the base rate it establishes is poor: every time we
+have examined an assumed measurement in this project, it has been wrong.
 
 \textbf{The correctness experiment is a single pair of runs.} Both arms were
 seeded identically and drew the same problems through epoch 4, diverging
@@ -901,7 +994,7 @@ sample.
 an upper bound on what a better student could.} It measures this student's
 ability to reproduce code it has been shown. A stronger student would raise
 both the ceiling and the untutored baseline, and we do not know which moves
-more; the headroom of $0.273$ is a property of the pair, not of tutoring.
+more; the headroom of $0.417$ is a property of the pair, not of tutoring.
 
 \textbf{The judge is a 7B model reading a 1.5B model.} Its verdicts carry its
 own errors, and we have validated it only against outcome agreement on 180
@@ -923,14 +1016,17 @@ voice input, a persistent Bayesian learner model driving placement and
 curriculum from an append-only log, and a turn adaptation layer built on
 failures read out of the training transcripts.
 
-\textbf{The tutor does not teach better, and we can now say something sharper
-than that: it teaches worse than no tutor.} On 60 held-out problems compared
-pairwise, a tutored student solves $0.217$ against $0.367$ untutored
-($p{=}0.035$), and the untrained checkpoint is significantly worse still
-($p{=}0.021$). The result has survived two accelerators, two student
-precisions, three solve prompts, two transcript framings, early stopping, and
-the addition of a correctness term, and in none of those comparisons is the
-trained adapter distinguishable from the untrained one it came from.
+\textbf{The tutor does not teach better, and the sharper claim we previously
+made, that it teaches worse than no tutor, does not survive its own control.}
+Under the transcript framing used throughout this project a tutored student
+solved $0.183$ against $0.367$ untutored ($p{=}0.0074$). Replaying those same
+transcripts without the student's own replies in the context of its final
+attempt gives $0.350$ against $0.367$ ($p{=}1.000$). The deficit was ours. What
+remains is that tutoring neither helps nor harms, and that the trained adapter
+is indistinguishable from the untrained one it came from, at $0.350$ against
+$0.350$ with five discordant pairs each way. That null has survived two
+accelerators, two student precisions, three solve prompts, both transcript
+framings, early stopping and the addition of a correctness term.
 
 The explanation is the contribution. Every term the policy can compute from its
 own text is driven to its ceiling while the outcome term does not move, and the
@@ -941,25 +1037,40 @@ that does, validated against outcomes before training, which no previous term
 was, changed nothing, with the unrewarded arm improving on that very metric
 more than the rewarded one.
 
-We also report that two instrumentation defects depressed every number this
+We also report that four instrumentation defects depressed every number this
 project has published. A verifier compared a JSON round-tripped value against a
 Python literal and failed $15\%$ of reference solutions against their own
-tests; a seed declared at the first commit was applied nowhere, which unpaired
-an experiment built to be paired. We have fixed both and re-reported the
+tests. A seed declared at the first commit was applied nowhere, which unpaired
+an experiment built to be paired. The entry point of each problem was read from
+the first function its reference defines rather than the one its tests call, so
+on five of sixty held-out problems the verifier executed a helper and the
+student was told to implement a function other than the one being scored, which
+made those problems unwinnable in every arm. And the step that recovers code
+from the student's reply discarded the whole reply whenever the function name
+differed, which on this dataset means whenever the student wrote snake case
+where the dataset used mixed case. We have fixed all four and re-reported the
 affected results rather than leaving the earlier ones standing.
 
-What we would do next follows from the oracle arm. Disclosing the reference
-solution outright lifts the student only to $0.633$, and it still fails $17$ of
-$55$ winnable problems with the answer in front of it. The entire headroom
-available to a perfect tutor is $0.273$ against an evaluation that resolves
-about $0.15$, and $30\%$ of this benchmark's solutions are three lines or
-fewer, with $197$ of $198$ problems carrying exactly three assertions. There is
-very little to teach in \texttt{def is\_upper(s): return s.upper()}, and a
-four-turn Socratic dialogue about it can only add noise. The binding constraint
-is therefore the task and the student, not the reward or the optimiser. A
-benchmark with multi-step solutions, several valid approaches per problem, and
-enough test cases to make partial credit continuous would give the method
-something to find; the present one does not.
+What we would do next no longer follows from the oracle arm, because the
+oracle arm has moved. Disclosing the reference solution lifts the student to
+$0.783$, not the $0.633$ we previously reported, and the headroom available to
+a tutor is $0.417$ rather than $0.273$. The task is less of a binding
+constraint than we concluded, though it still binds: $30\%$ of this benchmark's
+solutions are three lines or fewer and $197$ of $198$ problems carry exactly
+three assertions, so partial credit has four levels and there is little to
+teach in a one-line idiom.
+
+The clearer next step is that the policy has never been trained against a clean
+outcome signal. The outcome term is computed from the same student attempt
+whose framing we have just shown to be the dominant effect, so every run to
+date optimised a reward that penalised dialogues in proportion to how much the
+student talked rather than how well the tutor taught. Retraining under the
+corrected framing is the first experiment whose outcome term would mean what it
+says, and it is cheap, because nothing but the framing changes. Only if that
+also comes back inert does the argument for a different benchmark become the
+leading one; a benchmark with multi-step solutions, several valid approaches
+per problem and enough test cases to make partial credit continuous would then
+be the thing to build.
 
 We state the methodological lesson plainly because it cost us more than the
 modelling did. Every substantive correction in this paper came from a
