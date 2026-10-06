@@ -18,7 +18,13 @@ from __future__ import annotations
 
 import pathlib
 
-from sahai.core.dataset import _ast_skills, _tag_skills, drop_unsolvable
+from sahai.core.dataset import (
+    _ast_skills,
+    _entry_point,
+    _extract_function_signature,
+    _tag_skills,
+    drop_unsolvable,
+)
 
 
 class FakeProblem:
@@ -108,3 +114,60 @@ class TestLoaderContract:
         src = pathlib.Path("sahai/core/dataset.py").read_text()
         block = src[src.index("if validate:"):]
         assert "logger.warning" in block[:600]
+
+
+class TestEntryPoint:
+    """The function the tests call, not the first one the reference defines.
+
+    `_parse_assert` has always returned the name the assertion calls and the
+    loader discarded it into `_`, taking `function_name` from the first `def`
+    in the reference instead. MBPP reference solutions frequently open with a
+    helper, so for 5 of the 60 held-out problems and 6 of the 198 training
+    problems the two disagreed.
+
+    The field is not cosmetic. `CodeVerifier.verify` calls
+    `problem.function_name`, so it executed the helper and compared its result
+    against the entry point's expected value: every one of those references
+    failed its own tests. `function_signature` is interpolated into the
+    student's solve prompt as `Signature:`, so the student was told to
+    implement `rev(num)` on a problem scored by calling `check(n)`. Those
+    problems were unwinnable in every arm, the oracle arm included, and they
+    were counted in the denominator of every solve rate this project reported.
+    """
+
+    def test_the_tested_name_wins_over_the_first_def(self):
+        code = "def rev(num):\n    return num\ndef check(n):\n    return True\n"
+        assert _entry_point(code, ["check", "check", "check"]) == "check"
+
+    def test_the_first_def_is_used_when_it_is_the_tested_one(self):
+        code = "def check(n):\n    return True\ndef helper(x):\n    return x\n"
+        assert _entry_point(code, ["check"]) == "check"
+
+    def test_a_name_the_reference_never_defines_is_still_the_entry_point(self):
+        """The assertion is what executes, so its name is authoritative even
+        when the reference cannot satisfy it. `drop_unsolvable` is the right
+        place to notice that, not a silent substitution here."""
+        assert _entry_point("def other(x):\n    return x\n", ["missing"]) == "missing"
+
+    def test_no_assertions_falls_back_to_the_first_def(self):
+        assert _entry_point("def only(x):\n    return x\n", []) == "only"
+
+    def test_signature_names_the_same_function_as_the_entry_point(self):
+        code = "def rev(num):\n    return num\ndef check(n, k):\n    return True\n"
+        assert _extract_function_signature(code, "check") == "def check(n, k):"
+
+    def test_signature_falls_back_rather_than_raising(self):
+        code = "def only(x):\n    return x\n"
+        assert _extract_function_signature(code, "absent") == "def only(x):"
+        assert _extract_function_signature("no python here", "absent") == "def solution():"
+
+    def test_the_loader_takes_the_entry_point_from_the_assertions(self):
+        src = pathlib.Path("sahai/core/dataset.py").read_text()
+        assert "_entry_point(row[\"code\"], tested_names)" in src
+        assert '_, input_dict, expected = parsed' not in src, (
+            "discarding the tested name is the bug this replaced"
+        )
+
+    def test_the_loader_pairs_the_signature_with_the_entry_point(self):
+        src = pathlib.Path("sahai/core/dataset.py").read_text()
+        assert '_extract_function_signature(row["code"], func_name)' in src
