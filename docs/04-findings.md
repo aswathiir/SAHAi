@@ -1468,3 +1468,121 @@ principled version is the one that fixed leakage: verify rather than compare.
 For a hint that would mean turning the advice into code and running it, which
 is tractable for "use a heap" and not for "what does the first element tell
 you" — and the latter is 58% of what this tutor says.
+
+## 23. Five of the sixty held-out problems were unwinnable by construction
+
+Found on 2026-10-06 while auditing why the oracle arm fails at all. The oracle
+arm pastes the reference solution into the tutor's turn and asks the student to
+write it out; it scored 0.633, and that 0.367 shortfall had been read as a
+capability limit of a 1.5B student. Part of it was not.
+
+`_parse_assert` has always returned the function name the assertion calls. The
+loader discarded it:
+
+```python
+_, input_dict, expected = parsed          # the tested name, thrown away
+func_name = _extract_function_name(row["code"])   # first `def` in the file
+```
+
+MBPP reference solutions frequently open with a helper, so the two names
+disagree whenever they do:
+
+| problem | first `def` | what the tests call |
+|---|---|---|
+| mbpp_18 | `str_to_list` | `remove_dirty_chars` |
+| mbpp_30 | `check_Equality` | `count_Substring_With_Equal_Ends` |
+| mbpp_45 | `find_gcd` | `get_gcd` |
+| mbpp_56 | `rev` | `check` |
+| mbpp_70 | `find_equal_tuple` | `get_equal` |
+
+### The field is not cosmetic
+
+`CodeVerifier.verify` calls `problem.function_name`, so it executed the helper
+and compared its return value against the entry point's expected value. All
+five reference solutions failed their own tests.
+
+`function_signature` is interpolated into the student's solve prompt as
+`Signature:`. On mbpp_56 the student was told to implement `rev(num)` on a
+problem scored by calling `check(n)`. No output could pass.
+
+So these five problems returned 0 in every arm, in every run, and sat in the
+denominator of every solve rate this project has reported. On the oracle arm
+the failure is particularly clean: correct code was shown in the dialogue for a
+function the verifier never called.
+
+### Scale
+
+Reading the entry point from the assertions instead:
+
+| split | loaded | entry point corrected | references passing their own tests |
+|---|---|---|---|
+| train | 198 | 6 | 188 → **194** |
+| validation (probe) | 88 | 6 | → **87** |
+| test (held out) | 60 | 5 | 55 → **60** |
+
+The training bank recovers six problems that `drop_unsolvable` had been
+discarding. Under `validate=False`, which is the default and what the benchmark
+uses, they were not discarded but included and unwinnable.
+
+### What it does to the numbers already reported
+
+Recomputed on the 2026-10-02 three-arm dump, restricted to the 55 problems
+whose reference worked:
+
+| arm | all 60 | the 55 that were winnable |
+|---|---|---|
+| unaided | 0.367 | 0.382 |
+| base | 0.200 | 0.200 |
+| trained | 0.283 | 0.309 |
+
+The direction of every comparison survives, because a problem scoring 0 in all
+three arms cannot create a difference between them. What it does change is the
+floor: roughly 8% of the held-out set was dead weight, and the ceiling the
+oracle arm was measuring was 55/60 of what it appeared to be.
+
+A second thing surfaced in the same recomputation and is worth recording
+separately, because the report states the stronger version. On this dump
+`unaided` versus `trained` is **p=0.3323**, not significant; the p=0.035 in the
+report is the 2026-10-04 v2 pair. The `base` arm is significantly worse than
+unaided in both (p=0.021 here, p=0.013 on the 55). So "the untrained tutor
+costs the learner" is the claim with consistent support across runs, and "the
+trained tutor costs the learner" holds in one pair and not the other. The
+deficit's magnitude is not stable across adapters.
+
+### What was checked and was clean
+
+Test-case parsing on the held-out set: all 60 problems yield 3 of 3 assertions,
+none dropped, none with zero usable cases. The verifier's JSON round-trip fix
+from finding #20 holds. The remaining reference failures after this change are
+1 in validation and 4 in train, which `drop_unsolvable` handles.
+
+## 24. The learner block was served to a policy that never trained on it
+
+`sahai_core.learner_context` shares the wording of the personalisation block
+between the trainer and the gateway, and its docstring says why:
+
+> They must agree: a policy trained on one wording and served another is being
+> asked at inference time to follow an instruction it never saw during
+> training, which is exactly the gap this module closes.
+
+It closed the wording. It did not close whether the block exists.
+`sahai/core/dialogue.py` defined `LEARNER_CONTEXT_ENABLED` from
+`SAHAI_LEARNER_CONTEXT` and defaulted it off, so no recorded run has trained
+with the block. The gateway's `_context_for` built it on every served turn,
+typed and spoken, with no reference to the flag.
+
+The served tutor therefore received a block in its system prompt that its
+adapter had never been optimised against, and nothing recorded the discrepancy
+because each side was internally consistent on its own terms. This is the same
+shape as the `generate` versus `compute_log_probs` mismatch in the prompt
+consistency work: one decision, two implementations, diverging silently.
+
+The flag now lives in the shared library and both halves import it. Default
+stays off, which matches every number reported so far, and turning it on has to
+be done in the environment of the trainer and the services together.
+
+This disables the served personalisation block, which includes the skill priors
+the GitHub import seeds. That is a real loss of behaviour, and it is the
+correct direction: the block was never validated and was being fed to a model
+that had not trained on it, which makes it an unmeasured confound rather than a
+working feature.
