@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -10,7 +9,7 @@ from typing import TYPE_CHECKING
 # the fallback finds. If neither is present the block is simply empty and
 # training proceeds exactly as it did before this existed.
 try:  # pragma: no cover - import plumbing
-    from sahai_core.learner_context import learner_context
+    from sahai_core.learner_context import LEARNER_CONTEXT_ENABLED, learner_context
 except ImportError:  # pragma: no cover
     import sys
     from pathlib import Path as _Path
@@ -19,8 +18,10 @@ except ImportError:  # pragma: no cover
     if _libs.is_dir():
         sys.path.insert(0, str(_libs))
     try:
-        from sahai_core.learner_context import learner_context
+        from sahai_core.learner_context import LEARNER_CONTEXT_ENABLED, learner_context
     except ImportError:
+        LEARNER_CONTEXT_ENABLED = False
+
         def learner_context(skills, mastery):  # type: ignore[misc]
             return ""
 
@@ -28,15 +29,18 @@ if TYPE_CHECKING:
     from sahai.core.data import Problem
 
 
-# Off by default, and deliberately so. The staged fixes (clipped surrogate,
-# greedy partial-credit r_sol, difficulty-targeted ZPD) have never executed,
-# and turning the prompt change on at the same time would repeat v14 — three
-# variables changed at once, net negative, none of them attributable.
+# `LEARNER_CONTEXT_ENABLED` is imported above rather than defined here.
 #
-# Set SAHAI_LEARNER_CONTEXT=1 for the run that tests it, so the configuration
-# is recorded in the environment rather than inferred from whether a directory
-# happened to be uploaded.
-LEARNER_CONTEXT_ENABLED = os.getenv("SAHAI_LEARNER_CONTEXT", "0") == "1"
+# It used to be defined here, and the gateway did not read it: `_context_for`
+# built the block on every served turn while training defaulted it off, so the
+# deployed tutor was prompted with a block its adapter had never seen. Two
+# switches for one decision is the same shape of defect as two builders for
+# one prompt, and it stayed invisible for the same reason.
+#
+# Off by default, matching every run recorded so far. Set
+# SAHAI_LEARNER_CONTEXT=1 in the environment of the trainer *and* the services
+# for the run that tests it, so the configuration is recorded rather than
+# inferred from whether a directory happened to be uploaded.
 
 
 @dataclass

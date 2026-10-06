@@ -135,3 +135,53 @@ class TestDialogueCarriesItsConditioning:
         import sahai.core.dialogue as mod
 
         assert callable(mod.learner_context)
+
+
+class TestTrainAndServeReadOneSwitch:
+    """The learner block must be present on both sides or neither.
+
+    `sahai_core.learner_context` already shared the *wording* between the
+    trainer and the gateway, and its docstring said why: a policy trained on
+    one wording and served another is asked to follow an instruction it never
+    saw. Whether the block existed at all was not shared. `dialogue.py` gated
+    it on SAHAI_LEARNER_CONTEXT and defaulted that off; the gateway's
+    `_context_for` built it on every served turn, typed and spoken, with no
+    reference to the flag.
+
+    So the deployed tutor received a personalisation block its adapter had
+    never been trained on, and nothing recorded the discrepancy because each
+    side was internally consistent. Same shape as the `generate` versus
+    `compute_log_probs` mismatch above: one decision, two implementations.
+    """
+
+    def test_the_flag_is_defined_in_the_shared_library(self):
+        from sahai_core.learner_context import LEARNER_CONTEXT_ENABLED
+
+        assert isinstance(LEARNER_CONTEXT_ENABLED, bool)
+
+    def test_the_trainer_imports_the_flag_rather_than_redefining_it(self):
+        src = pathlib.Path("sahai/core/dialogue.py").read_text()
+        assert "LEARNER_CONTEXT_ENABLED, learner_context" in src
+        assert 'LEARNER_CONTEXT_ENABLED = os.getenv' not in src, (
+            "a second definition is how the trainer and the gateway drifted apart"
+        )
+
+    def test_the_gateway_honours_the_flag(self):
+        src = pathlib.Path("services/gateway/app/main.py").read_text()
+        assert "LEARNER_CONTEXT_ENABLED" in src
+        block = src[src.index("async def _context_for"):]
+        block = block[:block.index("\n\n\n")] if "\n\n\n" in block else block
+        assert "if not LEARNER_CONTEXT_ENABLED" in block, (
+            "_context_for must not build a block the trainer omitted"
+        )
+
+    def test_the_gateway_checks_before_doing_the_work(self):
+        """Both served paths funnel through `_context_for`, so the guard has to
+        sit ahead of the mastery lookup rather than at each call site."""
+        src = pathlib.Path("services/gateway/app/main.py").read_text()
+        block = src[src.index("async def _context_for"):]
+        assert block.index("LEARNER_CONTEXT_ENABLED") < block.index("_mastery_for")
+
+    def test_the_trainer_still_gates_the_block_on_it(self):
+        src = pathlib.Path("sahai/core/dialogue.py").read_text()
+        assert "if LEARNER_CONTEXT_ENABLED and tracer is not None" in src

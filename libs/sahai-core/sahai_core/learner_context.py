@@ -6,6 +6,11 @@ the policy is optimised on. They must agree: a policy trained on one wording
 and served another is being asked at inference time to follow an instruction
 it never saw during training, which is exactly the gap this module closes.
 
+`LEARNER_CONTEXT_ENABLED` below is part of that agreement and not a
+convenience. Sharing the wording while leaving each side to decide
+independently whether to use it closes the smaller half of the gap and leaves
+the larger half open.
+
 Deliberately *not* the raw numbers. "arrays: 0.42" gives a language model
 nothing to do — it has no calibration for what 0.42 should change about a
 hint. Naming the pedagogical move instead ("build the idea" vs "assume it")
@@ -13,6 +18,28 @@ is the part that can actually alter the next turn.
 """
 
 from __future__ import annotations
+
+import os
+
+# Whether the block is built at all, read from one place by both halves.
+#
+# The wording was already shared through this module. Whether the block
+# *exists* was not: `sahai/core/dialogue.py` gated it on this environment
+# variable and defaulted it off, while the gateway called `learner_context`
+# unconditionally on both the typed and the spoken path. So the served tutor
+# received a personalisation block in its system prompt that its adapter had
+# never been trained on, and no configuration recorded that, because the two
+# sides read different switches.
+#
+# That is the same class of defect as the prompt mismatch between `generate`
+# and `compute_log_probs`: one prompt built two ways, diverging silently. The
+# remedy is the same, which is to leave exactly one definition.
+#
+# Default off, matching what every recorded run was trained with. Turning it
+# on is a measured change and has to be set in the environment of *both* the
+# trainer and the services, which is the point: a run cannot now train without
+# the block and serve with it.
+LEARNER_CONTEXT_ENABLED = os.getenv("SAHAI_LEARNER_CONTEXT", "0") == "1"
 
 # Below NEW: the learner has not demonstrated this, so the idea has to be
 # built before it can be applied. At or above SOLID: re-explaining it wastes

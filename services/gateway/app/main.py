@@ -50,6 +50,7 @@ EXECUTOR_URL = os.getenv("SAHAI_EXECUTOR_URL", "http://executor:8000")
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
 from sahai_core.learner_context import (
+    LEARNER_CONTEXT_ENABLED,
     MASTERY_SOLID,
     learner_context as _learner_context,
 )
@@ -288,6 +289,14 @@ async def _context_for(learner: str, problem: dict | None) -> str:
     personalisation entirely.
     """
     if not problem:
+        return ""
+    # The trainer gates the same block on the same flag. This function used to
+    # ignore it, so a tutor trained without personalisation was served with
+    # it: the adapter met an instruction in its system prompt that no rollout
+    # it was optimised on had ever contained. Returning "" here keeps the
+    # served prompt identical to the trained one, and the flag is the single
+    # switch that moves both.
+    if not LEARNER_CONTEXT_ENABLED:
         return ""
     skills = problem.get("skills", [])
     context = _learner_context(skills, await _mastery_for(learner))
