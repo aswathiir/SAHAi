@@ -1586,3 +1586,151 @@ the GitHub import seeds. That is a real loss of behaviour, and it is the
 correct direction: the block was never validated and was being fed to a model
 that had not trained on it, which makes it an unmeasured confound rather than a
 working feature.
+
+## 25. The tutoring deficit was mostly how the dialogue was replayed to the student
+
+`SAHAI_SOLVE_CONTEXT` has had two settings since 2026-10-02 and only one had
+ever been run. Its docstring named the gap and left it open:
+
+> `hints` exists so the two can be compared on the same problems instead of
+> argued about, and the default is unchanged so existing results stay
+> comparable until that comparison is run.
+
+Run on 2026-10-06, 142 minutes on MPS. The comparison is made by **replaying
+the solve step of the saved benchmark dialogues** under both framings rather
+than by re-running the benchmark. Framing affects only the final solve call, so
+one fixed set of transcripts can be scored twice; re-running would resample the
+tutor and confound the framing with new dialogue content.
+
+| arm | `full` | `hints` |
+|---|---|---|
+| unaided (no dialogue, both framings identical) | 0.367 | 0.367 |
+| base | **0.183** | **0.350** |
+| trained | 0.333 | 0.350 |
+
+Paired, McNemar exact, n=60:
+
+| comparison | discordant | p |
+|---|---|---|
+| unaided vs base, `full` | 13 / 2 | **0.0074** |
+| unaided vs base, `hints` | 8 / 7 | 1.0000 |
+| unaided vs trained, `full` | 11 / 9 | 0.8238 |
+| unaided vs trained, `hints` | 7 / 6 | 1.0000 |
+| base vs trained, `hints` | 5 / 5 | 1.0000 |
+
+### The headline result does not survive the framing change
+
+Under `full` the untrained tutor costs the learner at p=0.0074, which is the
+result this project has reported in five forms. Under `hints`, on the same
+dialogues, with the same tutor turns, the deficit is gone: 0.350 against 0.367
+unaided, 8 discordant one way and 7 the other.
+
+Nothing about the tutoring changed. What changed is that the student's own
+turns stopped being replayed into its assistant history before it was asked to
+write code. The mechanism named in the docstring is the one that was operating:
+a chat model conditions heavily on its own prior assistant turns, and 20% of
+student turns express confusion.
+
+**Tutoring as built does not harm the learner. The measurement did.**
+
+### What training actually bought
+
+| framing | base | trained | discordant | p |
+|---|---|---|---|---|
+| `full` | 0.183 | 0.333 | 12 / 3 | **0.0352** |
+| `hints` | 0.350 | 0.350 | 5 / 5 | 1.0000 |
+
+Under the broken framing the trained policy beats the untrained one
+significantly. Under the fixed framing they are identical to the problem.
+
+So the one place training ever showed a measurable gain was **partial immunity
+to the measurement artefact**, not better teaching. The trained policy produces
+dialogues whose student turns hedge less, which interacts less badly with the
+`full` replay. Remove the artefact and the two adapters are indistinguishable,
+which is consistent with every other measurement of training in this project.
+
+### The reward used during training was computed under `full`
+
+`SolveReward` scores the same `attempt_solution` call. Every run to date
+therefore optimised against an outcome signal carrying this artefact, which
+penalised dialogues in proportion to how much the student talked rather than
+how well the tutor taught. The policy has never been optimised against a clean
+`r_sol`. That makes a retrain under `hints` the first training run whose
+outcome term means what it says, and it is the obvious next experiment.
+
+### Caveat: the replay is not bit-exact
+
+`attempt_solution` decodes greedily, so replaying `full` should reproduce the
+dump exactly. It reproduces **57/60 in both arms**. The 3-problem discrepancy
+is MPS reduction nondeterminism, not a logic difference, and it sets a noise
+floor of about 5% on any single arm.
+
+The base arm's framing effect is 12 gained against 2 lost, far outside that
+floor. The trained arm's is 7 gained against 6 lost, entirely inside it, so
+"the trained arm is unaffected by framing" is the honest reading rather than
+"the trained arm improves slightly".
+
+## 26. The oracle ceiling is 0.783, and two thirds of the shortfall was ours
+
+Re-ran the oracle arm on 2026-10-06 with the entry-point fix of finding #23 in
+place, dumping the raw generation beside the extracted code so the failures
+could be split rather than assumed.
+
+| | solve rate |
+|---|---|
+| oracle, as previously reported | 0.633 |
+| oracle, with the entry point read from the assertions | **0.733** |
+| oracle, with AST-based code extraction as well | **0.783** |
+
+Against unaided 0.367, paired McNemar: p=0.0001 and p<0.0001. The student can
+use what is in the dialogue, decisively.
+
+### Where the original 22 failures went
+
+| cause | n | fixable |
+|---|---|---|
+| entry point taken from the first `def` (finding #23) | 6 | fixed |
+| `_extract_code` discards the solution on a name mismatch | 3 | fixable, see below |
+| genuine failure with the answer in front of it | 13 | no |
+
+`_extract_code` ends with:
+
+```python
+if f"def {function_name}" not in text:
+    text = f"def {function_name}():\n    pass"
+```
+
+Everything the student wrote is thrown away on a literal string miss. All five
+misses are naming style, and three are pure case differences between MBPP's
+mixedCase and the snake_case the student writes:
+
+| wanted | student wrote | recovered by AST |
+|---|---|---|
+| `max_Prime_Factors` | `max_prime_factors` | yes |
+| `decimal_To_Binary` | `decimal_to_binary` | yes |
+| `count_Substrings` | `count_substrings` | yes |
+| `count_Substring_With_Equal_Ends` | `count_substrings_with_equal_ends` | no, logic also wrong |
+| `get_equal` | `check_tuples_length` | no, logic also wrong |
+
+Aliasing the last top-level function to the tested name recovers 3 of 60, or
+5 points of solve rate, in every arm. Note this is not a rename: an alias
+preserves recursion through the original name.
+
+Of the remaining 13, four score partial credit (0.33 to 0.67), so the student
+is writing nearly-correct code rather than failing to engage. Zero generations
+hit the 512-token cap and zero failed to parse, so truncation and malformed
+output are not contributors.
+
+### What this does to the headroom
+
+| | before this work | after |
+|---|---|---|
+| unaided | 0.367 | 0.367 |
+| oracle ceiling | 0.633 | 0.783 |
+| headroom available to tutoring | 0.267 | **0.417** |
+
+The conclusion in the report that "the binding constraint is the task and the
+student, not the reward or the optimiser" was drawn against the 0.267 figure
+and a tutoring deficit that turns out to be an artefact. Both inputs to it have
+changed. There is more than twice the measurable headroom previously believed,
+and tutoring is no longer starting from behind.

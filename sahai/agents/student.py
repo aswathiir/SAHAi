@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import os
 import random
 from dataclasses import dataclass, field
@@ -88,6 +89,31 @@ class StudentPersona:
             f"- Ask short questions. Show confusion. Keep responses to 1-2 sentences.\n"
             f"- When you finally understand the approach, say exactly: 'I think I can solve it now'\n"
         )
+
+
+
+def _parse_salvaging_tail(body: str) -> tuple[ast.Module, str] | None:
+    """Parse `body`, dropping trailing lines until it parses.
+
+    A generation cut off mid-statement leaves a complete function followed by a
+    fragment; discarding the whole reply over the fragment loses the part that
+    works. Returns the tree and the text it was parsed from, so callers alias
+    against exactly what parsed.
+
+    Module level rather than a method because it touches no instance state.
+    """
+    try:
+        return ast.parse(body), body
+    except SyntaxError:
+        pass
+    lines = body.split("\n")
+    for cut in range(len(lines) - 1, 0, -1):
+        candidate = "\n".join(lines[:cut])
+        try:
+            return ast.parse(candidate), candidate
+        except SyntaxError:
+            continue
+    return None
 
 
 class StudentSimulator:
@@ -274,10 +300,54 @@ class StudentSimulator:
         return self._extract_code(code, problem.function_name)
 
     def _extract_code(self, text: str, function_name: str) -> str:
-        if "```python" in text:
-            text = text.split("```python")[1].split("```")[0]
-        elif "```" in text:
-            text = text.split("```")[1].split("```")[0]
-        if f"def {function_name}" not in text:
-            text = f"def {function_name}():\n    pass"
-        return text.strip()
+        """Pull the student's code out of its reply, keeping it when the name
+        differs.
+
+        This used to end with a literal string check:
+
+            if f"def {function_name}" not in text:
+                text = f"def {function_name}():\n    pass"
+
+        which discards everything the student wrote the moment the name does
+        not match exactly. Measured on the oracle arm, where a correct solution
+        is in front of the student, that fired on 5 of 60 problems and every
+        one was naming style rather than a refusal to answer -- MBPP uses
+        mixedCase (`max_Prime_Factors`, `decimal_To_Binary`) and the student
+        writes snake_case. Three of the five were otherwise correct and scored
+        zero, which is 5 points of solve rate lost in every arm of every run.
+
+        So the fallback is now an alias rather than a stub. An alias and not a
+        rename, because a recursive solution calls itself by the name it
+        defined, and renaming the `def` would break the recursion it is there
+        to preserve.
+        """
+        body = text
+        if "```python" in body:
+            body = body.split("```python")[1].split("```")[0]
+        elif "```" in body:
+            parts = body.split("```")
+            if len(parts) > 1:
+                body = parts[1]
+        body = body.strip()
+        if not body:
+            return f"def {function_name}():\n    pass"
+
+        tree = _parse_salvaging_tail(body)
+        if tree is None:
+            # Nothing parseable. The stub is still the right answer here: it
+            # fails the tests, which is what unparseable output deserves.
+            return f"def {function_name}():\n    pass"
+        body = tree[1]
+
+        funcs = [
+            n.name for n in tree[0].body
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ]
+        if not funcs:
+            return f"def {function_name}():\n    pass"
+        if function_name in funcs:
+            return body
+        # Last, not first: the reference convention in this dataset is helpers
+        # first and the answer last, and the student imitates what it was shown.
+        return f"{body}\n\n{function_name} = {funcs[-1]}\n"
+
