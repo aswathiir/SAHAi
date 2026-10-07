@@ -73,6 +73,8 @@ def replay(turns: list[dict], problem, mode: str) -> int:
 
 results: dict[str, list[dict]] = {}
 t0 = time.time()
+MODES = ("full", "hints", "quoted")
+
 for arm in ("base", "trained"):
     rows = saved["arms"][arm]["dialogues"][:LIMIT]
     out = []
@@ -80,22 +82,18 @@ for arm in ("base", "trained"):
         p = by_id.get(r["problem_id"])
         if p is None:
             continue
-        full = replay(r["turns"], p, "full")
-        hints = replay(r["turns"], p, "hints")
-        out.append({
-            "problem_id": r["problem_id"],
-            "saved_full": r["solved"],
-            "replay_full": full,
-            "replay_hints": hints,
-            "n_turns": len(r["turns"]),
-        })
+        got = {m: replay(r["turns"], p, m) for m in MODES}
+        rec = {"problem_id": r["problem_id"], "saved_full": r["solved"],
+               "n_turns": len(r["turns"])}
+        rec.update({f"replay_{m}": got[m] for m in MODES})
+        out.append(rec)
         mark = ""
-        if full != r["solved"]:
+        if got["full"] != r["solved"]:
             mark += "  REPLAY DISAGREES WITH DUMP"
-        if hints != full:
-            mark += "  FRAMING FLIPS IT"
-        print(f"[{arm:7s} {i:3d}/{len(rows)}] {r['problem_id']:12s} "
-              f"dump={r['solved']} full={full} hints={hints}{mark}", flush=True)
+        if len(set(got.values())) > 1:
+            mark += "  FRAMING MATTERS HERE"
+        print(f"[{arm:7s} {i:3d}/{len(rows)}] {r['problem_id']:12s} dump={r['solved']} "
+              + " ".join(f"{m}={got[m]}" for m in MODES) + mark, flush=True)
     results[arm] = out
     json.dump(results, open(OUT, "w"), indent=1)
 
@@ -120,13 +118,16 @@ for arm, rows in results.items():
     n = len(rows)
     sf = sum(r["saved_full"] for r in rows)
     rf = sum(r["replay_full"] for r in rows)
-    rh = sum(r["replay_hints"] for r in rows)
     agree = sum(r["saved_full"] == r["replay_full"] for r in rows)
-    b, c_, p = mcnemar([(r["replay_full"], r["replay_hints"]) for r in rows])
     print(f"\n{arm}  n={n}")
     print(f"  solved, dump (full)      {sf}/{n} = {sf/n:.3f}")
     print(f"  solved, replay full      {rf}/{n} = {rf/n:.3f}   "
           f"(reproduces the dump on {agree}/{n})")
-    print(f"  solved, replay hints     {rh}/{n} = {rh/n:.3f}")
-    print(f"  full->hints discordant   {b} lost, {c_} gained, McNemar exact p={p:.4f}")
+    for m in MODES[1:]:
+        sm = sum(r[f"replay_{m}"] for r in rows)
+        b, c_, p = mcnemar([(r["replay_full"], r[f"replay_{m}"]) for r in rows])
+        print(f"  solved, replay {m:8s}  {sm}/{n} = {sm/n:.3f}"
+              f"   vs full: {b} lost, {c_} gained, p={p:.4f}")
+    b, c_, p = mcnemar([(r["replay_hints"], r["replay_quoted"]) for r in rows])
+    print(f"  hints vs quoted          {b} / {c_} discordant, p={p:.4f}")
 print(f"\nwritten to {OUT}")

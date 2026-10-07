@@ -15,9 +15,15 @@ logging.basicConfig(
 )
 
 
-def _load_settings(config: Path | None, kaggle: bool = False) -> "Settings":
+def _load_settings(
+    config: Path | None, kaggle: bool = False, local_mps: bool = False
+) -> "Settings":
     from sahai.settings import Settings
 
+    if kaggle and local_mps:
+        raise typer.BadParameter("pick one of --kaggle and --local-mps")
+    if local_mps:
+        return Settings.local_mps()
     if kaggle:
         return Settings.kaggle()
     if config and config.exists():
@@ -26,13 +32,24 @@ def _load_settings(config: Path | None, kaggle: bool = False) -> "Settings":
     return Settings()
 
 
-def _load_problems(settings):
+def _load_problems(settings, validate: bool = False):
+    """`validate=True` executes every reference and drops the ones that fail.
+
+    Training should pass it and evaluation should not. A problem whose reference
+    fails its own tests scores zero for every rollout in its group whatever the
+    tutor said, so the group has no reward variance, every advantage in it is
+    exactly zero, and it consumes a full generation budget to contribute no
+    gradient. Evaluation leaves it off because every number reported so far was
+    measured without it and turning it on there would make runs incomparable.
+    """
     from sahai.core.data import ProblemBank
 
     if settings.dataset == "mbpp":
         from sahai.core.dataset import load_mbpp
 
-        return load_mbpp(split="train", max_problems=settings.max_problems)
+        return load_mbpp(
+            split="train", max_problems=settings.max_problems, validate=validate
+        )
     if settings.dataset == "apps":
         from sahai.core.dataset import load_apps
 
@@ -45,6 +62,7 @@ def train(
     config: Path = typer.Option(None, help="Path to config JSON"),
     output: str = typer.Option("output", help="Output directory for checkpoints"),
     kaggle: bool = typer.Option(False, help="Use Kaggle-optimized settings (T4 16GB)"),
+    local_mps: bool = typer.Option(False, "--local-mps", help="Apple Silicon GPU settings"),
     dataset: str = typer.Option(None, help="Dataset: local, mbpp, apps"),
 ):
     """Train tutor policy with GRPO."""
@@ -54,10 +72,24 @@ def train(
     from sahai.reward.pedagogy import PedagogyReward
     from sahai.training.grpo import GRPOTrainer
 
-    settings = _load_settings(config, kaggle)
+    settings = _load_settings(config, kaggle, local_mps)
     settings.output_dir = output
     if dataset:
         settings.dataset = dataset
+
+    # Seed before the models load, not after.
+    #
+    # `GRPOTrainer.__init__` already calls this, but it runs after
+    # `load_for_training` has applied the LoRA adapter, and PEFT initialises
+    # `lora_A` from a Kaiming uniform draw. `lora_B` is zeros, so the policy at
+    # step 0 is identical either way and the difference is invisible in any
+    # epoch-0 metric; the trajectory from step 1 onward is not. Two runs of the
+    # same configuration with the same seed therefore diverged, which is the
+    # same failure as the seed not being applied at all, one layer further in.
+    from sahai.training.grpo import seed_everything
+
+    seed_everything(settings.seed)
+    typer.echo(f"Seeded with {settings.seed} before loading any model")
 
     typer.echo(f"Loading tutor: {settings.model.tutor}")
     tutor_model, tutor_tok = load_for_training(
@@ -85,8 +117,8 @@ def train(
         pedagogy = PedagogyReward(judge_model, judge_tok, settings.reward.num_judges)
 
     typer.echo(f"Loading dataset: {settings.dataset}")
-    problem_bank = _load_problems(settings)
-    typer.echo(f"Loaded {len(problem_bank.problems)} problems")
+    problem_bank = _load_problems(settings, validate=True)
+    typer.echo(f"Loaded {len(problem_bank.problems)} solvable problems")
 
     trainer = GRPOTrainer(settings, tutor, student, pedagogy, problem_bank)
 

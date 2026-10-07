@@ -268,3 +268,34 @@ class Settings(BaseModel):
             max_problems=200,
             output_dir="/kaggle/working/output",
         )
+
+    @classmethod
+    def local_mps(cls) -> "Settings":
+        """Apple Silicon GPU, derived from `kaggle()` so the two cannot drift.
+
+        Only what the device forces is changed. Everything that defines the
+        experiment -- group size, turns, learning rate, reward weights, probe
+        cadence, patience -- is inherited, so a result from this preset is
+        comparable with the Kaggle runs rather than a separate configuration
+        whose differences have to be reconstructed later.
+
+        What the device forces:
+
+        * `student_quantize_4bit` off. bitsandbytes is CUDA-only; the loader
+          already warns and falls back, and this makes the fallback explicit in
+          the configuration rather than in a log line. Two 1.5B models in
+          bfloat16 is about 6 GB against 16 GB of unified memory.
+        * `epochs` 10 -> 8. Both seeded Kaggle pairs selected epoch 1 or 3, and
+          with `eval_every=2` and patience 3 a stop needs six epochs past the
+          best, so 8 covers the range either of them used. The cap is a time
+          budget, not a belief about convergence: MPS is roughly three times
+          slower than a T4 here. `best_model` is written whenever a probe
+          improves, so a run killed early still leaves the selected checkpoint
+          rather than nothing.
+        """
+        s = cls.kaggle()
+        s.device = "mps"
+        s.model.student_quantize_4bit = False
+        s.training.epochs = 8
+        s.output_dir = "artifacts/retrain"
+        return s

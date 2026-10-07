@@ -193,6 +193,9 @@ class StudentSimulator:
           transcript, mapping the student's own turns to `assistant` and the
           tutor's to `user`.
         * `hints` passes only the tutor's turns, as a single user message.
+        * `quoted` passes every turn, the student's included, as a single user
+          message, so the content is preserved and no turn sits in the model's
+          own assistant history.
 
         Why this is a parameter rather than a fix. The 2026-10-02 benchmark
         measured, on 60 paired problems, that a tutored student solves 0.133
@@ -212,6 +215,38 @@ class StudentSimulator:
         results stay comparable until that comparison is run.
         """
         mode = os.getenv("SAHAI_SOLVE_CONTEXT", "full").lower()
+
+        if mode == "quoted":
+            # Every turn, including the student's own, as a single user message.
+            #
+            # This exists to separate two mechanisms that `hints` removes at the
+            # same time. `hints` drops the student's turns, which removes both
+            # the content and the fact that content sat in the model's own
+            # assistant history. `quoted` keeps every character and removes only
+            # the role, so the two can be told apart:
+            #
+            #   quoted scores like hints  -> the role is the mechanism, and
+            #                                `hints` is discarding usable
+            #                                context for no reason
+            #   quoted scores like full   -> the volume is the mechanism, and
+            #                                self-conditioning has nothing to
+            #                                do with it
+            #
+            # The hedging explanation originally offered for the `full` deficit
+            # is already ruled out: recovery does not track whether the student
+            # said it was lost (Fisher p=0.44, and p=1.00 in the base arm),
+            # while it does track how much the student wrote.
+            if not dialogue.turns:
+                return []
+            lines = [
+                f"{'You' if t.role == 'student' else 'Tutor'}: {t.content}"
+                for t in dialogue.turns
+            ]
+            return [{
+                "role": "user",
+                "content": "Here is the tutoring session you just had:\n\n"
+                           + "\n\n".join(lines),
+            }]
 
         if mode == "hints":
             hints = [t.content for t in dialogue.turns if t.role == "tutor"]
