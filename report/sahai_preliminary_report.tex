@@ -79,9 +79,11 @@ given no dialogue at all (McNemar, $p{=}0.0074$), which we reported in five
 forms as evidence that tutoring costs the learner. It does not. Replaying the
 same transcripts, with the same tutor turns, while omitting the student's own
 replies from the context of its final attempt lifts that arm to $0.350$ and
-removes the deficit entirely ($p{=}1.0$). The harm was an artefact of
-conditioning a chat model on its own recorded confusion immediately before
-asking it to write code. What survives is weaker and better supported:
+removes the deficit entirely ($p{=}1.0$). The harm is an artefact of the replay rather than
+a property of the tutoring. We do not know its mechanism: the explanation we
+first gave, that the model conditions on its own recorded confusion, does not
+survive its own prediction, and neither does the alternative that the
+assistant role is responsible. What survives is weaker and better supported:
 tutoring as built neither helps nor harms, and training is inert. The trained
 and untrained adapters score identically once the framing is corrected
 ($0.350$ against $0.350$, $p{=}1.0$), and the one comparison in which training
@@ -530,10 +532,23 @@ problems lost against two gained, $p{=}0.0074$. That is the result this project
 reported in five forms. Replaying the identical transcripts while omitting the
 student's own replies from the context of its final attempt lifts the same arm
 to $0.350$, seven discordant one way and eight the other, $p{=}1.000$. No
-tutoring changed. What changed is that the model stopped being conditioned on
-its own recorded confusion immediately before being asked to write code, and
-$20\%$ of student turns express exactly that. The deficit was an artefact of
-how the transcript was replayed, and we had carried it for six runs.
+tutoring changed, only whether the student's own words were in front of it. The
+deficit is an artefact of how the transcript was replayed, and we had carried
+it for six runs.
+
+We cannot say why, and we have excluded the two explanations we offered.
+Recovery does not track whether the student declared itself lost (Fisher exact
+$p{=}0.4378$ pooled, $p{=}1.0000$ in the untrained arm), and the problems the
+change broke carry marginally more such declarations than those it left solved,
+so the signal is not directional. A third framing that preserves every
+character of the transcript in a single user message, holding quantity fixed
+and removing only the role in which the student's words are recorded, does not
+recover the deficit either: on the problems where the first two framings
+disagree it follows the harmful one 14 times to 8, and in the trained arm on
+all 8. What separates recovered problems from those that stayed failed is the
+quantity of prior student text, 843 characters against 534. We report that
+contrast as the surviving description rather than as a mechanism, because we
+have not tested it.
 
 Second, \textbf{training is inert, and the one result suggesting otherwise was
 the artefact again.} Under the corrected framing the trained and untrained
