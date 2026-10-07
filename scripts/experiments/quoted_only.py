@@ -46,6 +46,11 @@ from sahai.reward.solve import CodeVerifier
 
 ARMS = sys.argv[1].split(",") if len(sys.argv) > 1 else ["base"]
 OUT = sys.argv[2] if len(sys.argv) > 2 else "artifacts/phase2/quoted.json"
+# "discordant" restricts to the problems where `full` and `hints` disagree.
+# Those are the only ones that can discriminate: a problem both framings fail,
+# or both solve, says nothing about which mechanism is operating, and 89 of the
+# 120 are in that category. Running them costs two hours and answers nothing.
+SCOPE = sys.argv[3] if len(sys.argv) > 3 else "discordant"
 
 prior = json.load(open("artifacts/phase2/framing.json"))
 dump = json.load(open("kaggle_upload/dialogues/ab_benchmark.json"))
@@ -77,6 +82,11 @@ t0 = time.time()
 for arm in ARMS:
     turns_by = {r["problem_id"]: r["turns"] for r in dump["arms"][arm]["dialogues"]}
     prior_by = {r["problem_id"]: r for r in prior[arm]}
+    if SCOPE == "discordant":
+        prior_by = {
+            k: v for k, v in prior_by.items()
+            if v["replay_full"] != v["replay_hints"]
+        }
     out = []
     for i, pid in enumerate(prior_by, 1):
         p = by_id[pid]
@@ -99,9 +109,15 @@ print("=" * 70)
 for arm, rows in results.items():
     n = len(rows)
     tot = {m: sum(r[f"replay_{m}"] for r in rows) for m in ("full", "hints", "quoted")}
-    print(f"\n{arm}  n={n}")
+    print(f"\n{arm}  n={n}  (scope={SCOPE})")
     for m in ("full", "hints", "quoted"):
         print(f"  {m:7s} {tot[m]:2d}/{n} = {tot[m]/n:.3f}")
+    # On the discordant set `full` and `hints` are by construction opposites,
+    # so the only question is which of them `quoted` tracks.
+    like_full = sum(1 for r in rows if r["replay_quoted"] == r["replay_full"])
+    like_hints = sum(1 for r in rows if r["replay_quoted"] == r["replay_hints"])
+    print(f"  quoted agrees with full  on {like_full}/{n}")
+    print(f"  quoted agrees with hints on {like_hints}/{n}")
     for x, y in (("full", "quoted"), ("hints", "quoted")):
         b, c_, pv = mcnemar([(r[f"replay_{x}"], r[f"replay_{y}"]) for r in rows])
         print(f"  {x:6s} vs {y:6s}  {b} lost / {c_} gained  p={pv:.4f}")

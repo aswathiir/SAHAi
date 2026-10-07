@@ -1734,3 +1734,79 @@ student, not the reward or the optimiser" was drawn against the 0.267 figure
 and a tutoring deficit that turns out to be an artefact. Both inputs to it have
 changed. There is more than twice the measurable headroom previously believed,
 and tutoring is no longer starting from behind.
+
+## 27. The framing effect is real, both explanations offered for it are wrong
+
+Finding #25 established that omitting the student's turns from the context of
+its final attempt removes a deficit of $0.184$, and offered a mechanism: the
+model conditions on its own recorded confusion, measured at 20% of student
+turns, immediately before being asked to write code. That mechanism carries a
+prediction, and the prediction fails.
+
+### Hedging does not predict recovery
+
+Among the problems available to be recovered, comparing those the framing
+change fixed against those that stayed failed:
+
+| | recovered | still failed |
+|---|---|---|
+| dialogue contains student "I am lost" | 0.632 | 0.500 |
+| mean stuck turns | 0.68 | 0.51 |
+| **Fisher exact, two-sided** | | **p=0.4378** |
+
+Per arm it is worse, not better: the base arm splits 0.50 against 0.49,
+p=1.0000, and only the trained arm shows anything (0.857 against 0.515,
+p=0.2055, n=7). Breakage does not track it either, with the problems the change
+*broke* carrying slightly more hedging than those it left solved (0.62 against
+0.48), so the signal is not even directional.
+
+What does separate the two groups is volume. Recovered problems average 843
+characters of student text against 534 for those that stayed failed, consistent
+across both arms.
+
+### Re-roling the content does not recover it either
+
+`hints` removes two things at once: the student's content, and the fact that
+content sat in the model's own assistant history. A third framing, `quoted`,
+keeps every character and puts the whole transcript in one user message, which
+holds volume fixed and removes only the role. On the 27 problems where `full`
+and `hints` disagree, those two are opposites by construction, so the only
+question is which one `quoted` follows.
+
+| arm | n | tracks `full` | tracks `hints` | sign test |
+|---|---|---|---|---|
+| base | 14 | 6 | 8 | p=0.7905 |
+| trained | 8 | **8** | **0** | **p=0.0078** |
+| pooled | 22 | 14 | 8 | p=0.2863 |
+
+In the trained arm `quoted` is identical to `full` on every discordant problem.
+In the base arm it is a coin flip. Pooled, it leans toward `full` and
+establishes nothing.
+
+So `quoted` is not a substitute for `hints`. Removing the student's text is
+doing the work; moving it out of the assistant role is not enough. That
+disposes of the role explanation, and it is the opposite of what we expected
+when the framing was added.
+
+### Where that leaves the framing
+
+`hints` is still the only framing shown to recover the deficit, and the two
+candidate explanations for why are both now excluded: not the hedging content
+specifically, and not the assistant role. The surviving description is the
+weakest one, that the quantity of prior student text degrades the attempt
+regardless of what it says or who is recorded as saying it, and the volume
+contrast above is consistent with that without testing it.
+
+This is uncomfortable but it is the state of the evidence. The practical
+consequence is unchanged: no result in this project is interpretable without
+stating its framing, because the two framings differ by more than the effect
+every arm was built to detect. The scientific consequence is that we do not
+know why, and the explanation printed in the report and in finding #25 should
+not be relied on.
+
+### Caveat on this finding
+
+The `quoted` run was stopped at 22 of 27 problems to yield the GPU to another
+project on the same machine, so the trained arm contributes 8 of its 13
+discordant problems. The base arm is complete. A pooled sign test at n=22 has
+little power, and the arm disagreement may not survive the missing five.
