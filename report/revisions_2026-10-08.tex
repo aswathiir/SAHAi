@@ -1,0 +1,575 @@
+%=======================================================================
+% SUPERSEDED SECTIONS AND THEIR REPLACEMENTS
+%
+% Against the draft titled "SAHAi: Socratic RL Tutor" (the one whose
+% abstract reports 17.5% on 20 unseen problems).
+%
+% Each block below is marked:
+%   [[R-n]] REPLACE  ... what to delete, named by its opening words
+%           WITH     ... the LaTeX to paste in its place
+%   [[A-n]] ADD      ... new material, with the insertion point named
+%
+% No em dashes anywhere, per the house rule.
+% Every number here is measured. Provenance is in docs/04-findings.md,
+% findings 23 to 27.
+%=======================================================================
+
+
+%-----------------------------------------------------------------------
+% [[R-1]] REPLACE: the whole abstract.
+%
+% Superseded on three counts. The 17.5% headline was measured with a
+% verifier that failed 15% of references, an entry point that made 5 of
+% 60 held-out problems unwinnable, and an extractor that discarded
+% correct code on a name mismatch. The "6% to 18%, no statistical
+% difference" framing predates the controls. And "validated tutor policy
+% reward design" is not supported: the correctness term did nothing.
+%-----------------------------------------------------------------------
+\begin{abstract}
+A language model that solves programming problems is not thereby able to teach
+them. The behaviours conflict: the fastest way to make a student's next
+submission correct is to hand over the answer, which is the one thing a tutor
+must not do. SAHAi treats this as a reinforcement learning problem. A tutor
+policy holds a multi-turn dialogue with a simulated, knowledge-traced student,
+the student then attempts the problem, and the attempt is executed against unit
+tests. The tutor is rewarded for the student's verified success and penalised
+for disclosing the solution. No human tutoring transcripts are used. The design
+follows the review of pedagogical reinforcement learning in~\cite{rev-pedrl}.
+
+Our central result is negative, and the most useful part of it is a negative
+result about our own measurement. On 60 held-out problems compared pairwise, a
+tutored student solved $0.183$ against $0.367$ for the same student given no
+dialogue at all (McNemar exact, $p{=}0.0074$), which we previously reported as
+evidence that tutoring costs the learner. It does not. Replaying the same
+transcripts, with the same tutor turns, while omitting the student's own replies
+from the context of its final attempt lifts that arm to $0.350$ and removes the
+deficit entirely ($p{=}1.0000$). What survives is weaker and better supported:
+tutoring as built neither helps nor harms, and training is inert. The trained
+and untrained adapters score identically once the framing is corrected ($0.350$
+against $0.350$, $p{=}1.0000$), and the one comparison in which training ever
+looked beneficial ($p{=}0.0352$) measured its partial immunity to the artefact
+rather than better teaching.
+
+We give the mechanism for the inertia. Every reward term the policy can compute
+from its own output is driven to its ceiling, pedagogy $0.76$ to $0.97$ and
+leakage $0.44$ to $0.09$, while the outcome term does not move. We also report
+four instrumentation defects that depressed every number this project has
+published, two of them found by auditing why an oracle arm fails at all: a
+verifier that marked $15\%$ of reference solutions wrong through a JSON round
+trip, a seed that was never applied, an entry point read from the first function
+a reference defines rather than the one its tests call, and an extraction step
+that discarded a correct solution whenever the student's function name differed
+in case. Correcting the last two raises the oracle ceiling from $0.633$ to
+$0.783$ and more than doubles the headroom available to a tutor, from $0.267$ to
+$0.417$. Alongside the training results we describe a complete interactive
+system: six containerised services, voice input for Indic languages, and a
+persistent Bayesian learner model driving placement and curriculum.
+\end{abstract}
+
+
+%-----------------------------------------------------------------------
+% [[R-2]] REPLACE: the IEEEkeywords block.
+%
+% The current block is three sentences of prose, not keywords.
+%-----------------------------------------------------------------------
+\begin{IEEEkeywords}
+Reinforcement learning from verifiable rewards, group-relative policy
+optimisation, intelligent tutoring systems, simulated learners, knowledge
+tracing, reward hacking, measurement validity, large language models.
+\end{IEEEkeywords}
+
+
+%-----------------------------------------------------------------------
+% [[R-3]] REPLACE: in \subsection{Contributions}, items 3 and 4.
+%
+% Item 3 states the pedagogy term carries about five times the usable
+% gradient of the outcome term. That ratio reversed once partial credit
+% was added, and keeping it would be reporting a measurement we have
+% since overturned. Item 4 is still true but is no longer the headline
+% methodological point; the framing artefact is.
+%-----------------------------------------------------------------------
+\item We measure the asymmetry between reward channels and report that it
+      reversed under a change we made to fix it. Under strict all-or-nothing
+      scoring the deterministic, tutor-controlled terms carried roughly five
+      times the usable between-group variance of the outcome term ($0.0482$
+      against $0.0098$). After partial test-case credit the ratio runs the other
+      way ($0.0150$ against $0.0481$), and held-out solve rate still does not
+      move. Gradient starvation was real and worth fixing. It was not what
+      prevented learning (Sec.~\ref{sec:channel}).
+\item We show that the framing of the student's final attempt moves held-out
+      solve rate by $0.184$, which is larger than any effect this protocol was
+      built to detect, and that the deficit we previously reported as active
+      harm is an artefact of it. No result in this area is interpretable
+      without stating how the transcript reaches the learner's attempt
+      (Sec.~\ref{sec:framing}).
+\item We give a statistical power result for our protocol: the held-out set used
+      for every run-to-run comparison before this revision could not detect the
+      differences it was being asked to detect (Sec.~\ref{sec:threats}).
+
+
+%-----------------------------------------------------------------------
+% [[R-4]] REPLACE: equation (eq:reward) and the itemized term list
+% following it, through the end of \subsection{Reward}.
+%
+% The equation omits the correctness term that was added and measured.
+% The term list contains a typo ("he post-dialogue solve rate") and the
+% closing paragraph is garbled.
+%-----------------------------------------------------------------------
+\begin{equation}
+r_{\mathrm{SAHAI}}=\bigl(r_{\mathrm{sol}}-\alpha\bigr)
++\bigl(r_{\mathrm{ped}}-1\bigr)\lambda-\gamma L
++\mu\, r_{\mathrm{corr}},
+\label{eq:reward}
+\end{equation}
+with a hard penalty $r_{\mathrm{SAHAI}}=-\lambda$ when
+$r_{\mathrm{ped}}=0$. The terms are:
+\begin{itemize}[leftmargin=*,topsep=2pt,itemsep=1pt,parsep=0pt]
+\item $r_{\mathrm{sol}}$, the post-dialogue solve rate, obtained by executing
+      the student's attempt in a sandbox against the problem's unit tests.
+      Decoded greedily, so it is a deterministic function of the dialogue, and
+      scored with partial test-case credit.
+\item $\alpha$, the tracer's ability baseline, which removes credit the tutor
+      would otherwise receive for a student who would have solved the problem
+      unaided.
+\item $r_{\mathrm{ped}}\in[0,1]$, a graded rule-based judge: the mean of three
+      checks, each of the form ``did the tutor give the answer away''.
+\item $L\in[0,1]$, leakage. Rare-token overlap between the tutor's text and the
+      reference solution with problem-statement tokens subtracted, combined with
+      an execution check: if the tutor's text runs and passes the problem's
+      tests, $L{=}1$ regardless of lexical similarity.
+\item $r_{\mathrm{corr}}\in[0,1]$, the share of the tutor's checkable technique
+      claims that the reference solution corroborates, grounded in an abstract
+      syntax tree pass over that solution rather than in the tutor's own text.
+      An uncorroborated claim is unverified rather than refuted, because most
+      problems admit several approaches and $18\%$ of measured passing student
+      solutions used a different technique set than their reference.
+\end{itemize}
+
+Advantages follow~\eqref{eq:adv} over groups sharing a problem. A KL penalty is
+applied against a frozen reference policy, realised as the same weights with the
+adapter disabled. Problems are drawn by a curriculum sampler that targets
+difficulty relative to the tracer's mastery state, following the Zone of
+Proximal Development~\cite{vygotsky}.
+
+We report $\mu{=}0.0$ throughout. A paired experiment at $\mu{=}0.5$ is in
+Sec.~\ref{sec:correctness}, and it found that the arm not paid for correctness
+improved on correctness more than the arm that was.
+
+
+%-----------------------------------------------------------------------
+% [[R-5]] REPLACE: the rows of Table~\ref{tab:config} listed below.
+% Keep the rest of the table.
+%-----------------------------------------------------------------------
+Problem bank      & MBPP~\cite{mbpp} train split; 198 loaded, 194 solvable \\
+Held-out set      & 60 unseen problems (20 before this revision) \\
+Probe split       & MBPP validation; 20 problems every 2 epochs \\
+Early stopping    & on held-out probe solve, patience 3 \\
+Solve decoding    & greedy, partial test-case credit \\
+Solve framing     & tutor turns only; see Sec.~\ref{sec:framing} \\
+
+
+%-----------------------------------------------------------------------
+% [[R-6]] REPLACE: \subsection{Held-out evaluation} in its entirety,
+% including Table~\ref{tab:heldout}.
+%
+% Superseded by the controlled comparison. The old table reports a single
+% arm at n=20 with pedagogy and leakage degenerate, and its solve rate
+% was measured on broken instrumentation.
+%-----------------------------------------------------------------------
+\subsection{Held-out evaluation: the controlled comparison}
+\label{sec:framing}
+
+Every evaluation before this one scored a single arm and compared it against a
+number remembered from an earlier run, at $n{=}20$, unpaired. At that size and a
+true rate near $0.15$, a two-proportion test cannot detect an improvement
+smaller than roughly $40$ points, and no difference this project has reported
+was that large. We therefore re-ran the comparison with every arm on the same
+problems in the same order, compared with McNemar's exact test on the problems
+where two arms disagree.
+
+Two framings of the student's final attempt are reported. Under \emph{full} the
+transcript is replayed with the student's own turns in the model's assistant
+history. Under \emph{hints} only the tutor's turns reach the attempt. The two
+are compared by replaying one fixed set of saved transcripts twice, so the
+framing is the only thing that changes.
+
+\begin{table}[t]
+\caption{Four arms, 60 held-out problems, paired, under both framings of the
+student's final attempt.}
+\label{tab:threearm}
+\centering
+\small
+\begin{tabular}{lrrrr}
+\toprule
+ & \multicolumn{2}{c}{\textbf{Solve}} & & \\
+\cmidrule(lr){2-3}
+\textbf{Arm} & \textbf{Full} & \textbf{Hints} & \textbf{Ped} & \textbf{Leak} \\
+\midrule
+No tutor (empty dialogue)   & 0.367 & 0.367 & ---   & 0.000 \\
+Base checkpoint, LoRA off   & 0.183 & \textbf{0.350} & 0.888 & 0.164 \\
+Trained adapter             & 0.333 & \textbf{0.350} & 0.913 & 0.125 \\
+Oracle (solution disclosed) & \multicolumn{2}{c}{\textit{0.783}} & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\caption{Paired comparisons (McNemar, exact, $n{=}60$).}
+\label{tab:mcnemar}
+\centering
+\small
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Comparison} & \textbf{$\Delta$} & \textbf{Discordant} & \textbf{$p$} \\
+\midrule
+\multicolumn{4}{l}{\emph{Full framing: the student's own replies are replayed}} \\
+No tutor $\rightarrow$ base     & $-0.184$ & 2:13  & $\mathbf{0.0074}$ \\
+No tutor $\rightarrow$ trained  & $-0.034$ & 9:11  & $0.8238$ \\
+Base $\rightarrow$ trained      & $+0.150$ & 12:3  & $\mathbf{0.0352}$ \\
+\midrule
+\multicolumn{4}{l}{\emph{Hints framing: only the tutor's turns are replayed}} \\
+No tutor $\rightarrow$ base     & $-0.017$ & 7:8   & $1.0000$ \\
+No tutor $\rightarrow$ trained  & $-0.017$ & 6:7   & $1.0000$ \\
+Base $\rightarrow$ trained      & $0.000$  & 5:5   & $1.0000$ \\
+\midrule
+No tutor $\rightarrow$ oracle   & $+0.417$ & 3:28  & $\mathbf{<0.0001}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Four readings, in descending order of importance.
+
+First, \textbf{the harm we reported was ours, not the tutor's.} Under the full
+framing a tutored student solves $0.183$ against $0.367$ untutored, thirteen
+problems lost against two gained, $p{=}0.0074$. That is the result this project
+reported in five forms. Replaying the identical transcripts while omitting the
+student's own replies lifts the same arm to $0.350$, seven discordant one way
+and eight the other, $p{=}1.0000$. No tutoring changed, only whether the student
+had its own words in front of it. We cannot say why, and
+Sec.~\ref{sec:framing-mech} reports that the two explanations we offered are
+both excluded.
+
+Second, \textbf{training is inert, and the one result suggesting otherwise was
+the artefact again.} Under the corrected framing the trained and untrained
+adapters both score $0.350$, five discordant pairs each way. Under the broken
+framing the trained adapter beat the untrained one at $p{=}0.0352$, and the
+natural reading was that training helped a little. It did not. The trained
+policy elicits student turns that hedge less, which interacts less badly with a
+replay that feeds those turns back, so that comparison measured partial immunity
+to our own instrument.
+
+Third, \textbf{the mechanism for the inertia is unchanged.} Every term the
+policy can compute from its own output saturates: pedagogy moves
+$0.76\rightarrow0.97$ and leakage $0.44\rightarrow0.09$ across training, ending
+at $0.913$ and $0.125$ against the untrained $0.888$ and $0.164$. The outcome
+term does not move. The optimiser works; what it optimises is disconnected from
+what the system is for.
+
+Fourth, \textbf{the prize is more than twice what we previously stated.} The
+oracle arm discloses the reference solution, so no tutor can beat it. We
+reported it at $0.633$. Two defects in Sec.~\ref{sec:instrument} accounted for
+nine of its twenty-two failures, and with those corrected it reaches $0.783$,
+twenty-eight problems gained against three lost relative to no tutoring. The
+headroom available to a tutor is therefore $0.417$ rather than $0.267$, against
+a paired evaluation at $n{=}60$ that resolves about $0.15$.
+
+A caveat on precision. The attempt is decoded greedily, so replaying a saved
+transcript should reproduce its recorded outcome exactly. It reproduces $57$ of
+$60$ in both arms. The residual is nondeterminism in GPU reductions rather than
+a difference in logic, and it puts a noise floor of roughly three problems on
+any single arm. The framing effect on the untrained arm is twelve gained against
+two lost and sits far outside that floor; on the trained arm it is seven against
+six and sits entirely inside it, which is why we read the trained arm as
+unaffected by framing rather than as mildly improved by it.
+
+
+%-----------------------------------------------------------------------
+% [[A-1]] ADD: new subsection, immediately after [[R-6]].
+%-----------------------------------------------------------------------
+\subsection{Four instrumentation defects}
+\label{sec:instrument}
+
+All four were found by asking why a result looked the way it did, not by a test
+failing, and all four depressed numbers this project has already published.
+
+\textbf{The verifier compared incomparable values.} The student's output arrives
+through a JSON round trip; the expected value is a Python literal parsed from
+the problem's assertion and makes no such trip. Comparing them directly failed
+$9$ of $60$ held-out reference solutions against their own tests, so the maximum
+achievable solve rate was never $1.0$. Normalising both sides through the same
+round trip reduced that to $5$ of $60$. We attributed the residual to dataset
+quality. That was wrong, and the next defect is what it actually was.
+
+\textbf{The seed was never applied.} A seed existed from the first commit and
+was read nowhere in the training path, so two runs of an identical
+configuration drew different problems in epoch 0, before any gradient step. A
+two-arm experiment built specifically to isolate one reward coefficient was
+therefore not paired. A second instance of the same defect sat one layer deeper:
+the seed was applied after the low-rank adapter had been initialised, and that
+initialisation draws from the generator, so runs diverged from the first update
+even once seeding was in place.
+
+\textbf{The entry point was the wrong function.} Each problem's callable name
+was taken from the first function its reference solution defines. The name the
+tests call was already available, parsed from the assertion and then discarded.
+These disagree whenever a reference opens with a helper, which on this dataset
+is common: one reference defines a greatest-common-divisor routine over two
+integers before the function the tests call, which takes a list.
+
+The field is not cosmetic. The verifier calls it, so it executed the helper and
+compared its return value against the entry point's expected value, which is why
+those references failed their own tests. It is also interpolated into the
+student's prompt as the signature to implement, so on one problem the student
+was asked for a digit-reversal routine while scoring called a predicate about
+that routine. No output could pass. Five of sixty held-out problems and six of
+$198$ training problems were therefore unwinnable in every arm, and they sat in
+the denominator of every solve rate we have reported. Reading the entry point
+from the assertions takes references passing their own tests to $60$ of $60$
+held out and $194$ of $198$ in training. The oracle arm shows the cost most
+clearly, because it pastes the reference into the dialogue: it was displaying
+correct code for a function the verifier never called.
+
+\textbf{A correct solution was discarded over its name.} The step that recovers
+code from the student's reply checked for the literal text of the expected
+definition and, failing that, replaced the entire reply with a stub that fails by
+construction. Every mismatch we observed was styling rather than refusal: this
+dataset uses mixed case for several functions and the student writes snake case.
+On the oracle arm this fired on five of sixty problems and three were otherwise
+correct. Binding the student's last defined function to the expected name, which
+preserves recursion in a way renaming would not, recovers exactly those three.
+Together with the entry-point fix this takes the oracle arm from $0.633$ to
+$0.783$.
+
+
+%-----------------------------------------------------------------------
+% [[A-2]] ADD: new subsection, after [[A-1]].
+%
+% This is the finding the draft has no equivalent of, and it is the one
+% that keeps the paper honest about what it does not know.
+%-----------------------------------------------------------------------
+\subsection{The framing effect is real and both explanations for it fail}
+\label{sec:framing-mech}
+
+We first attributed the framing deficit to the model conditioning on its own
+recorded confusion: $20\%$ of student turns express exactly that, and the model
+is asked to write code immediately after a history containing it. That mechanism
+carries a prediction, and the prediction fails. Comparing the problems the
+framing change recovered against those that stayed failed, the share whose
+dialogue contains an explicit declaration of being lost is $0.632$ against
+$0.500$, Fisher exact $p{=}0.4378$. Per arm it is worse: the untrained arm
+splits $0.50$ against $0.49$, $p{=}1.0000$. The problems the change
+\emph{broke} carry marginally more such declarations than those it left solved,
+$0.62$ against $0.48$, so the signal is not even directional.
+
+The alternative explanation fails too. A third framing preserves every character
+of the transcript in a single user message, holding quantity fixed and removing
+only the role in which the student's words are recorded. On the problems where
+the first two framings disagree, those two are opposites by construction, so the
+only question is which one the third follows.
+
+\begin{table}[t]
+\caption{Discordant problems only: which framing does the role-only variant
+follow?}
+\label{tab:quoted}
+\centering
+\small
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Arm} & \textbf{$n$} & \textbf{Tracks full} & \textbf{Tracks hints} &
+\textbf{$p$} \\
+\midrule
+Base    & 14 & 6 & 8 & $0.7905$ \\
+Trained &  8 & \textbf{8} & \textbf{0} & $\mathbf{0.0078}$ \\
+Pooled  & 22 & 14 & 8 & $0.2863$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+In the trained arm the role-only variant is identical to the harmful framing on
+every discordant problem. Removing the student's text is doing the work, and
+moving it out of the assistant role is not enough, which disposes of the role
+explanation as well.
+
+What does separate recovered problems from those that stayed failed is the
+quantity of prior student text, $843$ characters against $534$, consistent
+across both arms. We report that contrast as the surviving description rather
+than as a mechanism, because we have not tested it. The practical consequence
+stands regardless: no result here is interpretable without stating its framing,
+because the two framings differ by more than the effect every arm of this
+project was built to detect. The scientific consequence is that we do not know
+why, and no explanation in this paper should be relied on for it.
+
+This measurement is incomplete. The role-only run was stopped at 22 of 27
+problems to release a shared accelerator, so the trained arm contributes 8 of
+its 13 discordant problems. A pooled sign test at $n{=}22$ has little power, and
+the disagreement between arms may not survive the missing five.
+
+
+%-----------------------------------------------------------------------
+% [[R-7]] REPLACE: in \subsection{Only half the reward can teach}, the
+% final paragraph beginning "In the last three 10-epoch runs".
+%
+% The five-times ratio reversed. Keeping the old number alone would be
+% reporting a measurement we have overturned; deleting it would hide a
+% correction worth recording.
+%-----------------------------------------------------------------------
+Across the last three ten-epoch runs, the correlation between epoch and
+$r_{\mathrm{ped}}$ was $+0.80/+0.99/+0.64$ and between epoch and $L$ was
+$-0.64/-0.80/-0.48$, while between epoch and $r_{\mathrm{sol}}$ it was
+$+0.48/+0.54/+0.01$. On mean \emph{between-group} variance, which is the only
+variance that becomes gradient under~\eqref{eq:adv}, $r_{\mathrm{ped}}$ measured
+$0.0482$ against $0.0098$ for $r_{\mathrm{sol}}$: roughly five times the usable
+signal on the term the project exists to optimise, with $22$ of $24$ rollouts
+scoring $r_{\mathrm{sol}}$ exactly $0.00$.
+
+That ratio has since reversed, under the change we made to fix it. With greedy
+decoding and partial test-case credit, $r_{\mathrm{sol}}$ measures $0.0481$ and
+$r_{\mathrm{ped}}$ $0.0150$, and held-out solve rate still does not move. Two
+qualifications keep this from being a clean reversal: $76\%$ of rollouts still
+score exactly zero, and $197$ of $198$ problems carry exactly three assertions,
+so the ``continuous'' outcome term has four levels. Gradient starvation was real
+and worth removing. It was not what prevented learning, and we report both
+measurements rather than the one that suits the argument.
+
+
+%-----------------------------------------------------------------------
+% [[R-8]] REPLACE: the first item of Sec.~\ref{sec:threats}, beginning
+% "The headline figure is meaningless in absolute terms".
+%
+% This threat was correct and has now been addressed. Deleting it would
+% remove the paper's most useful methodological point, because the sign
+% of the conclusion changed once the control was run.
+%-----------------------------------------------------------------------
+\textbf{The missing baseline was the largest defect in this project, and running
+it changed the sign of the conclusion.} Every run before this revision reported
+a solve rate after tutoring with no control. The two that matter are the
+untrained policy under the same prompt and no dialogue at all, and the
+evaluation harness had been written to accept several arms while only ever being
+given one. We record this because of what happened when the control was finally
+run: a number that had read as weak progress, $17.5\%$ against a previous best
+of $16.3\%$, turned out to be a deficit against doing nothing, and then turned
+out to be an artefact of the framing of the student's attempt. A measurement
+nobody had taken was carrying two errors at once, in opposite directions. We
+regard this as the most transferable result in the paper.
+
+
+%-----------------------------------------------------------------------
+% [[R-9]] REPLACE: the threat beginning "Source of the reported running"
+% (the provenance discrepancy).
+%
+% Resolved. The staged configuration has since executed, so the
+% discrepancy is history rather than a live limitation, and the
+% paragraph as written is also badly garbled.
+%-----------------------------------------------------------------------
+\textbf{The reported run predated its own configuration, and later runs do not.}
+We previously documented a discrepancy found in the run's own outputs: the
+executed code preceded the staged corrections, so the method as run was
+REINFORCE with a $z$-scored baseline and a KL penalty rather than clipped
+group-relative optimisation, the outcome term was a four-sample all-or-nothing
+estimate rather than greedy with partial credit, the curriculum was
+mastery-banded rather than difficulty-targeted, and the evaluation ran on 20
+problems where the configuration specified 60. Every number in
+Table~\ref{tab:threearm} comes from runs in which all four corrections are
+present and logged, and the configuration is recorded in the run environment
+rather than inferred. We leave the earlier discrepancy on the record because the
+headline it produced was quoted for three runs before anyone checked the
+provenance.
+
+
+%-----------------------------------------------------------------------
+% [[A-3]] ADD: two further threats, into
+% \subsection{Threats introduced by this revision}. If that subsection
+% does not exist in your copy, create it at the end of
+% Sec.~\ref{sec:threats}.
+%-----------------------------------------------------------------------
+\textbf{The corrected framing is itself a choice, and nothing was trained
+against it.} Omitting the student's own replies from the context of its final
+attempt is not obviously the right reconstruction of what a tutored learner
+knows. It is one of three framings we implemented, and the one we adopted is the
+one that scored highest, which is a weak basis for calling it correct. A learner
+who has been tutored has in fact said things, and a measurement that pretends
+otherwise may discard signal along with the artefact. Every policy reported here
+was trained with the outcome term computed under the framing we now believe is
+distorting, so none has been optimised against a clean reward.
+
+\textbf{The served policy is not prompted as it was trained.} The serving path
+adds instructions the policy was never optimised against: a per-turn adaptation
+block, a dangling-colon rule, and code-mixing guidance. A fourth case was worse
+than a prompt difference. The personalisation block derived from the learner
+model was gated on a switch in the training path that defaulted off, and built
+unconditionally in the serving path, so the deployed tutor received a block in
+its system prompt that its adapter had never seen, and nothing recorded the
+discrepancy because each side was internally consistent. Both halves now read
+one definition of that switch. The training prompt is otherwise left unchanged,
+because altering it would invalidate comparison with every run in
+Table~\ref{tab:history}.
+
+
+%-----------------------------------------------------------------------
+% [[R-10]] REPLACE: the entire \section{Conclusion and future work are
+% discussed.} including its heading.
+%
+% The heading is malformed and the body is garbled past the point of
+% repair. Its central claim is also retracted.
+%-----------------------------------------------------------------------
+\section{Conclusion and Future Work}
+
+We have described an end-to-end system that trains a programming tutor by
+critic-free reinforcement learning against a simulated, knowledge-traced
+student, with execution-verified outcome supervision. The pipeline runs,
+produces a non-zero learning signal every epoch, moves the policy measurably
+away from its initialisation, and drives measured leakage down by a factor of
+four across a run. The serving half is built and running: six services with code
+execution isolated from scoring by construction, a learner workspace with voice
+input, a persistent Bayesian learner model driving placement and curriculum from
+an append-only log, and a turn adaptation layer built from failures read out of
+the training transcripts.
+
+\textbf{The tutor does not teach better, and the sharper claim we previously
+made, that it teaches worse than no tutor, does not survive its own control.}
+Under the transcript framing used throughout this project a tutored student
+solved $0.183$ against $0.367$ untutored, $p{=}0.0074$. Replaying those same
+transcripts without the student's own replies in the context of its final
+attempt gives $0.350$ against $0.367$, $p{=}1.0000$. The deficit was ours. What
+remains is that tutoring as built neither helps nor harms, and that the trained
+adapter is indistinguishable from the untrained one it came from, $0.350$ against
+$0.350$ with five discordant pairs each way. That null has survived two
+accelerators, two student precisions, three solve prompts, all three transcript
+framings, early stopping, and the addition of a correctness term.
+
+The explanation for the null is the contribution. Every term the policy can
+compute from its own text is driven to its ceiling while the outcome term does
+not move, and the reward never asked whether a hint was true. Adding a term that
+does, validated against outcomes before training rather than after, changed
+nothing, with the arm not paid for correctness improving on correctness more
+than the arm that was.
+
+We also report that four instrumentation defects depressed every number this
+project has published, and that two of them were found in a single afternoon by
+auditing one arm we had never questioned. We have no reason to believe that
+audit is complete. The base rate it establishes is poor: every assumed
+measurement we have examined in this project has been wrong.
+
+What we would do next no longer follows from the oracle arm, because the oracle
+arm has moved. Disclosing the reference solution lifts the student to $0.783$,
+not the $0.633$ we previously reported, and the headroom available to a tutor is
+$0.417$ rather than $0.267$. The task is less of a binding constraint than we
+concluded, though it still binds: $30\%$ of this benchmark's solutions are three
+lines or fewer and $197$ of $198$ problems carry exactly three assertions, so
+partial credit has four levels and there is little to teach in a one-line idiom.
+
+The clearer next step is that the policy has never been trained against a clean
+outcome signal. The outcome term is computed from the same student attempt whose
+framing we have shown to be the dominant effect, so every run to date optimised
+a reward that penalised dialogues in proportion to how much the student talked
+rather than how well the tutor taught. Retraining under the corrected framing is
+the first experiment whose outcome term would mean what it says, and it is
+cheap, because nothing but the framing changes. Only if that also returns inert
+does the argument for a different benchmark become the leading one.
+
+We state the methodological lesson plainly because it cost us more than the
+modelling did. Every substantive correction in this paper came from a
+measurement someone had assumed rather than checked: an untutored arm nobody had
+run, a seed nobody had traced, a function name nobody had compared against the
+test that calls it, and a framing nobody had varied. The reward design and the
+optimiser were correct for most of the project's life. The instruments were not.
