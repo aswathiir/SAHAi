@@ -33,3 +33,4 @@ RL LIT REVIEW.pdf
 # Phase 2 experiment outputs: rollout dumps and per-problem generations, large
 # and reproducible from scripts/experiments/.
 artifacts/phase2/
+artifacts/retrain/
