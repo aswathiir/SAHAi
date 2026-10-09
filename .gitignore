@@ -36,3 +36,5 @@ artifacts/phase2/
 artifacts/retrain/
 artifacts/retrain_corrected/
 artifacts/retrain_asym/
+artifacts/frontier/
+artifacts/raft/

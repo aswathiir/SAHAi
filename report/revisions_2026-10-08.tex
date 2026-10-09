@@ -646,3 +646,164 @@ defects, a retracted central claim, a transcript framing worth more than the
 effect the protocol was built to detect, and a policy that never moved while
 twenty runs of reward engineering were performed on it. We would rather report
 that than a solve rate.
+
+
+%-----------------------------------------------------------------------
+% [[A-5]] ADD: new subsection in Sec.~\ref{sec:results}, after [[A-4]].
+%
+% The single cheapest and most load-bearing measurement in the project, and
+% it needs no GPU: how far did the adapter actually move?
+%-----------------------------------------------------------------------
+\subsection{The policy never moved}
+\label{sec:nomove}
+
+Low-rank adaptation initialises its down-projection $A$ from a random draw and
+its up-projection $B$ to \emph{exactly} zero, so the adapter contributes
+nothing at step 0 whatever $A$ holds, and the entire effect of training is
+visible in how far $B$ travelled from zero.
+
+\begin{table}[t]
+\caption{Adapter weight magnitude after training. $B$ begins at exactly zero,
+so its magnitude is the whole of what was learned; $A$ is a random draw and
+serves only as a scale reference.}
+\label{tab:movement}
+\centering
+\small
+\begin{tabular}{lrr}
+\toprule
+ & \textbf{selected (ep.\ 5)} & \textbf{final (ep.\ 7)} \\
+\midrule
+$A$ mean $|w|$ (random init)  & 0.012758 & 0.012771 \\
+$\mathbf{B}$ mean $|w|$ (init $=0$) & \textbf{0.000762} & 0.000902 \\
+$B$ max $|w|$                 & 0.004822 & 0.005863 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+With $\alpha/r = 2$ at rank 8 this is an effective weight perturbation near
+$5\times10^{-5}$ against base weights of order $0.02$, about $0.2\%$. The
+divergence from the frozen reference agrees: across all eight epochs it never
+left the noise of its estimator and changed sign at random, where an earlier
+run reached $0.0301$ in the same column at the same learning rate.
+
+\textbf{The surrogate is why.} The advantage in \eqref{eq:adv} is a
+within-group $z$-score, so advantages sum to zero and at the first
+accumulation step the importance ratio is exactly one. Measured policy loss
+across this run ran $0.0008$ to $0.0042$. That loss is additionally a mean over
+tokens rather than a sum, dividing the gradient by sequence length again, and
+it is opposed by a KL penalty 50 times stronger than the one used by the work
+this method follows. Small loss, twice normalised, actively pulled back.
+
+\textbf{What this does to every other result here.} The reward terms in
+Sec.~\ref{sec:hack} were debugged, graded, re-weighted and extended across
+twenty runs; the measurement was found wrong in four separate ways and
+corrected; and throughout all of it the policy being optimised stayed within
+$0.2\%$ of its initialisation. Every null this paper reports is consistent with
+a tutor that never changed. We report it as the simplest available explanation
+and prefer it to any account involving the reward.
+
+The check costs one minute from a saved adapter and we had never run it. It
+should precede any claim about reward design.
+
+
+%-----------------------------------------------------------------------
+% [[A-6]] ADD: new subsection in the Discussion, after
+% \subsection{Only half the reward can teach}.
+%-----------------------------------------------------------------------
+\subsection{A tutor with its student's weights has nothing to teach}
+\label{sec:asymmetry}
+
+Tutor and student were the same checkpoint for the entire project. Both are
+Qwen2.5-1.5B-Instruct, and the configuration records the choice as deliberate:
+the student was raised from a smaller model to match the tutor's size after the
+smaller one failed to hold a confused persona under reinforcement learning
+pressure.
+
+A tutor holding its student's exact weights knows nothing the student does not.
+It cannot transfer information, because there is none to transfer. The only
+channel left open to it is organisation: decomposition, ordering, and the
+timing of hints. Measured, organisation is worth nothing, $0.350$ against
+$0.367$ for no dialogue at all.
+
+This is not a reward problem and not an optimisation problem, and it interacts
+badly with the method. A policy gradient reweights behaviour the policy already
+produces; it cannot synthesise capability the base model lacks. If no rollout
+in a group ever contains teaching that would help, there is nothing in the
+sample for the estimator to reinforce, whatever the reward says about it.
+
+The oracle arm establishes that the receiving end works. Disclose the solution
+and the same student reaches $0.783$, twenty-eight problems gained against
+three lost. The channel is open and the student absorbs what arrives on it.
+Nothing useful was being sent.
+
+Two routes follow and we have only begun the first. An asymmetry can be
+manufactured by weakening the student, which also lowers the untutored baseline
+and so creates the headroom this evaluation lacked: $60\%$ of the held-out bank
+was previously inert, solved or failed alike by every arm. Or capability can be
+imported, by having a stronger model generate tutoring dialogues, filtering
+them by whether the student then solved, and fine-tuning the small tutor on
+what survives. The second addresses the cause rather than the symptom and is
+the direction we would now take.
+
+
+%-----------------------------------------------------------------------
+% [[A-7]] ADD: new subsection in the Discussion, after [[A-6]].
+%-----------------------------------------------------------------------
+\subsection{Was reinforcement learning the right tool?}
+\label{sec:method-choice}
+
+The case for it was sound at the outset. No corpus of human programming-tutoring
+dialogue exists at the scale supervised learning needs, which the review that
+this design follows gives as its own motivation, and the outcome of tutoring is
+cheaply verifiable by executing the student's attempt. Absent demonstrations and
+present a verifier is the situation reinforcement learning from verifiable
+rewards exists for.
+
+The case for the particular estimator was also sound, and for a reason that is
+about hardware rather than statistics. Proximal policy optimisation needs a
+learned critic, which is another network resident in memory, and a tutor and a
+student already occupy a 16\,GB accelerator. Replacing the critic with a
+within-group $z$-score costs no additional model.
+
+What it costs instead is that the learning signal becomes \emph{entirely}
+within-group reward variance. A group whose rollouts all score alike has
+$\sigma = 0$, every advantage in it is exactly zero, and it consumes a full
+generation budget to contribute no gradient. Much of this project's reward
+engineering was, in retrospect, an effort to keep that variance non-zero, and
+by the final run it had succeeded: no group was dead and the outcome term
+carried the largest share of usable variance. The policy still did not move,
+for the reason in Sec.~\ref{sec:nomove}.
+
+Given what we now measure, a simpler objective fits our constraints better.
+Rejection-sampling fine-tuning trains only on the rollouts that succeeded and
+is reported competitive with both group-relative optimisation and proximal
+policy optimisation, with the observation that the former's advantage comes
+from discarding prompts whose rollouts all fail rather than from normalising
+rewards~\cite{raft}. For us the decisive property is different: an ordinary
+cross-entropy objective has a loss of order one rather than $0.002$, so the
+policy moves. The data for it already exists in our own rollouts, where $45$
+dialogues had the tutor teach without disclosing and the student then solve.
+Its weakness is equally clear, since those $45$ cover only $15$ distinct
+problems.
+
+We therefore do not conclude that reinforcement learning is wrong for
+pedagogical alignment. We conclude that a critic-free policy gradient at this
+compute scale produces a gradient too small to move a policy, that the
+constraint which made it attractive is the same constraint that made it
+ineffective, and that a method whose objective is not a near-zero surrogate
+should be tried first at this budget.
+
+
+%-----------------------------------------------------------------------
+% [[B-1]] BIBLIOGRAPHY: entries the new sections cite. Add to
+% the thebibliography block. Verify each identifier before submission;
+% the first two were read directly, the third was not.
+%-----------------------------------------------------------------------
+\bibitem{mathtutorbench}
+J.~Macina \emph{et al.}, ``MathTutorBench: A benchmark for measuring
+open-ended pedagogical capabilities of LLM tutors,'' in \emph{Proc. EMNLP},
+2025. arXiv:2502.18940.
+
+\bibitem{raft}
+W.~Xiong \emph{et al.}, ``A minimalist approach to LLM reasoning: from
+rejection sampling to REINFORCE,'' arXiv:2504.11343, 2025.
