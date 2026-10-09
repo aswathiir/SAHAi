@@ -1912,3 +1912,79 @@ Until this revision the measurement was wrong, in four distinct ways. Now that
 it is right, the training configuration is wrong, in four distinct ways, and
 none of the configuration numbers has ever been compared against the paper the
 method was taken from. That comparison took one search.
+
+## 29. The policy never moved, which explains every null more simply than the reward does
+
+Measured on 2026-10-09 from the saved adapter, with no GPU. PEFT initialises
+`lora_A` from a Kaiming uniform and `lora_B` to **exactly zero**, so the
+adapter contributes nothing at step 0 whatever `lora_A` holds, and everything
+training learned is in how far `lora_B` travelled from zero.
+
+| | best_model (epoch 5) | final (epoch 7) |
+|---|---|---|
+| `lora_A` mean $|w|$ (random init, scale reference) | 0.012758 | 0.012771 |
+| **`lora_B` mean $|w|$ (init exactly 0)** | **0.000762** | 0.000902 |
+| `lora_B` max $|w|$ | 0.004822 | 0.005863 |
+
+With $\alpha/r = 2$ and rank 8 that is an effective weight perturbation around
+$5\times10^{-5}$ against base weights of order $0.02$, so roughly $0.2\%$.
+
+The KL to the frozen reference agrees:
+
+| epoch | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|---|
+| raw KL | $-0.0067$ | $-0.0011$ | $-0.0115$ | $-0.0009$ | $-0.0126$ | $+0.0005$ | $-0.0025$ | $+0.0033$ |
+
+The sign flips at random and the magnitude never leaves the noise of the k1
+estimator. Run v24 reached $0.0301$ in this same column, at this same learning
+rate, and that run was described as the policy finally making measurable
+progress away from the base model. This run moved **less** than v24.
+
+### This inverts the conclusion of finding #28
+
+Finding #28 compared this project's hyperparameters against
+arXiv:2505.15607 and found the learning rate 200x higher, the KL coefficient
+50x stronger, the batch 4x smaller and the gradient steps 8x more numerous. The
+arithmetic is right. The inference drawn from it, that steps were too coarse
+and the learning rate should come down, is wrong, and this measurement is why:
+at $10^{-4}$ the policy did not move. Taking the learning rate to $5\times
+10^{-7}$ would freeze it outright.
+
+Of the three changes made in response to #28, the KL coefficient
+($0.05 \rightarrow 0.001$) is in the right direction because it reduces the
+force opposing an already negligible policy gradient, the batch increase is
+right because coverage was 26 of 198 problems, and the learning rate reduction
+is harmful. The corrected run was cancelled before it consumed a night on a
+configuration whose predicted outcome is total inertia.
+
+### Why the gradient is negligible
+
+The GRPO surrogate is $-\min(\rho A, \mathrm{clip}(\rho)A)$ with the advantage
+z-scored inside its group, so advantages sum to zero and at the first
+accumulation step $\rho = 1$ exactly. Measured policy loss across this run ran
+$0.0008$ to $0.0042$. The loss is additionally a mean over tokens rather than a
+sum, which divides the gradient by sequence length again. Small loss, heavily
+normalised, pulled back by a KL penalty 50x stronger than the reference's: the
+net parameter movement is what the table above shows.
+
+### What this does to the project's history
+
+The simplest account of twenty runs is now this. The reward terms were
+debugged, narrowed, graded, re-weighted and extended; the measurement was found
+wrong in four separate ways and corrected; and throughout all of it the policy
+being optimised stayed within $0.2\%$ of its initialisation. Every null result
+this project has reported is consistent with a tutor that never changed.
+
+This is checkable in one minute from any saved adapter and it was never
+checked. It should be the first diagnostic run against any future adapter here,
+before any claim about reward design is made.
+
+### Caveat
+
+The base-probe control was stopped at 7 of 20 problems to release the GPU, so
+there is no untrained reference for the probe series. Of those 7, 3 solved,
+which is 0.429 against the trained probes' 0.150 to 0.350. That is **not a
+result**: at $n{=}7$ the interval covers almost everything, and the problems are
+the first 7 of the split rather than a sample. It is recorded only because the
+direction is the opposite of the one the probe series suggested, and the control
+remains unrun.
