@@ -299,3 +299,53 @@ class Settings(BaseModel):
         s.training.epochs = 8
         s.output_dir = "artifacts/retrain"
         return s
+
+    @classmethod
+    def local_mps_corrected(cls) -> "Settings":
+        """`local_mps()` with the three hyperparameters that were never checked
+        against the paper this method came from.
+
+        SAHAi follows the review of Dinucu-Jianu et al. (EMNLP 2025,
+        arXiv:2505.15607), which trains the same kind of system. Its published
+        settings against the ones this project has used for twenty runs:
+
+            problems per batch      16      vs 4     4x fewer
+            rollouts per problem     8      vs 8     same
+            learning rate            5e-7   vs 1e-4  200x higher
+            KL coefficient           0.001  vs 0.05  50x stronger
+            gradient steps per batch 2      vs 16    8x more
+
+        Three are corrected here and nothing else is touched, so the comparison
+        against `local_mps()` isolates them. `gradient_accumulation_steps`
+        stays at 2, which means doubling the batch doubles the steps per epoch
+        from 16 to 32 as a consequence rather than as a fourth change. Run v14
+        of this project changed three things at once, came out net negative, and
+        nothing could be attributed; that is the mistake being avoided.
+
+        The learning rate has a traceable origin. It was raised from 2e-5 to
+        1e-4 on the reasoning, recorded above, that "LoRA adapters are normally
+        trained at 1e-4..3e-4". That is a supervised-finetuning convention and
+        it does not carry to policy-gradient RL.
+
+        **Stated risk.** Total parameter movement is roughly the learning rate
+        times the number of steps. The run this replaces moved 1e-4 x 128
+        steps; this one moves 5e-7 x 256, about a hundred times less. The
+        reference reaches a comparable total only because it takes thousands of
+        steps over roughly 200 GPU-hours, and this machine has about twelve. So
+        the most likely failure mode of this configuration is not instability
+        but inertia: KL to the reference policy staying near zero and the
+        policy not moving measurably. If that is what comes back, the quantity
+        to change is the learning rate, and the estimate that matches the
+        reference's cumulative movement at this step budget is near 2e-5, which
+        is close to the value this project started from.
+
+        Batch 8 rather than the reference's 16 is a compute choice. It doubles
+        problem coverage, which was 26 of 198 problems, at roughly twice the
+        per-epoch cost.
+        """
+        s = cls.local_mps()
+        s.training.batch_size = 8
+        s.training.learning_rate = 5e-7
+        s.training.kl_coeff = 0.001
+        s.output_dir = "artifacts/retrain_corrected"
+        return s

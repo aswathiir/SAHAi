@@ -34,3 +34,4 @@ RL LIT REVIEW.pdf
 # and reproducible from scripts/experiments/.
 artifacts/phase2/
 artifacts/retrain/
+artifacts/retrain_corrected/

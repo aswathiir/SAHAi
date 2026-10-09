@@ -16,12 +16,19 @@ logging.basicConfig(
 
 
 def _load_settings(
-    config: Path | None, kaggle: bool = False, local_mps: bool = False
+    config: Path | None,
+    kaggle: bool = False,
+    local_mps: bool = False,
+    corrected: bool = False,
 ) -> "Settings":
     from sahai.settings import Settings
 
-    if kaggle and local_mps:
-        raise typer.BadParameter("pick one of --kaggle and --local-mps")
+    if sum(map(bool, (kaggle, local_mps, corrected))) > 1:
+        raise typer.BadParameter(
+            "pick one of --kaggle, --local-mps and --corrected"
+        )
+    if corrected:
+        return Settings.local_mps_corrected()
     if local_mps:
         return Settings.local_mps()
     if kaggle:
@@ -63,6 +70,11 @@ def train(
     output: str = typer.Option("output", help="Output directory for checkpoints"),
     kaggle: bool = typer.Option(False, help="Use Kaggle-optimized settings (T4 16GB)"),
     local_mps: bool = typer.Option(False, "--local-mps", help="Apple Silicon GPU settings"),
+    corrected: bool = typer.Option(
+        False, "--corrected",
+        help="Apple Silicon settings with the RL hyperparameters matched to "
+             "arXiv:2505.15607 (batch 8, lr 5e-7, KL 0.001)",
+    ),
     dataset: str = typer.Option(None, help="Dataset: local, mbpp, apps"),
 ):
     """Train tutor policy with GRPO."""
@@ -72,7 +84,7 @@ def train(
     from sahai.reward.pedagogy import PedagogyReward
     from sahai.training.grpo import GRPOTrainer
 
-    settings = _load_settings(config, kaggle, local_mps)
+    settings = _load_settings(config, kaggle, local_mps, corrected)
     settings.output_dir = output
     if dataset:
         settings.dataset = dataset
