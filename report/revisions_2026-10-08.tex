@@ -573,3 +573,76 @@ measurement someone had assumed rather than checked: an untutored arm nobody had
 run, a seed nobody had traced, a function name nobody had compared against the
 test that calls it, and a framing nobody had varied. The reward design and the
 optimiser were correct for most of the project's life. The instruments were not.
+
+
+%-----------------------------------------------------------------------
+% [[A-4]] ADD: new subsection at the end of Sec.~\ref{sec:results}.
+%
+% The draft's abstract claims "validated tutor policy reward design" and the
+% project's stated aim is a tutor that outperforms available models and helps
+% the student solve. Neither half is supported, and one half has never been
+% measured at all. This states which is which.
+%-----------------------------------------------------------------------
+\subsection{What the system does and does not achieve}
+\label{sec:claims}
+
+The aim was a tutor that outperforms available models and helps a student
+solve problems. We separate the two halves because their evidentiary status is
+different: one is measured and negative, the other is unmeasured.
+
+\textbf{Helping the student solve: measured, and negative.} Every arm is paired
+on the same 60 held-out problems under the corrected framing.
+
+\begin{table}[t]
+\caption{Student solve rate by arm, 60 held-out problems, paired. All arms use
+the same 1.5B student; the tutor arms differ only in whether the adapter is
+enabled.}
+\label{tab:claims}
+\centering
+\small
+\begin{tabular}{lrl}
+\toprule
+\textbf{Condition} & \textbf{Solve} & \textbf{vs no tutor} \\
+\midrule
+Reference solution disclosed      & 0.783 & $p<0.0001$ \\
+\textbf{No tutor at all}          & \textbf{0.367} & --- \\
+Untrained policy, same prompt     & 0.350 & $p{=}1.0000$ \\
+\textbf{Trained policy}           & \textbf{0.350} & $p{=}1.0000$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Three readings follow and none of them supports the aim. The trained tutor does
+not beat no tutoring at all. It does not beat the same model with the adapter
+disabled, which is to say reinforcement learning added nothing over prompting.
+And it is less than half as effective as simply disclosing the answer, which is
+the one action the system is designed to prevent.
+
+The weight-space measurement in Sec.~\ref{sec:nomove} explains the second of
+those directly: the adapter moved $0.2\%$ from its initialisation, so the
+trained and untrained arms are close to the same function.
+
+\textbf{Outperforming available models: never measured.} The evaluation harness
+supports four arms and all four use the same 1.5B checkpoint, differing only in
+whether the adapter is enabled and whether the reference solution is disclosed.
+No model other than this one has ever been scored as a tutor in this project.
+There is no comparison against a larger model of the same family, against a
+proprietary tutoring model, or against the straightforward baseline of a strong
+general model under a careful tutoring prompt. The claim is not weakly
+supported; it has no measurements behind it, and we withdraw it rather than
+qualify it.
+
+\textbf{What is supported.} A complete and running system, described in
+Sec.~\ref{sec:interactive}: six containerised services with code execution
+isolated from scoring by construction, speech input for Indic languages, a
+persistent Bayesian learner model driving placement and curriculum from an
+append-only log, and skill priors seeded from a learner's own public solution
+history with the source parsed and discarded at the boundary. Those are
+engineering results and we report them as such, with the explicit caveat that no
+human cohort has used any of it.
+
+The research contribution is the diagnosis, not the tutor. Four instrumentation
+defects, a retracted central claim, a transcript framing worth more than the
+effect the protocol was built to detect, and a policy that never moved while
+twenty runs of reward engineering were performed on it. We would rather report
+that than a solve rate.
