@@ -349,3 +349,55 @@ class Settings(BaseModel):
         s.training.kl_coeff = 0.001
         s.output_dir = "artifacts/retrain_corrected"
         return s
+
+    @classmethod
+    def local_mps_asymmetric(cls) -> "Settings":
+        """A tutor that knows more than its student.
+
+        The deepest defect in this project's configuration was never a reward
+        term. Tutor and student were the same checkpoint,
+        Qwen2.5-1.5B-Instruct for both, recorded as a deliberate choice to
+        "match the tutor's size" after a 0.5B student failed to hold the
+        confused persona. A tutor with its student's exact weights has no
+        knowledge the student lacks, so the only thing it can contribute is
+        organisation, and organisation measured 0.350 against 0.367 for no
+        tutoring at all.
+
+        The oracle arm shows the channel is open: disclose the solution and the
+        student reaches 0.783. The student can absorb information. There was
+        none to send.
+
+        Three changes from `local_mps()`:
+
+        * student 1.5B -> 0.5B. Creates the asymmetry. It also lowers the
+          unaided baseline, which is the other thing this experiment needs,
+          because 60% of the held-out bank was previously inert, solved or
+          failed by every arm alike.
+        * `kl_coeff` 0.05 -> 0.001, matching arXiv:2505.15607. The measured
+          policy loss ran 0.0008 to 0.0042 and the KL penalty was a quarter of
+          it, so this removes most of the force opposing an already negligible
+          gradient.
+        * `batch_size` 4 -> 8. Coverage was 26 of 198 problems.
+
+        The learning rate is deliberately **not** lowered. Finding #29 measured
+        `lora_B` at 0.000762 mean absolute weight against an initialisation of
+        exactly zero, an effective perturbation of about 0.2%, with KL to the
+        reference never leaving noise across eight epochs. At 1e-4 the policy
+        did not move; 5e-7 would freeze it. The earlier
+        `local_mps_corrected()` preset is kept for the record but should not be
+        run.
+
+        **Stated risk.** The published MBPP gap between these sizes is modest,
+        roughly 57 against 67 pass@1 for the Coder variants, so the asymmetry
+        this buys may be too small to teach across. If the run reproduces
+        finding #29 with `lora_B` still near zero, the problem is the GRPO
+        surrogate magnitude rather than the configuration, and the next thing
+        to try is rejection-sampling fine-tuning, which produces ordinary
+        cross-entropy gradients instead of a surrogate that measures 0.002.
+        """
+        s = cls.local_mps()
+        s.model.student = "Qwen/Qwen2.5-0.5B-Instruct"
+        s.training.kl_coeff = 0.001
+        s.training.batch_size = 8
+        s.output_dir = "artifacts/retrain_asym"
+        return s

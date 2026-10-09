@@ -20,13 +20,16 @@ def _load_settings(
     kaggle: bool = False,
     local_mps: bool = False,
     corrected: bool = False,
+    asymmetric: bool = False,
 ) -> "Settings":
     from sahai.settings import Settings
 
-    if sum(map(bool, (kaggle, local_mps, corrected))) > 1:
+    if sum(map(bool, (kaggle, local_mps, corrected, asymmetric))) > 1:
         raise typer.BadParameter(
-            "pick one of --kaggle, --local-mps and --corrected"
+            "pick one of --kaggle, --local-mps, --corrected and --asymmetric"
         )
+    if asymmetric:
+        return Settings.local_mps_asymmetric()
     if corrected:
         return Settings.local_mps_corrected()
     if local_mps:
@@ -75,6 +78,11 @@ def train(
         help="Apple Silicon settings with the RL hyperparameters matched to "
              "arXiv:2505.15607 (batch 8, lr 5e-7, KL 0.001)",
     ),
+    asymmetric: bool = typer.Option(
+        False, "--asymmetric",
+        help="1.5B tutor against a 0.5B student, KL 0.001, batch 8. The tutor "
+             "finally knows more than the student it teaches.",
+    ),
     dataset: str = typer.Option(None, help="Dataset: local, mbpp, apps"),
 ):
     """Train tutor policy with GRPO."""
@@ -84,7 +92,7 @@ def train(
     from sahai.reward.pedagogy import PedagogyReward
     from sahai.training.grpo import GRPOTrainer
 
-    settings = _load_settings(config, kaggle, local_mps, corrected)
+    settings = _load_settings(config, kaggle, local_mps, corrected, asymmetric)
     settings.output_dir = output
     if dataset:
         settings.dataset = dataset
