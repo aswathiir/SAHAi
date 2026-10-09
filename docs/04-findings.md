@@ -1810,3 +1810,105 @@ The `quoted` run was stopped at 22 of 27 problems to yield the GPU to another
 project on the same machine, so the trained arm contributes 8 of its 13
 discordant problems. The base arm is complete. A pooled sign test at n=22 has
 little power, and the arm disagreement may not survive the missing five.
+
+## 28. The training configuration, not the reward, is why twenty runs did nothing
+
+Asked on 2026-10-09 why the retrain still shows no clean gain. Every previous
+investigation in this project went after the reward terms, the prompts, the
+judge or the measurement. None asked whether the training loop as configured
+can deliver a usable gradient. Measured from the rollout dumps, which carry the
+advantage GRPO actually applied.
+
+### What is now fixed, and it is not small
+
+| | earlier runs | this run |
+|---|---|---|
+| groups with zero reward variance | ~1 in 7 | **0 of 32** |
+| rollouts with zero advantage | many | **0 of 256** |
+| mean within-group variance, `r_sol` | 0.0098 | **0.0741** |
+| mean within-group variance, `r_ped` | 0.0482 | 0.0248 |
+| `r_sol` share of usable variance | small | **36.5%, the largest term** |
+
+Gradient starvation is gone. `r_sol` now carries three times the usable
+variance of `r_ped` and is the single largest contributor. Mean $|$advantage$|$
+is 0.80. The reward design work was not wasted and the diagnosis in finding #14
+was correct for its time. It is no longer the binding constraint.
+
+### The apparent rise in rollout solve rate is problem draw
+
+Rollout solve rate across the eight epochs: 0.188, 0.250, 0.281, 0.250, 0.188,
+0.156, 0.188, 0.594. The last epoch looks like a breakthrough.
+
+| correlation | value |
+|---|---|
+| epoch vs strict solved | $+0.434$ |
+| **AST nodes of the problems drawn vs strict solved** | $\mathbf{-0.623}$ |
+| epoch vs AST nodes | $-0.372$ |
+
+Difficulty of the draw explains more of the epoch-to-epoch variation than
+epoch does, and epoch 7 drew the easiest problems of the entire run: 54.0 mean
+AST nodes against 105.2 at epoch 0 and 115.0 at epoch 5. Mean difficulty over
+the first two epochs was 2.38 and over the last two 2.25, so the curriculum did
+not move to harder problems either. Rollout solve rate is not interpretable as
+a learning signal.
+
+### The within-problem test says training did nothing
+
+Six problems were drawn in more than one epoch. That is the only design here
+that holds the problem fixed and varies policy state.
+
+| problem | earlier epoch | later epoch |
+|---|---|---|
+| mbpp_603 | 0.00 | 0.00 |
+| mbpp_633 | 0.50 | 0.38 |
+| mbpp_699 | 0.00 | 0.00 |
+| mbpp_755 | 0.25 | 0.00 |
+| mbpp_781 | 0.12 | 0.12 |
+| mbpp_791 | 0.00 | 0.25 |
+
+One better, two worse, three unchanged. $n{=}6$ is far too small to test, but it
+is the right comparison and it points the same way as every held-out
+measurement in this project.
+
+### The configuration is one to two orders of magnitude from its own source
+
+The project is built on the review of~\cite{rev-pedrl}, which is
+Dinucu-Jianu et al., EMNLP 2025, arXiv:2505.15607. That paper trains the same
+kind of system. Its published hyperparameters against ours:
+
+| | reference | SAHAi | factor |
+|---|---|---|---|
+| problems per batch | 16 | 4 | 4x fewer |
+| rollouts per problem | 8 | 8 | same |
+| learning rate | 5e-7 | **1e-4** | **200x higher** |
+| KL coefficient | 0.001 | **0.05** | **50x stronger** |
+| gradient steps per batch | 2 | **16** | **8x more** |
+| compute per run | ~200 GPU-hours | ~12 | ~17x less |
+
+Four of five differ by a large factor, and in combination they describe a run
+that takes very large steps, under a very strong pull back to the reference
+policy, many times over the same stale rollouts, on very few problems.
+
+The learning rate has a traceable cause. It was raised from 2e-5 to 1e-4 with
+the reasoning, recorded in the settings, that "LoRA adapters are normally
+trained at 1e-4..3e-4". That is an supervised-finetuning convention. For
+policy-gradient RL the reference uses 5e-7, and the intuition does not carry
+across. The KL coefficient and the sixteen sequential steps compound it: the
+project's own threats section already noted those steps "consume rollouts from
+a policy that has already moved", and the reference takes two.
+
+### Coverage
+
+26 distinct problems out of 198, 13.1%, across 32 groups. Four problems per
+epoch over eight epochs cannot be more than 32, and six were repeats. A general
+tutoring skill is not learnable from 26 problems in 128 optimiser steps, whatever
+the reward says.
+
+### What this means for the project's history
+
+The honest reconstruction of twenty runs is that two separate faults were
+active the whole time and each was sufficient on its own to produce the null.
+Until this revision the measurement was wrong, in four distinct ways. Now that
+it is right, the training configuration is wrong, in four distinct ways, and
+none of the configuration numbers has ever been compared against the paper the
+method was taken from. That comparison took one search.
