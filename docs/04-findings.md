@@ -2225,3 +2225,82 @@ The experiment was built expecting L3 to help here. It did not. This is the
 second prediction in two days that the ladder falsified, after the
 arXiv:2404.02213 hint-register hypothesis of finding #31. Both are recorded
 rather than reframed.
+
+## 33. The harm is real and the mechanism is not copying. Two routes, neither established.
+
+Run 2026-10-10 on a Kaggle T4, 39 minutes, 411 generations with the learner's
+code recorded. Three rungs on the same 137 multi-step problems: no hint, the
+approach named in one sentence with no code, and a correct worked solution to an
+analogous problem.
+
+| rung | solve | sim to analogy | sim to reference | copied a name | $p$ vs L0 |
+|---|---|---|---|---|---|
+| L0 nothing | 0.336 | 0.233 | 0.359 | 2.9% | --- |
+| L2 approach named | **0.234** | 0.205 | **0.319** | 2.9% | **0.0094** |
+| L4 analogous example | **0.234** | 0.250 | 0.356 | 3.6% | **0.0243** |
+
+### The anchoring hypothesis is dead
+
+Finding #32 proposed that the learner transfers the analogous pattern instead
+of solving the problem. It does not.
+
+* Paired on the same problem, the shift in token overlap with the analogy
+  between L4 and L0 is $+0.0169$, and only **64 of 137 problems moved toward
+  the analogy at all, which is 46.7%, below chance**.
+* The learner defines a function by the analogy's name on 5 of 137 problems
+  under L4 against 4 of 137 under L0.
+* On the 24 problems L0 solved and L4 lost, 16 moved toward the analogy,
+  binomial $p{=}0.152$. Suggestive, not significant.
+
+**The decisive argument is L2.** It contains no code at all, one sentence naming
+the approach, and it harms by exactly the same amount as the worked example,
+$0.234$ against $0.234$. If copying shown code were the mechanism, a rung with
+no code to copy could not do equal damage.
+
+### Two different damage routes, same magnitude
+
+| | sim to reference | code size | on the problems it lost |
+|---|---|---|---|
+| L2, one sentence | $0.359 \rightarrow 0.319$ | nodes 76.2 $\rightarrow$ 78.8 | 9/20 wrote more code, $p{=}0.824$ |
+| L4, worked example | $0.359 \rightarrow 0.356$ | nodes 76.2 $\rightarrow$ **84.4** | 17/24 wrote more code, $p{=}0.064$ |
+
+Naming the approach moves the learner's code **away from the correct solution**
+without moving it toward anything in particular. Showing a worked example
+leaves it about as close to the reference but **inflates it**: eleven percent
+more AST nodes, and on the problems it loses it writes more code than it did
+unaided in 17 of 24 cases. Neither route reaches significance on its own, and
+they are not the same route, so this is two weak signals rather than one
+mechanism.
+
+The clearest single case: on a median-of-two-arrays problem the learner was
+shown a binary-search example, and attempted a full partition algorithm with
+`float('-inf')` sentinels where unaided it had written something simpler that
+passed. That is reaching for a more elaborate method than the problem needs,
+which is the over-engineering route, and it is one anecdote.
+
+### Hints do help sometimes. They break far more than they fix.
+
+| rung | problems it lost | problems it gained | ratio |
+|---|---|---|---|
+| L2 | 20 | 6 | 3.3 to 1 |
+| L4 | 24 | 10 | 2.4 to 1 |
+
+This matters for how the result is stated. Partial help is not inert and it is
+not uniformly harmful: it fixes six to ten problems the learner could not do
+alone and breaks twenty to twenty-four it could. The aggregate is negative
+because the breakage is larger, not because help never works.
+
+### Third failed prediction, recorded
+
+The register hypothesis of #31 failed, the benchmark hypothesis of #32 failed,
+and the anchoring hypothesis of this run failed. The effect is firmly
+established across two ladders and 197 problems; **no proposed mechanism for it
+survives contact with the data**, including all three of mine. The honest state
+is that partial information degrades this learner through at least two distinct
+and individually unproven routes.
+
+That is where this line of investigation should stop. The effect is what the
+paper needs and the effect is solid. Another GPU run buying a third
+underpowered mechanism signal is not worth it; what would settle it is a
+controlled study varying one property of the hint at a time at a sample size
+that resolves $0.05$, which is roughly 800 problems per rung.
