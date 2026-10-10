@@ -304,24 +304,46 @@ def main() -> None:
               f"{m['p_value']:>9.4f}  {allowed}")
 
     print("\nREADING")
-    best_allowed = max(("L1_socratic", "L2_approach"),
-                       key=lambda lv: sum(r["solved"] for r in rows[lv]))
-    best_any = max(LEVELS, key=lambda lv: sum(r["solved"] for r in rows[lv]))
-    ba = sum(r["solved"] for r in rows[best_allowed]) / len(problems)
-    bany = sum(r["solved"] for r in rows[best_any]) / len(problems)
+    # The first version of this block was wrong and printed a flattering
+    # conclusion the data did not support. It fired "the prompt is the
+    # constraint" whenever the best permitted rung failed to beat L0 and ANY
+    # rung beat it, without checking which rung. On the real data only L5, the
+    # complete solution, beat L0. Disclosure is not tutoring, so that rule
+    # turned "only the answer works" into "our prompt is the problem".
+    #
+    # The question is specifically whether a rung that is NOT disclosure helps.
     l0 = sum(base) / len(base)
-    print(f"  no help                      {l0:.3f}")
-    print(f"  best hint our rules ALLOW    {ba:.3f}  ({best_allowed})")
-    print(f"  best hint of any kind        {bany:.3f}  ({best_any})")
-    if ba <= l0 + 1e-9 and bany > l0:
-        print("\n  Help works on this task, and the register our tutor is")
-        print("  restricted to is not the register that works. The constraint")
-        print("  is the prompt and the reward, not the policy.")
-    elif bany <= l0 + 1e-9:
-        print("\n  No level of help beats no help. The task does not admit")
-        print("  tutoring by this student at all, and no tutor could have won.")
+    partial = [lv for lv in LEVELS if lv not in ("L0_none", "L5_solution")]
+    helped = []
+    for lv in partial:
+        k = sum(r["solved"] for r in rows[lv]) / len(rows[lv])
+        m = mcnemar(base, [r["solved"] for r in rows[lv]])
+        if k > l0 and m["p_value"] < 0.05:
+            helped.append((lv, k, m["p_value"]))
+    best_partial = max(partial, key=lambda lv: sum(r["solved"] for r in rows[lv]))
+    bp = sum(r["solved"] for r in rows[best_partial]) / len(problems)
+    l5 = sum(r["solved"] for r in rows["L5_solution"]) / len(problems)
+
+    print(f"  no help                          {l0:.3f}")
+    print(f"  best PARTIAL hint                {bp:.3f}  ({best_partial})")
+    print(f"  full solution disclosed          {l5:.3f}")
+    print()
+    if helped:
+        for lv, k, pv in helped:
+            print(f"  {lv} beats no help: {k:.3f} vs {l0:.3f}, p={pv:.4f}")
+        print("  A hint short of disclosure helps. Tutoring is possible here.")
     else:
-        print("\n  Mixed: read the ladder directly.")
+        print("  No hint short of the full solution beats giving no help at all.")
+        print("  The 0.40 gap between no help and disclosure is reachable only")
+        print("  by disclosing. On this benchmark no tutor bound by a")
+        print("  non-disclosure constraint can win, whatever its size, prompt")
+        print("  or training. That is a property of the task, not of a policy.")
+    worst = min(partial, key=lambda lv: sum(r["solved"] for r in rows[lv]))
+    wv = sum(r["solved"] for r in rows[worst]) / len(problems)
+    if wv < l0:
+        mw = mcnemar(base, [r["solved"] for r in rows[worst]])
+        print(f"\n  Worst rung is {worst} at {wv:.3f}, below no help at all")
+        print(f"  (p={mw['p_value']:.4f}). Partial information can mislead.")
     print(f"\nwritten to {args.out}")
 
 

@@ -2067,3 +2067,82 @@ two-thirds of the wall-clock, and it required none of the reward design, the
 learner model, the curriculum or the reinforcement learning. The remaining
 contribution is the measurement work and the diagnosis, which is real and which
 no amount of further training will improve.
+
+## 31. Only the complete answer helps. No tutor could have won this benchmark.
+
+Run 2026-10-10 on a Kaggle T4, 60 held-out problems, every level paired on the
+same bank. Six hint levels, each constructed programmatically from the
+reference solution, so no tutor model is involved and no policy quality can
+confound the measurement. This measures the **task**, not a tutor.
+
+| level | content | solve | vs L0 | $p$ | leakage |
+|---|---|---|---|---|---|
+| L0 | nothing | 0.433 | --- | --- | 0.000 |
+| L1 | generic Socratic question | 0.400 | $-0.033$ | 0.7744 | 0.006 |
+| L2 | approach named from the solution's structure | 0.383 | $-0.050$ | 0.5488 | 0.006 |
+| L3 | control-flow skeleton, bodies removed | 0.450 | $+0.017$ | 1.0000 | 0.774 |
+| L4 | working code for a different problem, as analogy | **0.317** | $-0.117$ | 0.0654 | 0.350 |
+| L5 | the reference solution | **0.833** | $+0.400$ | **0.0000** | 0.992 |
+
+**No level short of complete disclosure beats giving no help at all.** L3 is
+$+0.017$ at $p{=}1.0$, which is noise. L1 and L2 are below the floor. L4, the
+one the literature predicted would work, is the **worst rung in the table**,
+$0.117$ below no help at all and nearly significantly so.
+
+The only thing that helps is L5, and L5 is the answer.
+
+### What this settles
+
+The $0.40$ gap between no help and disclosure is reachable only by disclosing.
+On this benchmark **no tutor bound by a non-disclosure constraint can win**,
+whatever its size, prompt, reward or training. That is a property of the task.
+
+It explains, in one measurement, every null this project has produced, and it
+subsumes the other explanations rather than competing with them. The policy not
+moving (#29) and the tutor having no information advantage (#30) would both
+have mattered if there had been anything to win. There was not. A prompted 3B
+losing to no-tutoring in finding #30 is the same fact seen from a different
+angle: it is not that the 3B tutors badly, it is that tutoring without
+disclosure does nothing here.
+
+MBPP is why. Its solutions are one to three line idioms, so there is no
+intermediate reasoning state to scaffold. A skeleton of a one-line solution is
+`def f(M): ... return ...`, which carries no information, and that is most of
+the bank. Either the student knows `sorted(M, key=sum)` or it does not.
+
+### The analogy rung hurting is the most interesting number here
+
+L4 shows the student a correct, working solution to a *different* problem that
+shares AST constructs with this one, and the student then does **worse than if
+it had been shown nothing**. The plausible mechanism is that it copies the
+analogous pattern instead of solving the problem in front of it, which would
+make a well-intentioned worked example actively harmful. We have not confirmed
+it: the ladder recorded outcomes and not the student's code, so the mechanism
+is a hypothesis and the effect is $p{=}0.0654$ at $n{=}60$.
+
+This is consistent with a published human finding rather than isolated.
+Bastani et al. (IZA DP 18338, 2025) report that in secondary mathematics,
+unrestricted AI assistance improved supported practice while **reducing
+subsequent unaided examination performance** against a control. Our result is
+the same shape in a simulated setting.
+
+### A correction against my own analysis
+
+The hypothesis this experiment was built to test was that our tutor's prompt
+forbids the hint register that works. A think-aloud study of twelve novice
+programmers (arXiv:2404.02213) reports that high-level natural-language hints
+alone can be unhelpful or misleading while commented code examples support
+novices better, and our prompt forbids code, code blocks and pseudocode. The
+prediction was that L3 and L4 would recover much of the gap.
+
+**They did not.** L3 is noise and L4 is harmful. The prompt constraint is not
+the binding problem, and the 2404.02213 result does not transfer to a
+simulated 1.5B student on one-line problems.
+
+Worse, the script's own verdict block printed the flattering conclusion
+anyway. It was written to fire "the constraint is the prompt and the reward,
+not the policy" whenever the best permitted rung failed to beat L0 and *any*
+rung beat it, without checking which rung. Only L5 beat L0, so the rule turned
+"only the answer works" into "our prompt is the problem". The logic now
+requires a rung that is not disclosure, and the earlier verdict is recorded
+here as wrong rather than quietly deleted.

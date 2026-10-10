@@ -1,0 +1,2534 @@
+{
+ "L0_none": [
+  {
+   "problem_id": "mbpp_11",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_12",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_13",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_14",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_15",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_16",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_17",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_18",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_19",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_20",
+   "solved": 0,
+   "partial": 0.6666666666666666,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_21",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_22",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_23",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_24",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_25",
+   "solved": 0,
+   "partial": 0.6666666666666666,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_26",
+   "solved": 0,
+   "partial": 0.6666666666666666,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_27",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_28",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_29",
+   "solved": 0,
+   "partial": 0.6666666666666666,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_30",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_31",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_32",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_33",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_34",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_35",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_36",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_37",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_38",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_39",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_40",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_41",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_42",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_43",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_44",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_45",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_46",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_47",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_48",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_49",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_50",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_51",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_52",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_53",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_54",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_55",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_56",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_57",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_58",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_59",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_60",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_61",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_62",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_63",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_64",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_65",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_66",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_67",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_68",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_69",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_70",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  }
+ ],
+ "L1_socratic": [
+  {
+   "problem_id": "mbpp_11",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_12",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_13",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_14",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_15",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_16",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_17",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_18",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_19",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_20",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_21",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_22",
+   "solved": 0,
+   "partial": 0.6666666666666666,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_23",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_24",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_25",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_26",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_27",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_28",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_29",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_30",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_31",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_32",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_33",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_34",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_35",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_36",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_37",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_38",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_39",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_40",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_41",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_42",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_43",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_44",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_45",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_46",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_47",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_48",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_49",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_50",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_51",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_52",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_53",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_54",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_55",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_56",
+   "solved": 0,
+   "partial": 0.6666666666666666,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_57",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_58",
+   "solved": 0,
+   "partial": 0.6666666666666666,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_59",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_60",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_61",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_62",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_63",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_64",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_65",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_66",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_67",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_68",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_69",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_70",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 138,
+   "leakage": 0.3333333333333333
+  }
+ ],
+ "L2_approach": [
+  {
+   "problem_id": "mbpp_11",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 119,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_12",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 69,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_13",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 28,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_14",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_15",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 26,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_16",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 32,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_17",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_18",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 114,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_19",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 78,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_20",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 46,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_21",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 33,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_22",
+   "solved": 0,
+   "partial": 0.6666666666666666,
+   "hint_chars": 121,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_23",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 106,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_24",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 67,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_25",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 119,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_26",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 82,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_27",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 76,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_28",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 50,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_29",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 119,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_30",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 139,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_31",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 133,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_32",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 118,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_33",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 67,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_34",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 118,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_35",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_36",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 55,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_37",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 88,
+   "leakage": 0.16666666666666666
+  },
+  {
+   "problem_id": "mbpp_38",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 61,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_39",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 120,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_40",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 37,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_41",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 27,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_42",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 68,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_43",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 32,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_44",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 59,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_45",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 126,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_46",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 55,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_47",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 106,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_48",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 82,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_49",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 82,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_50",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 88,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_51",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 32,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_52",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_53",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 80,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_54",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 139,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_55",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_56",
+   "solved": 0,
+   "partial": 0.6666666666666666,
+   "hint_chars": 49,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_57",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 128,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_58",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_59",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_60",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 135,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_61",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 135,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_62",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 64,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_63",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 72,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_64",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 92,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_65",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 111,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_66",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 93,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_67",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 94,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_68",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 114,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_69",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 117,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_70",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 89,
+   "leakage": 0.16666666666666666
+  }
+ ],
+ "L3_skeleton": [
+  {
+   "problem_id": "mbpp_11",
+   "solved": 0,
+   "partial": 0.6666666666666666,
+   "hint_chars": 276,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_12",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 134,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_13",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 167,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_14",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 131,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_15",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 142,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_16",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 257,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_17",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 135,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_18",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 410,
+   "leakage": 0.7272727272727273
+  },
+  {
+   "problem_id": "mbpp_19",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 145,
+   "leakage": 0.6666666666666666
+  },
+  {
+   "problem_id": "mbpp_20",
+   "solved": 0,
+   "partial": 0.6666666666666666,
+   "hint_chars": 241,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_21",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 141,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_22",
+   "solved": 0,
+   "partial": 0.6666666666666666,
+   "hint_chars": 261,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_23",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 206,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_24",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 145,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_25",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 217,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_26",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 221,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_27",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 142,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_28",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 206,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_29",
+   "solved": 0,
+   "partial": 0.6666666666666666,
+   "hint_chars": 329,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_30",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 311,
+   "leakage": 0.6666666666666666
+  },
+  {
+   "problem_id": "mbpp_31",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 447,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_32",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 298,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_33",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 172,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_34",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 330,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_35",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 126,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_36",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 166,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_37",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 147,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_38",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 139,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_39",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 409,
+   "leakage": 0.6428571428571429
+  },
+  {
+   "problem_id": "mbpp_40",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 194,
+   "leakage": 0.75
+  },
+  {
+   "problem_id": "mbpp_41",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 138,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_42",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 127,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_43",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 200,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_44",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 249,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_45",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 200,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_46",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 188,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_47",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 290,
+   "leakage": 0.6666666666666666
+  },
+  {
+   "problem_id": "mbpp_48",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 204,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_49",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 146,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_50",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 147,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_51",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 178,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_52",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 139,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_53",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 180,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_54",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 350,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_55",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 140,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_56",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 190,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_57",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 178,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_58",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 131,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_59",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 124,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_60",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 316,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_61",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 212,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_62",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 126,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_63",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 141,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_64",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 140,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_65",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 224,
+   "leakage": 0.8
+  },
+  {
+   "problem_id": "mbpp_66",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 177,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_67",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 222,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_68",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 143,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_69",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 342,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_70",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 299,
+   "leakage": 0.5
+  }
+ ],
+ "L4_analogy": [
+  {
+   "problem_id": "mbpp_11",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 361,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_12",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 328,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_13",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 314,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_14",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_15",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 359,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_16",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_17",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_18",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 361,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_19",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 280,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_20",
+   "solved": 0,
+   "partial": 0.6666666666666666,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_21",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_22",
+   "solved": 0,
+   "partial": 0.6666666666666666,
+   "hint_chars": 421,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_23",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 603,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_24",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 560,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_25",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 433,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_26",
+   "solved": 0,
+   "partial": 0.6666666666666666,
+   "hint_chars": 338,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_27",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 346,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_28",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_29",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 433,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_30",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 349,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_31",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 534,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_32",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 415,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_33",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 560,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_34",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 626,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_35",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_36",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 621,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_37",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 295,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_38",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 399,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_39",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 583,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_40",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 401,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_41",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_42",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 399,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_43",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_44",
+   "solved": 0,
+   "partial": 0.6666666666666666,
+   "hint_chars": 421,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_45",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 364,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_46",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_47",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 380,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_48",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 560,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_49",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 310,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_50",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 294,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_51",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_52",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_53",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 359,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_54",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 349,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_55",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_56",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_57",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 415,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_58",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_59",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_60",
+   "solved": 0,
+   "partial": 0.6666666666666666,
+   "hint_chars": 603,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_61",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 419,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_62",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 538,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_63",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 343,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_64",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 300,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_65",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 338,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_66",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 349,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_67",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 0,
+   "leakage": 0.0
+  },
+  {
+   "problem_id": "mbpp_68",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 294,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_69",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 469,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_70",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 0,
+   "leakage": 0.0
+  }
+ ],
+ "L5_solution": [
+  {
+   "problem_id": "mbpp_11",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 349,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_12",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 143,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_13",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 223,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_14",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 127,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_15",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 155,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_16",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 293,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_17",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 133,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_18",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 735,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_19",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 181,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_20",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 274,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_21",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 184,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_22",
+   "solved": 0,
+   "partial": 0.6666666666666666,
+   "hint_chars": 319,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_23",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 257,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_24",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 321,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_25",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 247,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_26",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 224,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_27",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 195,
+   "leakage": 0.5
+  },
+  {
+   "problem_id": "mbpp_28",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 235,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_29",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 347,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_30",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 376,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_31",
+   "solved": 0,
+   "partial": 0.3333333333333333,
+   "hint_chars": 665,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_32",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 390,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_33",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 285,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_34",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 408,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_35",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 113,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_36",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 223,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_37",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 268,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_38",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 248,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_39",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 650,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_40",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 221,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_41",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 173,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_42",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 147,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_43",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 239,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_44",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 273,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_45",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 289,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_46",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 176,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_47",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 336,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_48",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 274,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_49",
+   "solved": 0,
+   "partial": 0.0,
+   "hint_chars": 157,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_50",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 247,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_51",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 165,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_52",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 127,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_53",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 185,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_54",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 465,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_55",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 148,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_56",
+   "solved": 0,
+   "partial": 0.6666666666666666,
+   "hint_chars": 278,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_57",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 226,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_58",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 124,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_59",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 120,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_60",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 365,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_61",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 353,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_62",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 110,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_63",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 182,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_64",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 262,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_65",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 279,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_66",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 190,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_67",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 358,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_68",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 221,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_69",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 408,
+   "leakage": 1.0
+  },
+  {
+   "problem_id": "mbpp_70",
+   "solved": 1,
+   "partial": 1.0,
+   "hint_chars": 376,
+   "leakage": 1.0
+  }
+ ]
+}
