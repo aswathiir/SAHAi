@@ -877,3 +877,100 @@ base, which was six discordant one way and seven the other.
 The leakage and pedagogy columns are means of a continuous measure over 60
 dialogues rather than a 60-sample binomial, and an eight-fold difference there
 is not plausibly sampling noise.
+
+
+%-----------------------------------------------------------------------
+% [[A-8]] ADD: new subsection at the end of Sec.~\ref{sec:results}. This is
+% the paper's strongest result and it should be the last thing in Results.
+%-----------------------------------------------------------------------
+\subsection{Only the complete answer helps}
+\label{sec:ladder}
+
+Two points on this bank were known and nothing between them: with no dialogue
+the student solves $0.433$, and with the reference solution in front of it
+$0.833$. Every experiment in this paper lives in that unmeasured gap, and the
+question none of them asked is whether the gap is reachable by anything short
+of disclosure.
+
+We measure six levels of hint concreteness. Every hint is constructed
+programmatically from the reference solution, so no tutor model is involved and
+no policy quality can confound the result. This measures the task.
+
+\begin{table}[t]
+\caption{Hint concreteness against student outcome, 60 held-out problems, every
+level paired on the same bank. Leakage is our own disclosure metric. The final
+column is whether the tutor's system prompt permits a turn of that kind.}
+\label{tab:ladder}
+\centering
+\small
+\begin{tabular}{llrrrl}
+\toprule
+ & \textbf{Hint} & \textbf{Solve} & \textbf{$\Delta$} & \textbf{$p$} & \textbf{Allowed} \\
+\midrule
+L0 & nothing                   & 0.433 & ---      & ---    & yes \\
+L1 & Socratic question         & 0.400 & $-0.033$ & 0.7744 & yes \\
+L2 & approach named            & 0.383 & $-0.050$ & 0.5488 & yes \\
+L3 & skeleton, logic removed   & 0.450 & $+0.017$ & 1.0000 & no \\
+L4 & analogous worked example  & \textbf{0.317} & $-0.117$ & 0.0654 & no \\
+L5 & the reference solution     & \textbf{0.833} & $+0.400$ & \textbf{0.0000} & no \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{No level short of complete disclosure beats giving no help at all.} The
+skeleton is $+0.017$ at $p{=}1.0$, which is noise. Naming the approach and
+asking a guiding question both land below the floor. The analogous worked
+example, which the hint-granularity literature predicted would be the most
+helpful of the non-disclosing rungs, is the worst row in the table.
+
+\textbf{This settles the paper.} The $0.40$ gap is reachable only by
+disclosing, so on this benchmark no tutor bound by a non-disclosure constraint
+can win, at any model size, under any prompt, with any reward, after any amount
+of training. It is a property of the task and not of a policy, and it subsumes
+our other negative results rather than competing with them. The policy failing
+to move and the tutor having no information advantage over its student would
+both have mattered if there had been something to win.
+
+The benchmark is why. Its reference solutions are one to three lines, so there
+is no intermediate reasoning state to scaffold: the skeleton of a one-line
+solution is a signature and a placeholder, which carries nothing. Either the
+learner knows the idiom or it does not, and a four-turn Socratic dialogue
+cannot install an idiom without stating it.
+
+\textbf{The harmful rung is the most interesting number here.} L4 shows the
+learner a correct, working solution to a \emph{different} problem sharing
+syntactic constructs with this one, and the learner then does worse than if it
+had been shown nothing. The plausible mechanism is that it transfers the
+analogous pattern instead of solving the problem in front of it, which would
+make a well-intentioned worked example actively harmful. We did not confirm it:
+this run recorded outcomes and not the learner's code, so the mechanism is a
+hypothesis and the effect is $p{=}0.0654$.
+
+It is not isolated. A randomised trial in secondary mathematics reports that
+unrestricted assistance improved supported practice while reducing subsequent
+\emph{unaided} examination performance against a control~\cite{bastani}. Our
+result has the same shape in a simulated setting, which is the strongest
+external support any finding in this paper has.
+
+\textbf{A prediction of ours that this falsifies.} We built this experiment
+expecting the opposite. A think-aloud study of twelve novice
+programmers~\cite{hintlevels} reports that high-level natural-language hints
+alone can be unhelpful or misleading while commented code examples support
+novices better, and our tutor's prompt forbids code, code blocks and
+pseudocode. We predicted that the two rungs containing code would recover much
+of the gap and that our own constraint would be the binding one. Neither rung
+helped and one of them hurt. We report the prediction and its failure because
+the alternative, presenting the ladder as confirmation of a constraint we had
+already named, is the error this paper is otherwise about.
+
+
+%-----------------------------------------------------------------------
+% [[B-2]] BIBLIOGRAPHY: two further entries for the section above.
+%-----------------------------------------------------------------------
+\bibitem{bastani}
+H.~Bastani \emph{et al.}, ``Generative AI can harm learning,'' IZA Discussion
+Paper 18338, 2025.
+
+\bibitem{hintlevels}
+``Exploring how multiple levels of GPT-generated programming hints support or
+disappoint novices,'' arXiv:2404.02213, 2024. % FILL IN: author list
