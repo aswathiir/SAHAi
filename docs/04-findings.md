@@ -2146,3 +2146,82 @@ rung beat it, without checking which rung. Only L5 beat L0, so the rule turned
 "only the answer works" into "our prompt is the problem". The logic now
 requires a rung that is not disclosure, and the earlier verdict is recorded
 here as wrong rather than quietly deleted.
+
+## 32. Partial information makes this learner worse, significantly, and that is not the benchmark's fault
+
+Finding #31 found that on the 60-problem bank no hint short of full disclosure
+beat no help, and offered the task as the explanation: MBPP references are one
+to three line idioms, so a skeleton of one is a signature and a placeholder.
+That was testable. It is now falsified.
+
+Run 2026-10-10 on a Kaggle T4, 84 minutes, 822 generations. Every split pooled
+and filtered to references with at least four statements in the function body
+and at least one loop or conditional: 137 of 558 problems, mean 11.9 lines and
+2.9 control-flow nodes. Skeletons on this set encode real branch sequences.
+
+| level | 60 default | **137 multi-step** | $p$ vs L0 |
+|---|---|---|---|
+| L0 nothing | 0.433 | **0.336** | --- |
+| L1 Socratic question | 0.400 | 0.263 | 0.0639 |
+| L2 approach named | 0.383 | **0.234** | **0.0094** |
+| L3 skeleton, logic removed | 0.450 | 0.321 | 0.8388 |
+| L4 analogous worked example | 0.317 | **0.234** | **0.0243** |
+| L5 the reference solution | 0.833 | **0.752** | **0.0000** |
+
+### The skeleton still does nothing
+
+$-0.015$ at $p{=}0.84$, on problems where the skeleton shows a four-branch
+decision sequence rather than a placeholder. The benchmark explanation is dead:
+making the structure informative did not make the structural hint work.
+
+### Two rungs now harm the learner significantly
+
+At $n{=}137$ the protocol resolves $16.6\%$ rather than the $25.1\%$ of the
+60-problem bank, and two effects clear it. Naming the approach costs $0.102$
+($p{=}0.0094$). Showing a correct worked solution to an analogous problem costs
+$0.102$ ($p{=}0.0243$). Both are *worse than telling the learner nothing at
+all*, and on the harder set the damage is larger and now measurable where
+before it was only suggestive.
+
+Only complete disclosure helps, and it helps enormously: $+0.416$.
+
+### So the constraint is the learner, not the task or the tutor
+
+This is the third explanation this project has offered for the same null and
+the first one the data supports. It is not the reward design, which was
+debugged across twenty runs. It is not the policy, which never moved. It is not
+the prompt's no-code rule, since the rungs containing code do not help. It is
+not the benchmark, since selecting for scaffoldable structure changed nothing.
+
+A 1.5B learner given partial information performs **worse** than the same
+learner given none. The plausible mechanism is anchoring: a partial hint
+commits it to an incomplete pattern that displaces its own prior, which is
+better than the fragment. L4 is the clearest case, since the learner is shown
+working code for a different problem and plausibly transfers it rather than
+solving the one in front of it. We have not confirmed the mechanism because the
+run recorded outcomes and not the learner's code, and that is the single
+cheapest follow-up available.
+
+### What this means beyond this project
+
+The simulated-student methodology has a problem, and it is not ours alone. A
+tutor evaluated against an LLM learner is scored by a learner that is harmed by
+partial, non-disclosing hints and helped only by the answer. That penalises
+exactly the behaviour pedagogy requires, so a reward built on such a learner
+pushes a tutor toward disclosure or toward silence, which is what every run of
+this project measured. MathTutorBench, StudentSim and the simulated-learner
+line of work all rest on this assumption, and we can find no paper that checks
+it.
+
+It is consistent with human evidence rather than contradicting it. Bastani et
+al. (IZA DP 18338, 2025) report that in secondary mathematics unrestricted AI
+assistance improved supported practice while reducing subsequent unaided
+examination performance. The direction matches; whether the mechanism does is
+unknown.
+
+### Prediction recorded, and failed
+
+The experiment was built expecting L3 to help here. It did not. This is the
+second prediction in two days that the ladder falsified, after the
+arXiv:2404.02213 hint-register hypothesis of finding #31. Both are recorded
+rather than reframed.
