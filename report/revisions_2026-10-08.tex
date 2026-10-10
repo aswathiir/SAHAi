@@ -614,9 +614,16 @@ Untrained policy, same prompt     & 0.350 & $p{=}1.0000$ \\
 
 Three readings follow and none of them supports the aim. The trained tutor does
 not beat no tutoring at all. It does not beat the same model with the adapter
-disabled, which is to say reinforcement learning added nothing over prompting.
-And it is less than half as effective as simply disclosing the answer, which is
-the one action the system is designed to prevent.
+disabled, which is to say reinforcement learning added nothing a prompt did not
+already give. And it is less than half as effective as simply disclosing the
+answer, which is the one action the system is designed to prevent.
+
+A caveat on the disclosed-solution row. Its leakage and pedagogy are not
+measured: the harness records leakage as zero and pedagogy as undefined
+whenever an arm has no tutor object, and the disclosed-solution arm is built
+that way even though its dialogue contains the solution. Its true leakage is
+one by construction. We state it rather than print a zero that would read as a
+measurement.
 
 The weight-space measurement in Sec.~\ref{sec:nomove} explains the second of
 those directly: the adapter moved $0.2\%$ from its initialisation, so the
@@ -807,3 +814,66 @@ open-ended pedagogical capabilities of LLM tutors,'' in \emph{Proc. EMNLP},
 \bibitem{raft}
 W.~Xiong \emph{et al.}, ``A minimalist approach to LLM reasoning: from
 rejection sampling to REINFORCE,'' arXiv:2504.11343, 2025.
+
+
+%-----------------------------------------------------------------------
+% [[R-11]] REPLACE: Table~\ref{tab:claims} and its surrounding readings in
+% [[A-4]], now that a model this project did not train has been scored.
+%
+% This is the table the paper's comparative claim stands or falls on.
+%-----------------------------------------------------------------------
+\begin{table}[t]
+\caption{Five tutoring conditions, 60 held-out problems, every arm paired on
+the same bank in the same order. Leakage is the share of the tutor's text that
+discloses the solution; pedagogy is the graded rule-based judge. The
+disclosed-solution arm has no tutor object, so the harness does not measure
+either column for it.}
+\label{tab:claims}
+\centering
+\small
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Condition} & \textbf{Solve} & \textbf{Leak} & \textbf{Ped} & \textbf{min} \\
+\midrule
+Solution disclosed            & 0.833 & ---   & ---   & 3.4 \\
+\textbf{No tutor at all}      & \textbf{0.433} & 0.000 & ---   & 3.0 \\
+\textbf{Prompted 3B, untrained} & \textbf{0.417} & \textbf{0.017} & \textbf{0.997} & 15.0 \\
+Untrained policy, adapter off & 0.350 & 0.249 & 0.768 & 22.9 \\
+\textbf{Trained policy}       & \textbf{0.333} & 0.137 & 0.893 & 21.1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A model we did not train, prompted with the same instructions and carrying no
+adapter, no reward function and no reinforcement learning, is better than the
+trained policy on every axis we measure at once: it solves more problems, it
+discloses the solution eight times less often, and it satisfies the pedagogy
+rules almost perfectly. There is no frontier position for the trained model to
+occupy. It is dominated.
+
+The gap is widest where it should have been narrowest. Non-disclosure is the
+behaviour this project spent its entire optimisation budget on, and it is the
+axis on which a larger model with a prompt beats it most decisively, $0.017$
+against $0.137$.
+
+\textbf{What the training did achieve, stated precisely.} Between the untrained
+and trained policy, leakage fell from $0.249$ to $0.137$ and pedagogy rose from
+$0.768$ to $0.893$. Reinforcement learning moved both terms the policy computes
+from its own text, substantially, in the intended direction. This is the
+asymmetry of Sec.~\ref{sec:channel} appearing one final time: the controllable
+channel responded, the outcome did not, and the behaviour that was successfully
+installed turns out to be available at no cost from a model twice the size.
+
+\textbf{What is not established.} No difference in the solve column is
+significant at this sample size. Paired exact tests give $p{=}0.2101$ for no
+tutor against the trained policy, $p{=}1.0000$ for no tutor against the
+prompted model, $p{=}0.2668$ for the trained policy against the prompted model,
+and $p{=}1.0000$ between the trained and untrained policies. At $n{=}60$ this
+protocol resolves roughly $0.15$ and no pair differs by that much, so the
+ordering of the solve column is the direction of the evidence and not a result.
+In particular we do not claim that training made the tutor worse than its own
+base, which was six discordant one way and seven the other.
+
+The leakage and pedagogy columns are means of a continuous measure over 60
+dialogues rather than a 60-sample binomial, and an eight-fold difference there
+is not plausibly sampling noise.
