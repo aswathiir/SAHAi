@@ -974,3 +974,79 @@ Paper 18338, 2025.
 \bibitem{hintlevels}
 ``Exploring how multiple levels of GPT-generated programming hints support or
 disappoint novices,'' arXiv:2404.02213, 2024. % FILL IN: author list
+
+
+%-----------------------------------------------------------------------
+% [[R-12]] REPLACE: in [[A-8]], the paragraph beginning "This settles the
+% paper" and the one beginning "The benchmark is why".
+%
+% Both attributed the result to the benchmark. A second ladder on problems
+% selected for scaffoldable structure falsifies that.
+%-----------------------------------------------------------------------
+\textbf{The benchmark is not the explanation, and we tested it.} The reading
+above invites the obvious objection: these reference solutions are one to three
+lines, so the skeleton of one is a signature and a placeholder. We therefore
+pooled every split and selected the 137 problems of 558 whose reference has at
+least four statements in the function body and at least one loop or
+conditional, averaging $11.9$ lines and $2.9$ control-flow nodes. On that set a
+skeleton shows a four-branch decision sequence rather than a placeholder.
+Pooling splits is sound because the ladder uses no trained model: hints come
+from the reference and the learner is the base student.
+
+\begin{table}[t]
+\caption{The same ladder on the default bank and on problems selected for
+scaffoldable structure. At $n{=}137$ the protocol resolves $16.6\%$ against the
+$25.1\%$ of the 60-problem bank.}
+\label{tab:ladder2}
+\centering
+\small
+\begin{tabular}{llrrr}
+\toprule
+ & \textbf{Hint} & \textbf{60} & \textbf{137} & \textbf{$p$} \\
+\midrule
+L0 & nothing                  & 0.433 & 0.336 & --- \\
+L1 & Socratic question        & 0.400 & 0.263 & 0.0639 \\
+L2 & approach named           & 0.383 & \textbf{0.234} & \textbf{0.0094} \\
+L3 & skeleton, logic removed  & 0.450 & 0.321 & 0.8388 \\
+L4 & analogous worked example & 0.317 & \textbf{0.234} & \textbf{0.0243} \\
+L5 & the reference solution    & 0.833 & \textbf{0.752} & \textbf{0.0000} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The skeleton still does nothing, $-0.015$ at $p{=}0.8388$. Making the structure
+informative did not make the structural hint work. What the harder set adds is
+significance in the other direction: naming the approach costs $0.102$
+($p{=}0.0094$) and the analogous worked example costs $0.102$ ($p{=}0.0243$),
+both worse than telling the learner nothing. Only complete disclosure helps,
+and it helps by $0.416$.
+
+\textbf{The constraint is the learner.} This is the third explanation this
+paper has offered for one null and the first the data supports. Not the reward,
+which was debugged across twenty runs. Not the policy, which moved $0.2\%$ from
+its initialisation. Not the prompt's prohibition on code, since the rungs that
+contain code do not help. Not the benchmark, since selecting for scaffoldable
+structure changed nothing. A 1.5B learner given partial information performs
+worse than the same learner given none, and the plausible mechanism is
+anchoring: an incomplete pattern displaces a prior that was better than the
+fragment. The analogous worked example is the clearest case, since the learner
+sees correct code for a different problem and plausibly transfers it rather
+than solving the one in front of it. We did not confirm the mechanism, because
+these runs recorded outcomes and not the learner's code.
+
+\textbf{This generalises past our system, and it is the paper's most useful
+claim.} A tutor evaluated against a simulated learner is scored by something
+that is harmed by partial, non-disclosing hints and helped only by the answer.
+That penalises precisely the behaviour pedagogy requires, so any reward built
+on such a learner pushes a tutor toward disclosure or toward silence. Every
+reward in this paper inherited that, and so does the evaluation in any work
+that scores tutors against an LLM learner. The simulated-learner line of
+research rests on the assumption that a simulated student responds to teaching
+as a student would, and we are not aware of a paper that tests
+it~\cite{rev-simstudents}. Our two ladders are such a test, and the assumption
+does not hold for a 1.5B learner on program synthesis.
+
+The direction is consistent with human evidence rather than opposed to it.
+A randomised trial in secondary mathematics reports that unrestricted
+assistance improved supported practice while reducing subsequent unaided
+performance~\cite{bastani}. Whether the mechanism is the same is unknown.
