@@ -174,10 +174,43 @@ def build_hint(level: str, problem, analogy) -> str | None:
     raise ValueError(level)
 
 
+def is_multi_step(code: str) -> bool:
+    """Does a skeleton of this solution carry information?
+
+    Two conditions, both on the reference. At least four statements in the
+    function body, so removing the logic still leaves a sequence. And at least
+    one loop or conditional, so the shape encodes a decision rather than a
+    single expression. Measured over the 558-problem MBPP pool this selects
+    137 problems averaging 11.9 lines and 2.9 control-flow nodes, against a
+    pool median nearer three lines.
+    """
+    try:
+        tree = ast.parse(code.strip())
+    except SyntaxError:
+        return False
+    ctrl = sum(1 for n in ast.walk(tree)
+               if isinstance(n, (ast.For, ast.While, ast.If, ast.Try)))
+    stmts = max((len(n.body) for n in ast.walk(tree)
+                 if isinstance(n, ast.FunctionDef)), default=0)
+    return stmts >= 4 and ctrl >= 1
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--problems", type=int, default=60)
     ap.add_argument("--split", default="test")
+    ap.add_argument(
+        "--multi-step", action="store_true",
+        help="Pool every split and keep only problems whose reference has at "
+             "least 4 statements in the function body and at least one "
+             "control-flow node. On the default bank a skeleton of a one-line "
+             "solution is a signature and a placeholder, which carries no "
+             "information; this selects the problems where it carries some. "
+             "Pooling splits is sound here because the ladder involves no "
+             "trained model: hints are built from the reference and the learner "
+             "is the base student, so there is nothing for a train split to "
+             "contaminate.",
+    )
     ap.add_argument("--out", default="artifacts/ladder/ladder.json")
     ap.add_argument("--device", default="auto")
     args = ap.parse_args()
@@ -198,40 +231,70 @@ def main() -> None:
     print(f"device: {device}   framing: {os.environ['SAHAI_SOLVE_CONTEXT']}", flush=True)
 
     train_bank = load_mbpp(split="train", max_problems=settings.max_problems)
-    bank = load_mbpp(split=args.split, max_problems=args.problems)
-    problems = bank.problems
+    if args.multi_step:
+        pool = []
+        for sp, cap in (("train", 400), ("validation", 100), ("test", 100)):
+            try:
+                pool += load_mbpp(split=sp, max_problems=cap).problems
+            except Exception as exc:  # noqa: BLE001
+                print(f"  could not load {sp}: {type(exc).__name__}")
+        problems = [p for p in pool if is_multi_step(p.solution)]
+        print(f"multi-step filter: {len(problems)} of {len(pool)} problems kept",
+              flush=True)
+        # The analogy rung must draw from the same register, or a multi-step
+        # problem gets a one-line example and the rung is not what it claims.
+        train_pool = problems
+    else:
+        problems = load_mbpp(split=args.split, max_problems=args.problems).problems
+        train_pool = train_bank.problems
 
     # An analogy source: another problem sharing a skill, never this one.
     by_skill: dict[str, list] = {}
-    for p in train_bank.problems:
+    for p in train_pool:
         for s in p.skills:
             if s != "general":
                 by_skill.setdefault(s, []).append(p)
 
     def pick_analogy(problem):
-        """The closest other problem, by shared skills AND shared constructs.
+        """The closest other problem, by shared constructs first, skills second.
 
-        Ranking on a single skill tag in common matched a list-slicing problem
-        to a sorting one, which is an analogy in name only. Constructs come
-        from the same AST pass L2 uses, so the example actually demonstrates
-        the technique the learner needs.
+        Ranking on a single shared skill tag paired a list-slicing example with
+        a sorting problem, which is an analogy in name only. Constructs come
+        from the same AST pass L2 uses, so the example demonstrates the
+        technique the learner needs.
+
+        The construct-only fallback matters: 18 of the 137 multi-step problems
+        carry no skill tag but `general`, and without it this rung would
+        silently return nothing for them, making L4 identical to L0 on 13% of
+        the bank and biasing the comparison toward no effect.
         """
         want_skills = {s for s in problem.skills if s != "general"}
         want_cons = set(constructs(problem.solution))
-        pool = {c.id: c for s in want_skills for c in by_skill.get(s, [])}
-        best, best_score = None, -1.0
-        for cand in pool.values():
-            if cand.id == problem.id:
-                continue
-            cs = {x for x in cand.skills if x != "general"}
-            cc = set(constructs(cand.solution))
-            skill_j = len(want_skills & cs) / max(len(want_skills | cs), 1)
-            cons_j = len(want_cons & cc) / max(len(want_cons | cc), 1)
-            # Constructs weigh more: they are what the example demonstrates.
-            score = cons_j * 2 + skill_j
-            if score > best_score:
-                best, best_score = cand, score
-        return best
+
+        def rank(cands, use_skills):
+            best, best_score = None, -1.0
+            for cand in cands:
+                if cand.id == problem.id:
+                    continue
+                cc = set(constructs(cand.solution))
+                cons_j = len(want_cons & cc) / max(len(want_cons | cc), 1)
+                score = cons_j * 2
+                if use_skills:
+                    cs = {x for x in cand.skills if x != "general"}
+                    score += len(want_skills & cs) / max(len(want_skills | cs), 1)
+                if score > best_score:
+                    best, best_score = cand, score
+            return best, best_score
+
+        if want_skills:
+            pool_c = {c.id: c for s in want_skills for c in by_skill.get(s, [])}
+            best, score = rank(pool_c.values(), True)
+            if best is not None and score > 0:
+                return best
+        # No usable tag, or no tagged candidate shared anything: fall back to
+        # the whole register and match on constructs alone.
+        best, score = rank(train_pool, False)
+        return best if score > 0 else None
 
     evaluator = Evaluator(settings, solution_corpus=[p.solution for p in train_bank.problems])
     student_model, student_tok = load_for_inference(
@@ -304,24 +367,46 @@ def main() -> None:
               f"{m['p_value']:>9.4f}  {allowed}")
 
     print("\nREADING")
-    best_allowed = max(("L1_socratic", "L2_approach"),
-                       key=lambda lv: sum(r["solved"] for r in rows[lv]))
-    best_any = max(LEVELS, key=lambda lv: sum(r["solved"] for r in rows[lv]))
-    ba = sum(r["solved"] for r in rows[best_allowed]) / len(problems)
-    bany = sum(r["solved"] for r in rows[best_any]) / len(problems)
+    # The first version of this block was wrong and printed a flattering
+    # conclusion the data did not support. It fired "the prompt is the
+    # constraint" whenever the best permitted rung failed to beat L0 and ANY
+    # rung beat it, without checking which rung. On the real data only L5, the
+    # complete solution, beat L0. Disclosure is not tutoring, so that rule
+    # turned "only the answer works" into "our prompt is the problem".
+    #
+    # The question is specifically whether a rung that is NOT disclosure helps.
     l0 = sum(base) / len(base)
-    print(f"  no help                      {l0:.3f}")
-    print(f"  best hint our rules ALLOW    {ba:.3f}  ({best_allowed})")
-    print(f"  best hint of any kind        {bany:.3f}  ({best_any})")
-    if ba <= l0 + 1e-9 and bany > l0:
-        print("\n  Help works on this task, and the register our tutor is")
-        print("  restricted to is not the register that works. The constraint")
-        print("  is the prompt and the reward, not the policy.")
-    elif bany <= l0 + 1e-9:
-        print("\n  No level of help beats no help. The task does not admit")
-        print("  tutoring by this student at all, and no tutor could have won.")
+    partial = [lv for lv in LEVELS if lv not in ("L0_none", "L5_solution")]
+    helped = []
+    for lv in partial:
+        k = sum(r["solved"] for r in rows[lv]) / len(rows[lv])
+        m = mcnemar(base, [r["solved"] for r in rows[lv]])
+        if k > l0 and m["p_value"] < 0.05:
+            helped.append((lv, k, m["p_value"]))
+    best_partial = max(partial, key=lambda lv: sum(r["solved"] for r in rows[lv]))
+    bp = sum(r["solved"] for r in rows[best_partial]) / len(problems)
+    l5 = sum(r["solved"] for r in rows["L5_solution"]) / len(problems)
+
+    print(f"  no help                          {l0:.3f}")
+    print(f"  best PARTIAL hint                {bp:.3f}  ({best_partial})")
+    print(f"  full solution disclosed          {l5:.3f}")
+    print()
+    if helped:
+        for lv, k, pv in helped:
+            print(f"  {lv} beats no help: {k:.3f} vs {l0:.3f}, p={pv:.4f}")
+        print("  A hint short of disclosure helps. Tutoring is possible here.")
     else:
-        print("\n  Mixed: read the ladder directly.")
+        print("  No hint short of the full solution beats giving no help at all.")
+        print("  The 0.40 gap between no help and disclosure is reachable only")
+        print("  by disclosing. On this benchmark no tutor bound by a")
+        print("  non-disclosure constraint can win, whatever its size, prompt")
+        print("  or training. That is a property of the task, not of a policy.")
+    worst = min(partial, key=lambda lv: sum(r["solved"] for r in rows[lv]))
+    wv = sum(r["solved"] for r in rows[worst]) / len(problems)
+    if wv < l0:
+        mw = mcnemar(base, [r["solved"] for r in rows[worst]])
+        print(f"\n  Worst rung is {worst} at {wv:.3f}, below no help at all")
+        print(f"  (p={mw['p_value']:.4f}). Partial information can mislead.")
     print(f"\nwritten to {args.out}")
 
 
