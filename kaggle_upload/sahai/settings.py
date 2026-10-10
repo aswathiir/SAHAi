@@ -268,3 +268,136 @@ class Settings(BaseModel):
             max_problems=200,
             output_dir="/kaggle/working/output",
         )
+
+    @classmethod
+    def local_mps(cls) -> "Settings":
+        """Apple Silicon GPU, derived from `kaggle()` so the two cannot drift.
+
+        Only what the device forces is changed. Everything that defines the
+        experiment -- group size, turns, learning rate, reward weights, probe
+        cadence, patience -- is inherited, so a result from this preset is
+        comparable with the Kaggle runs rather than a separate configuration
+        whose differences have to be reconstructed later.
+
+        What the device forces:
+
+        * `student_quantize_4bit` off. bitsandbytes is CUDA-only; the loader
+          already warns and falls back, and this makes the fallback explicit in
+          the configuration rather than in a log line. Two 1.5B models in
+          bfloat16 is about 6 GB against 16 GB of unified memory.
+        * `epochs` 10 -> 8. Both seeded Kaggle pairs selected epoch 1 or 3, and
+          with `eval_every=2` and patience 3 a stop needs six epochs past the
+          best, so 8 covers the range either of them used. The cap is a time
+          budget, not a belief about convergence: MPS is roughly three times
+          slower than a T4 here. `best_model` is written whenever a probe
+          improves, so a run killed early still leaves the selected checkpoint
+          rather than nothing.
+        """
+        s = cls.kaggle()
+        s.device = "mps"
+        s.model.student_quantize_4bit = False
+        s.training.epochs = 8
+        s.output_dir = "artifacts/retrain"
+        return s
+
+    @classmethod
+    def local_mps_corrected(cls) -> "Settings":
+        """`local_mps()` with the three hyperparameters that were never checked
+        against the paper this method came from.
+
+        SAHAi follows the review of Dinucu-Jianu et al. (EMNLP 2025,
+        arXiv:2505.15607), which trains the same kind of system. Its published
+        settings against the ones this project has used for twenty runs:
+
+            problems per batch      16      vs 4     4x fewer
+            rollouts per problem     8      vs 8     same
+            learning rate            5e-7   vs 1e-4  200x higher
+            KL coefficient           0.001  vs 0.05  50x stronger
+            gradient steps per batch 2      vs 16    8x more
+
+        Three are corrected here and nothing else is touched, so the comparison
+        against `local_mps()` isolates them. `gradient_accumulation_steps`
+        stays at 2, which means doubling the batch doubles the steps per epoch
+        from 16 to 32 as a consequence rather than as a fourth change. Run v14
+        of this project changed three things at once, came out net negative, and
+        nothing could be attributed; that is the mistake being avoided.
+
+        The learning rate has a traceable origin. It was raised from 2e-5 to
+        1e-4 on the reasoning, recorded above, that "LoRA adapters are normally
+        trained at 1e-4..3e-4". That is a supervised-finetuning convention and
+        it does not carry to policy-gradient RL.
+
+        **Stated risk.** Total parameter movement is roughly the learning rate
+        times the number of steps. The run this replaces moved 1e-4 x 128
+        steps; this one moves 5e-7 x 256, about a hundred times less. The
+        reference reaches a comparable total only because it takes thousands of
+        steps over roughly 200 GPU-hours, and this machine has about twelve. So
+        the most likely failure mode of this configuration is not instability
+        but inertia: KL to the reference policy staying near zero and the
+        policy not moving measurably. If that is what comes back, the quantity
+        to change is the learning rate, and the estimate that matches the
+        reference's cumulative movement at this step budget is near 2e-5, which
+        is close to the value this project started from.
+
+        Batch 8 rather than the reference's 16 is a compute choice. It doubles
+        problem coverage, which was 26 of 198 problems, at roughly twice the
+        per-epoch cost.
+        """
+        s = cls.local_mps()
+        s.training.batch_size = 8
+        s.training.learning_rate = 5e-7
+        s.training.kl_coeff = 0.001
+        s.output_dir = "artifacts/retrain_corrected"
+        return s
+
+    @classmethod
+    def local_mps_asymmetric(cls) -> "Settings":
+        """A tutor that knows more than its student.
+
+        The deepest defect in this project's configuration was never a reward
+        term. Tutor and student were the same checkpoint,
+        Qwen2.5-1.5B-Instruct for both, recorded as a deliberate choice to
+        "match the tutor's size" after a 0.5B student failed to hold the
+        confused persona. A tutor with its student's exact weights has no
+        knowledge the student lacks, so the only thing it can contribute is
+        organisation, and organisation measured 0.350 against 0.367 for no
+        tutoring at all.
+
+        The oracle arm shows the channel is open: disclose the solution and the
+        student reaches 0.783. The student can absorb information. There was
+        none to send.
+
+        Three changes from `local_mps()`:
+
+        * student 1.5B -> 0.5B. Creates the asymmetry. It also lowers the
+          unaided baseline, which is the other thing this experiment needs,
+          because 60% of the held-out bank was previously inert, solved or
+          failed by every arm alike.
+        * `kl_coeff` 0.05 -> 0.001, matching arXiv:2505.15607. The measured
+          policy loss ran 0.0008 to 0.0042 and the KL penalty was a quarter of
+          it, so this removes most of the force opposing an already negligible
+          gradient.
+        * `batch_size` 4 -> 8. Coverage was 26 of 198 problems.
+
+        The learning rate is deliberately **not** lowered. Finding #29 measured
+        `lora_B` at 0.000762 mean absolute weight against an initialisation of
+        exactly zero, an effective perturbation of about 0.2%, with KL to the
+        reference never leaving noise across eight epochs. At 1e-4 the policy
+        did not move; 5e-7 would freeze it. The earlier
+        `local_mps_corrected()` preset is kept for the record but should not be
+        run.
+
+        **Stated risk.** The published MBPP gap between these sizes is modest,
+        roughly 57 against 67 pass@1 for the Coder variants, so the asymmetry
+        this buys may be too small to teach across. If the run reproduces
+        finding #29 with `lora_B` still near zero, the problem is the GRPO
+        surrogate magnitude rather than the configuration, and the next thing
+        to try is rejection-sampling fine-tuning, which produces ordinary
+        cross-entropy gradients instead of a surrogate that measures 0.002.
+        """
+        s = cls.local_mps()
+        s.model.student = "Qwen/Qwen2.5-0.5B-Instruct"
+        s.training.kl_coeff = 0.001
+        s.training.batch_size = 8
+        s.output_dir = "artifacts/retrain_asym"
+        return s

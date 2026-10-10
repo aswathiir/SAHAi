@@ -1988,3 +1988,82 @@ result**: at $n{=}7$ the interval covers almost everything, and the problems are
 the first 7 of the split rather than a sample. It is recorded only because the
 direction is the opposite of the one the probe series suggested, and the control
 remains unrun.
+
+## 30. A prompted 3B dominates the trained tutor on every axis we measure
+
+Run on 2026-10-10 on a Kaggle T4, 60 held-out problems, every arm paired on the
+same bank in the same order, `hints` framing, all six instrumentation fixes in
+place. This is the first time this project has scored a model it did not train.
+
+| arm | solve | partial | leakage | pedagogy | min |
+|---|---|---|---|---|---|
+| oracle (solution disclosed) | 0.833 | 0.861 | n/a | n/a | 3.4 |
+| **no tutor at all** | **0.433** | 0.500 | 0.000 | n/a | 3.0 |
+| **prompted 3B, no training** | **0.417** | 0.478 | **0.017** | **0.997** | 15.0 |
+| sahai-base (adapter off) | 0.350 | 0.433 | 0.249 | 0.768 | 22.9 |
+| **sahai-trained** | **0.333** | 0.428 | 0.137 | 0.893 | 21.1 |
+
+Qwen2.5-3B-Instruct, prompted with the same system prompt, no adapter, no
+reward function, no training of any kind, beats the trained 1.5B on **all three
+measured axes at once**: it solves higher, it discloses eight times less often,
+and it satisfies the pedagogy rules almost perfectly. There is no frontier
+position to claim. The system is Pareto-dominated.
+
+The worst part is where it loses. Non-disclosure is the thing this project
+spent twenty runs optimising, and it is the axis on which the gap is largest:
+$0.137$ against $0.017$.
+
+### Nothing in the solve column is statistically significant
+
+| comparison | discordant | $p$ |
+|---|---|---|
+| unaided vs sahai-trained | 5:11 | 0.2101 |
+| unaided vs prompted-3B | 6:7 | 1.0000 |
+| sahai-trained vs prompted-3B | 9:4 | 0.2668 |
+| sahai-base vs sahai-trained | 6:7 | 1.0000 |
+
+At $n{=}60$ this protocol resolves about $0.15$, and no pair differs by that
+much. So the solve-rate ordering above is the direction of the evidence and not
+an established result, and the earlier claim that training made the tutor
+*worse* than its own base is **not** supported: 6:7 discordant, $p{=}1.0$.
+
+The leakage and pedagogy columns are a different kind of quantity, a mean over
+60 dialogues of a continuous measure rather than a 60-sample binomial, and an
+eight-fold gap there is not plausibly noise.
+
+### The training did work, on the channel it could reach
+
+| | base | trained |
+|---|---|---|
+| leakage | 0.249 | **0.137** |
+| pedagogy | 0.768 | **0.893** |
+
+Reinforcement learning moved both terms the policy computes from its own text,
+substantially, in the intended direction. This is the asymmetry of finding #14
+appearing one last time: the controllable channel responded, the outcome did
+not, and the thing that was improved turns out to be available for free from a
+model twice the size.
+
+### Two corrections this run forces
+
+The oracle arm's leakage and pedagogy are **not measured**. `run()` records
+leakage as `0.0` and pedagogy as `nan` whenever `tutor is None`, and the oracle
+arm is constructed with no tutor object even though its dialogue does contain a
+disclosed solution. Its true leakage is 1.0 by construction. Earlier write-ups,
+including the report sections drafted on 2026-10-08, describe the oracle as the
+total-leakage corner of the frontier with a measured value; that value does not
+exist and the table must say so.
+
+The T4 numbers also agree with the local Apple Silicon run to within one
+problem per arm (unaided 0.433 against 0.450, oracle 0.833 against 0.850),
+which is the first cross-platform check this pipeline has had since the six
+fixes.
+
+### What follows
+
+There is no version of this result that supports the project's original claim.
+A 3B model with a prompt is better on outcome and better on pedagogy, at
+two-thirds of the wall-clock, and it required none of the reward design, the
+learner model, the curriculum or the reinforcement learning. The remaining
+contribution is the measurement work and the diagnosis, which is real and which
+no amount of further training will improve.

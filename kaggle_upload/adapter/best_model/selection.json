@@ -1,0 +1,7 @@
+{
+  "epoch": 5,
+  "probe_solve": 0.35,
+  "probe_split": "validation",
+  "probe_problems": 20,
+  "criterion": "strict held-out solve rate, maximised"
+}

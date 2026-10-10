@@ -123,11 +123,59 @@ def _parse_assert(assertion: str) -> tuple[str, dict[str, Any], Any] | None:
 
 
 def _extract_function_name(code: str) -> str:
+    """First `def` in the file. Kept only as the fallback for `_entry_point`.
+
+    Wrong on its own for MBPP, because a reference solution is frequently a
+    helper followed by the function the tests actually call.
+    """
     match = re.search(r"def\s+(\w+)\s*\(", code)
     return match.group(1) if match else "solution"
 
 
-def _extract_function_signature(code: str) -> str:
+def _entry_point(code: str, tested: list[str]) -> str:
+    """The function the assertions call.
+
+    This used to be `_extract_function_name`, the first `def` in the reference
+    solution, and `_parse_assert` already returned the name the test calls --
+    the loader discarded it into `_`. For 5 of the 60 held-out problems the
+    reference defines a helper first, so the two disagree:
+
+        mbpp_45  defines `find_gcd` then `get_gcd`; the tests call `get_gcd`
+        mbpp_56  defines `rev` then `check`;         the tests call `check`
+        mbpp_18  defines three helpers before `remove_dirty_chars`
+        mbpp_30  defines `check_Equality` before the counter
+        mbpp_70  defines `find_equal_tuple` before `get_equal`
+
+    The consequence was not a mislabelled field. `CodeVerifier` calls
+    `problem.function_name`, so it invoked the helper and compared its output
+    against the entry point's expected value; every reference failed its own
+    tests. And `function_signature` reaches the student's solve prompt, so the
+    student was told to implement `rev(num)` on a problem scored by calling
+    `check(n)`. Those 5 problems were unwinnable by construction, in every arm,
+    including the oracle arm that pastes the reference into the dialogue.
+
+    The assertions are the ground truth here: they are what gets executed, so
+    whatever they call is the entry point whether or not the reference defines
+    it. A name the reference does not define leaves the problem unsolvable,
+    which is what `drop_unsolvable` is for.
+    """
+    for name in tested:
+        if re.search(rf"def\s+{re.escape(name)}\s*\(", code):
+            return name
+    return tested[0] if tested else _extract_function_name(code)
+
+
+def _extract_function_signature(code: str, name: str | None = None) -> str:
+    """The `def` line for `name`, not for whichever function comes first.
+
+    Signature and entry point have to name the same function. This string is
+    shown to the student as `Signature:` in the solve prompt, so disagreement
+    told the student to write one function while scoring another.
+    """
+    if name:
+        match = re.search(rf"(def\s+{re.escape(name)}\s*\([^)]*\))", code)
+        if match:
+            return f"{match.group(1)}:"
     match = re.search(r"(def\s+\w+\s*\([^)]*\))", code)
     return f"{match.group(1)}:" if match else "def solution():"
 
@@ -268,17 +316,20 @@ def load_mbpp(
         if max_problems and i >= max_problems:
             break
 
-        func_name = _extract_function_name(row["code"])
         test_cases = []
+        tested_names = []
         for assertion in row["test_list"]:
             parsed = _parse_assert(assertion)
             if parsed is None:
                 continue
-            _, input_dict, expected = parsed
+            tested, input_dict, expected = parsed
+            tested_names.append(tested)
             test_cases.append(TestCase(input=input_dict, expected=expected))
 
         if not test_cases:
             continue
+
+        func_name = _entry_point(row["code"], tested_names)
 
         problem = Problem(
             id=f"mbpp_{row['task_id']}",
@@ -287,7 +338,7 @@ def load_mbpp(
             difficulty=_estimate_difficulty(row["code"], row["text"]),
             skills=_tag_skills(row["text"], row["code"]),
             function_name=func_name,
-            function_signature=_extract_function_signature(row["code"]),
+            function_signature=_extract_function_signature(row["code"], func_name),
             test_cases=test_cases,
             solution=row["code"],
         )

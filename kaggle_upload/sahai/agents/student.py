@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import os
 import random
 from dataclasses import dataclass, field
@@ -90,6 +91,31 @@ class StudentPersona:
         )
 
 
+
+def _parse_salvaging_tail(body: str) -> tuple[ast.Module, str] | None:
+    """Parse `body`, dropping trailing lines until it parses.
+
+    A generation cut off mid-statement leaves a complete function followed by a
+    fragment; discarding the whole reply over the fragment loses the part that
+    works. Returns the tree and the text it was parsed from, so callers alias
+    against exactly what parsed.
+
+    Module level rather than a method because it touches no instance state.
+    """
+    try:
+        return ast.parse(body), body
+    except SyntaxError:
+        pass
+    lines = body.split("\n")
+    for cut in range(len(lines) - 1, 0, -1):
+        candidate = "\n".join(lines[:cut])
+        try:
+            return ast.parse(candidate), candidate
+        except SyntaxError:
+            continue
+    return None
+
+
 class StudentSimulator:
     def __init__(
         self,
@@ -167,6 +193,9 @@ class StudentSimulator:
           transcript, mapping the student's own turns to `assistant` and the
           tutor's to `user`.
         * `hints` passes only the tutor's turns, as a single user message.
+        * `quoted` passes every turn, the student's included, as a single user
+          message, so the content is preserved and no turn sits in the model's
+          own assistant history.
 
         Why this is a parameter rather than a fix. The 2026-10-02 benchmark
         measured, on 60 paired problems, that a tutored student solves 0.133
@@ -186,6 +215,38 @@ class StudentSimulator:
         results stay comparable until that comparison is run.
         """
         mode = os.getenv("SAHAI_SOLVE_CONTEXT", "full").lower()
+
+        if mode == "quoted":
+            # Every turn, including the student's own, as a single user message.
+            #
+            # This exists to separate two mechanisms that `hints` removes at the
+            # same time. `hints` drops the student's turns, which removes both
+            # the content and the fact that content sat in the model's own
+            # assistant history. `quoted` keeps every character and removes only
+            # the role, so the two can be told apart:
+            #
+            #   quoted scores like hints  -> the role is the mechanism, and
+            #                                `hints` is discarding usable
+            #                                context for no reason
+            #   quoted scores like full   -> the volume is the mechanism, and
+            #                                self-conditioning has nothing to
+            #                                do with it
+            #
+            # The hedging explanation originally offered for the `full` deficit
+            # is already ruled out: recovery does not track whether the student
+            # said it was lost (Fisher p=0.44, and p=1.00 in the base arm),
+            # while it does track how much the student wrote.
+            if not dialogue.turns:
+                return []
+            lines = [
+                f"{'You' if t.role == 'student' else 'Tutor'}: {t.content}"
+                for t in dialogue.turns
+            ]
+            return [{
+                "role": "user",
+                "content": "Here is the tutoring session you just had:\n\n"
+                           + "\n\n".join(lines),
+            }]
 
         if mode == "hints":
             hints = [t.content for t in dialogue.turns if t.role == "tutor"]
@@ -274,10 +335,54 @@ class StudentSimulator:
         return self._extract_code(code, problem.function_name)
 
     def _extract_code(self, text: str, function_name: str) -> str:
-        if "```python" in text:
-            text = text.split("```python")[1].split("```")[0]
-        elif "```" in text:
-            text = text.split("```")[1].split("```")[0]
-        if f"def {function_name}" not in text:
-            text = f"def {function_name}():\n    pass"
-        return text.strip()
+        """Pull the student's code out of its reply, keeping it when the name
+        differs.
+
+        This used to end with a literal string check:
+
+            if f"def {function_name}" not in text:
+                text = f"def {function_name}():\n    pass"
+
+        which discards everything the student wrote the moment the name does
+        not match exactly. Measured on the oracle arm, where a correct solution
+        is in front of the student, that fired on 5 of 60 problems and every
+        one was naming style rather than a refusal to answer -- MBPP uses
+        mixedCase (`max_Prime_Factors`, `decimal_To_Binary`) and the student
+        writes snake_case. Three of the five were otherwise correct and scored
+        zero, which is 5 points of solve rate lost in every arm of every run.
+
+        So the fallback is now an alias rather than a stub. An alias and not a
+        rename, because a recursive solution calls itself by the name it
+        defined, and renaming the `def` would break the recursion it is there
+        to preserve.
+        """
+        body = text
+        if "```python" in body:
+            body = body.split("```python")[1].split("```")[0]
+        elif "```" in body:
+            parts = body.split("```")
+            if len(parts) > 1:
+                body = parts[1]
+        body = body.strip()
+        if not body:
+            return f"def {function_name}():\n    pass"
+
+        tree = _parse_salvaging_tail(body)
+        if tree is None:
+            # Nothing parseable. The stub is still the right answer here: it
+            # fails the tests, which is what unparseable output deserves.
+            return f"def {function_name}():\n    pass"
+        body = tree[1]
+
+        funcs = [
+            n.name for n in tree[0].body
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ]
+        if not funcs:
+            return f"def {function_name}():\n    pass"
+        if function_name in funcs:
+            return body
+        # Last, not first: the reference convention in this dataset is helpers
+        # first and the answer last, and the student imitates what it was shown.
+        return f"{body}\n\n{function_name} = {funcs[-1]}\n"
+
