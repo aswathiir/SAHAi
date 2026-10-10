@@ -1050,3 +1050,73 @@ The direction is consistent with human evidence rather than opposed to it.
 A randomised trial in secondary mathematics reports that unrestricted
 assistance improved supported practice while reducing subsequent unaided
 performance~\cite{bastani}. Whether the mechanism is the same is unknown.
+
+
+%-----------------------------------------------------------------------
+% [[R-13]] REPLACE: in [[R-12]], the sentence proposing anchoring as the
+% mechanism, beginning "A 1.5B learner given partial information performs
+% worse" and running to "solving the one in front of it."
+%
+% A run with the learner's code recorded rules that mechanism out.
+%-----------------------------------------------------------------------
+A 1.5B learner given partial information performs worse than the same learner
+given none. We proposed that it transfers the analogous pattern rather than
+solving the problem in front of it, and a further run with the learner's code
+recorded rules that out.
+
+\begin{table}[t]
+\caption{411 generations with the learner's code recorded, same 137 problems.
+Similarity is token overlap. The one-sentence rung contains no code at all.}
+\label{tab:anchor}
+\centering
+\small
+\begin{tabular}{llrrrr}
+\toprule
+ & \textbf{Hint} & \textbf{Solve} & \textbf{sim}$_{\text{ex}}$ &
+ \textbf{sim}$_{\text{ref}}$ & \textbf{$p$} \\
+\midrule
+L0 & nothing           & 0.336 & 0.233 & 0.359 & --- \\
+L2 & approach named    & \textbf{0.234} & 0.205 & \textbf{0.319} & \textbf{0.0094} \\
+L4 & worked example    & \textbf{0.234} & 0.250 & 0.356 & \textbf{0.0243} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Paired on the same problem, overlap with the example rises by only $0.0169$
+under L4, and just 64 of 137 problems move toward it at all, which is below
+chance. The learner borrows the example's function name on 5 problems of 137
+against 4 unaided. On the 24 problems L0 solved and L4 lost, 16 move toward the
+example, $p{=}0.152$.
+
+\textbf{The decisive argument is the one-sentence rung.} It contains no code,
+and it harms by exactly as much as the worked example, $0.234$ against
+$0.234$. A hint with nothing to copy cannot do equal damage if copying is the
+mechanism.
+
+What the code shows instead is two different routes of comparable size, neither
+significant on its own. Naming the approach moves the learner's output
+\emph{away} from the correct solution, overlap $0.359$ to $0.319$, without
+moving it toward anything in particular. The worked example leaves it about as
+close to the correct solution but inflates it, from $76.2$ to $84.4$ abstract
+syntax tree nodes, and on the problems it loses the learner writes more code
+than it did unaided in 17 of 24 cases ($p{=}0.064$). In the clearest single
+case the learner, shown a binary-search example on a median-of-two-arrays
+problem, attempted a full partition algorithm with sentinel values where
+unaided it had written something simpler that passed.
+
+\textbf{Partial help is not inert, and the aggregate hides that.} The
+one-sentence rung fixes 6 problems the learner could not do alone and breaks
+20; the worked example fixes 10 and breaks 24. Help works, and it works less
+often than it backfires, which is a different claim from help being useless and
+a more uncomfortable one.
+
+\textbf{We state the mechanism as unidentified.} Three explanations have been
+offered in this paper for one effect: that our prompt forbade the hint register
+that works, that the benchmark's one-line solutions made structural hints
+vacuous, and that the learner copies worked examples. The first was falsified by
+the rungs containing code failing to help, the second by selecting for
+scaffoldable structure and changing nothing, the third by the measurements
+above. The effect is firm across two ladders and 197 problems. No proposed
+mechanism for it survives, and settling the question needs a study varying one
+property of the hint at a time at a sample size resolving $0.05$, which is
+roughly 800 problems per rung rather than our 137.
