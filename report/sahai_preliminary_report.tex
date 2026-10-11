@@ -635,23 +635,30 @@ checkpoint with the adapter enabled or disabled, so no model we did not train
 had ever been evaluated as a tutor.
 
 \begin{table}[t]
-\caption{Inference study. Every condition scored the same 60 held-out problems
-in the same order on one NVIDIA T4, under the corrected framing.
-\emph{Prompted} is a larger model given the same system prompt and no training
-of any kind. Minutes are wall clock for all 60 problems.}
+\caption{Inference study. 60 held-out problems, every condition paired on the
+same problems in the same order, one NVIDIA T4, corrected framing.
+\emph{Prompted} is Qwen2.5-3B under the same system prompt with no adapter and
+no training of any kind; both of our arms are Qwen2.5-1.5B. \emph{Leak} is the
+share of the tutor's text that discloses the solution and \emph{Ped} the graded
+rule-based pedagogy judge; the harness measures neither for an arm that carries
+no tutor object. \textbf{No difference in the solve column is significant at
+this sample size} ($p$ from $0.21$ to $1.00$), whereas \emph{Leak} and
+\emph{Ped} are means of a continuous measure over 60 dialogues and the
+eight-fold gap in \emph{Leak} is not sampling noise. \emph{Min} is wall clock
+for all 60 problems.}
 \label{tab:inference}
 \centering
 \small
 \begin{tabular}{llrrrr}
 \toprule
 \textbf{Condition} & \textbf{Model} & \textbf{Solve} & \textbf{Leak} &
-\textbf{Ped} & \textbf{min} \\
+\textbf{Ped} & \textbf{Min} \\
 \midrule
-Solution disclosed  & ---            & 0.833 & ---   & ---   & 3.4 \\
-No tutor            & ---            & 0.433 & 0.000 & ---   & 3.0 \\
-Prompted, untrained & Qwen2.5-3B     & 0.417 & \textbf{0.017} & \textbf{0.997} & 15.0 \\
-Untrained, adapter off & Qwen2.5-1.5B & 0.350 & 0.249 & 0.768 & 22.9 \\
-\textbf{Trained (ours)} & Qwen2.5-1.5B & \textbf{0.333} & 0.137 & 0.893 & 21.1 \\
+Solution disclosed     & ---  & 0.833 & n/a            & n/a            & 3.4 \\
+No tutor               & ---  & 0.433 & 0.000          & n/a            & 3.0 \\
+Prompted, no training  & 3B   & 0.417 & \textbf{0.017} & \textbf{0.997} & 15.0 \\
+Ours, adapter off      & 1.5B & 0.350 & 0.249          & 0.768          & 22.9 \\
+\textbf{Ours, trained} & 1.5B & 0.333 & 0.137          & 0.893          & 21.1 \\
 \bottomrule
 \end{tabular}
 \end{table}
