@@ -65,51 +65,32 @@
 
 \begin{abstract}
 A language model that solves programming problems is not thereby able to teach
-them. The behaviours conflict: the fastest way to make a student's next
-submission correct is to hand over the answer, which is the one thing a tutor
-must not do. SAHAi treats this as a reinforcement learning problem. A tutor
-policy holds a multi-turn dialogue with a simulated, knowledge-traced student,
-the student then attempts the problem, and the attempt is executed against unit
-tests. The tutor is rewarded for the student's verified success and penalised
-for disclosing the solution. No human tutoring transcripts are used. The design
-follows the review of pedagogical reinforcement learning in~\cite{rev-pedrl}.
-
-Across twenty training runs the tutor never improved the student's held-out
-solve rate. We report why, and the answer is not in the reward, the optimiser or
-the policy. It is in the learner the whole method is evaluated against.
-
-We measure the student's response to six graded levels of help, from a Socratic
-question through a structural skeleton to the reference solution itself, with
-every hint constructed programmatically so that no tutor model is involved. On
-60 problems and again on 137 selected for multi-step structure, \textbf{no level
-short of complete disclosure beats offering no help at all}. On the harder set
-two levels harm the learner significantly: naming the approach in one sentence
-costs $0.102$ of solve rate ($p{=}0.0094$) and showing a correct worked solution
-to an analogous problem costs $0.102$ ($p{=}0.0243$), while the reference
-solution adds $0.416$. Partial help is not inert: it fixes six to ten problems
-the learner cannot do alone and breaks twenty to twenty-four it can.
-
-This invalidates the evaluation, not merely our system. A tutor scored against a
-simulated learner is scored by something harmed by partial, non-disclosing hints
-and helped only by the answer, which penalises precisely the behaviour pedagogy
-requires. Every reward in this work inherited that, and so does any evaluation
-that scores tutors against a language-model learner. We find no prior work that
-tests the assumption.
-
-Three further results support the diagnosis. The trained adapter moved $0.2\%$
-from its initialisation, measured in weight space, so twenty runs of reward
-engineering were performed on a policy that never changed. A Qwen2.5-3B with no
-training, no adapter and no reward function beats our trained 1.5B on solve
-rate, on disclosure and on pedagogy compliance at once. And six instrumentation
-defects depressed every number this project published, two of them making five
-of sixty held-out problems unwinnable in every arm. We state three mechanisms we
-proposed for the central effect and the measurements that falsified each.
+them: the fastest way to make a student's next submission correct is to supply
+the answer, which is the one thing a tutor must not do. We train a tutor by
+critic-free reinforcement learning against a simulated, knowledge-traced
+student, rewarding the student's execution-verified success and penalising
+disclosure of the solution, using no human tutoring transcripts. Across twenty
+runs the tutor never improved the student's held-out solve rate. We measure the
+student's response to six graded levels of help, from a guiding question
+through a structural skeleton to the reference solution itself, every hint
+constructed programmatically so that no tutor model is involved. On 60
+problems, and again on 137 selected for multi-step structure, no level short of
+complete disclosure beats offering no help at all. On the
+harder set, naming the approach in one sentence and showing a worked solution to
+an analogous problem each reduce solve rate by about ten points, while the
+reference solution raises it by forty-two. This invalidates the evaluation
+rather than only our system: a tutor scored against a simulated learner is
+scored by something harmed by partial, non-disclosing hints and helped only by
+the answer, which penalises precisely the behaviour pedagogy requires. Three further results
+support this. The trained adapter moved two tenths of one percent from its
+initialisation; an untrained larger model, prompted plainly, beats it on solve
+rate, disclosure and pedagogy at once; and six instrumentation defects
+depressed every number this project previously published.
 \end{abstract}
 
 \begin{IEEEkeywords}
-reinforcement learning from verifiable rewards, group-relative policy
-optimization, intelligent tutoring systems, simulated learners, knowledge
-tracing, reward hacking, large language models
+Intelligent tutoring systems, knowledge tracing, large language models,
+reinforcement learning, simulated learners.
 \end{IEEEkeywords}
 
 %=======================================================================
