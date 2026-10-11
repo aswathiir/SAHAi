@@ -1020,23 +1020,32 @@ differing only in the weight on that term. Both selected epoch 1 by early
 stopping on a validation split disjoint from the test set.
 
 \begin{table}[t]
-\caption{Correctness term, paired arms}
+\caption{The correctness term. Two arms identical in seed, problems, episodes,
+judge and early stopping, differing only in $\mu$, the weight on the term.
+Correctness is the share of the tutor's checkable technical claims that the
+reference solution corroborates, averaged over the first two and the last two
+episodes. The arm that was \emph{not} paid for correctness improved on it more
+than the arm that was. Judge coverage was $72$--$88\%$ in both arms, so this is
+not sparsity, and both arms selected episode 1.}
 \label{tab:correctness}
 \centering
 \small
-\begin{tabular}{lrr}
+\begin{tabular}{lccrc}
 \toprule
- & \textbf{$\mu{=}0$} & \textbf{$\mu{=}0.5$} \\
+ & \multicolumn{3}{c}{\textbf{Correctness}} & \textbf{Held-out} \\
+\cmidrule(lr){2-4}
+\textbf{Arm} & \textbf{First} & \textbf{Last} & \textbf{Change} &
+\textbf{solve} \\
 \midrule
-Correctness, first 2 epochs $\rightarrow$ last 2 & $+0.177\rightarrow+0.570$ & $+0.276\rightarrow+0.552$ \\
-Change                                           & $\mathbf{+0.393}$ & $+0.276$ \\
-Held-out solve                                   & $0.218$ & $0.200$ \\
+$\mu{=}0$, not rewarded   & 0.177 & 0.570 & $\mathbf{+0.393}$ & 0.218 \\
+$\mu{=}0.5$, rewarded     & 0.276 & 0.552 & $+0.276$          & 0.200 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\textbf{Table~\ref{tab:correctness} reports both arms. The arm that was not paid for correctness improved it more than the arm
-that was.} Coverage was $72$--$88\%$ in both, so this is not sparsity.
+Table~\ref{tab:correctness} reports both arms.
+\textbf{The arm that was not paid for correctness improved on it more than the
+arm that was.} Coverage, now in the caption, rules out sparsity.
 Correctness rises during training whether rewarded or not, as a by-product of
 leakage falling: a tutor making fewer claims of any kind makes fewer wrong
 ones. Held-out, the two adapters are indistinguishable
