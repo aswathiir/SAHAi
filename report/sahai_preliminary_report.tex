@@ -1,13 +1,13 @@
 %=======================================================================
-% SAHAi — Preliminary Technical Report (IEEE conference format)
+% SAHAi: Preliminary Technical Report (IEEE conference format)
 %
 % Compile:  pdflatex sahai_preliminary_report.tex   (twice, for refs)
 % Needs:    IEEEtran, pgfplots, booktabs, amsmath
 % Figure:   figures/architecture.png must sit beside this file.
 %
-% REFERENCES: titles for [1]-[3] are taken verbatim from the project's own
-% literature review. Author lists, venues and years are not recorded there
-% and are marked "% FILL IN". Nothing here was invented.
+% REFERENCES: every entry's authors, title, venue and identifier were checked
+% against the primary record (arXiv abstract pages, ACL Anthology, SSRN) on
+% 2026-10-11. Nothing here was reconstructed from memory.
 %=======================================================================
 \documentclass[conference]{IEEEtran}
 \IEEEoverridecommandlockouts
@@ -696,10 +696,15 @@ Untrained & Trained      & 6:7  & 1.0000 \\
 \end{table}
 
 Table~\ref{tab:inference} gives the conditions and
-Table~\ref{tab:inferencestats} the tests. A model we did not train, prompted
-with the same instructions and carrying no adapter, no reward function and no
-reinforcement learning, is better than the trained policy on every axis we
-measure at once: it solves more, discloses the solution eight times less often,
+Table~\ref{tab:inferencestats} the tests. Solve rate alone would be the
+wrong axis: an established benchmark for pedagogical capability reports that
+subject expertise does not translate into good teaching and that the two form a
+trade-off navigated by how specialised for tutoring a model
+is~\cite{mathtutorbench}, and our disclosure arm is the degenerate corner of
+exactly that trade-off. We therefore score outcome and non-disclosure together.
+A model we did not train, prompted with the same instructions and carrying no
+adapter, no reward function and no reinforcement learning, is better than the
+trained policy on every axis we measure at once: it solves more, discloses the solution eight times less often,
 and satisfies the pedagogy rules almost perfectly. There is no frontier
 position for the trained model to occupy.
 
@@ -826,8 +831,10 @@ useless.
 
 \textbf{We state the mechanism as unidentified.} Three explanations were
 offered in this paper for one effect: that our prompt forbade the register that
-works, that short reference solutions made structural hints vacuous, and that
-the learner copies worked examples. Each was falsified by a measurement run to
+works, which a think-aloud study of twelve novice programmers across four hint
+levels gave us reason to expect~\cite{hintlevels}; that short reference
+solutions made structural hints vacuous; and that the learner copies worked
+examples. Each was falsified by a measurement run to
 test it. The effect is firm across two banks and 197 problems; settling the
 mechanism needs one hint property varied at a time at a sample size resolving
 $0.05$, roughly 800 problems per rung against our 137.
@@ -842,11 +849,15 @@ language-model learner. That line of work rests on the assumption that a
 simulated student responds to teaching as a student
 would~\cite{rev-simstudents}, and we are not aware of a paper that tests it.
 Our two ladders are such a test, and the assumption does not hold for a 1.5B
-learner on program synthesis. The direction is consistent with a randomised
-trial in secondary mathematics reporting that unrestricted assistance improved
-supported practice while reducing subsequent unaided
-performance~\cite{bastani}, though whether the mechanism is the same is
-unknown.
+learner on program synthesis. A randomised trial in high-school mathematics is
+adjacent but does not straightforwardly support us: unguarded access to a
+general assistant improved supported practice and reduced subsequent unaided
+performance by $17\%$ against students who never had access, and that harm was
+\emph{largely removed} by a guardrailed tutor~\cite{bastani}. Our hints are
+guardrailed by construction, since the ladder's non-disclosing rungs withhold
+the solution, and they still failed. So the two results share a direction
+without sharing a mechanism, and theirs suggests a remedy that ours has already
+excluded.
 
 \subsection{Run history}
 
@@ -1252,40 +1263,49 @@ model on both.
 
 \begin{thebibliography}{99}
 
-% ---- The three review papers. Titles verbatim from the project's own
-%      literature review; author lists and venues are not recorded there.
-\bibitem{rev-pedrl} % FILL IN: authors, venue, year, DOI/arXiv
-``From problem-solving to teaching problem-solving: Aligning LLMs with
-pedagogy using reinforcement learning.'' [Authors and venue to be
-completed.]
+% ---- The three review papers. Author lists, titles and venues taken from
+%      each paper's arXiv record, checked 2026-10-11.
+\bibitem{rev-pedrl}
+D.~Dinucu-Jianu, J.~Macina, N.~Daheim, I.~Hakimi, I.~Gurevych, and
+M.~Sachan, ``From problem-solving to teaching problem-solving: Aligning LLMs
+with pedagogy using reinforcement learning,'' in \emph{Proc. Conf. Empirical
+Methods in Natural Language Processing (EMNLP)}, 2025. arXiv:2505.15607.
 
-\bibitem{rev-simstudents} % FILL IN: authors, venue, year, DOI/arXiv
-``Simulating students with large language models: A review of architecture,
-mechanisms, and role modelling in education with generative AI.''
-[Authors and venue to be completed.]
+\bibitem{rev-simstudents}
+L.~Marquez-Carpintero, A.~Lopez-Sellers, and M.~Cazorla, ``Simulating students
+with large language models: A review of architecture, mechanisms, and role
+modelling in education with generative AI,'' \emph{Computer Science Review},
+vol.~62, art.~101008, 2026. arXiv:2511.06078.
 
-\bibitem{rev-learnermodel} % FILL IN: authors, venue, year, DOI/arXiv
-``Problems with large language models for learner modelling: Why LLMs alone
-fall short for responsible tutoring in K--12 education.'' [Authors and
-venue to be completed.]
+\bibitem{rev-learnermodel}
+D.~Hooshyar, Y.~Yang, G.~\v{S}\'{i}r, T.~K\"{a}rkk\"{a}inen,
+R.~H\"{a}m\"{a}l\"{a}inen, M.~Cukurova, and R.~Azevedo, ``Problems with
+large language models for learner modelling: Why LLMs alone fall short for
+responsible tutoring in K--12 education,'' arXiv:2512.23036, 2025.
 
 % ---- Independently verifiable references. ----------------------------
 \bibitem{mathtutorbench}
-J.~Macina \emph{et al.}, ``MathTutorBench: A benchmark for measuring
-open-ended pedagogical capabilities of LLM tutors,'' in \emph{Proc. EMNLP},
+J.~Macina, N.~Daheim, I.~Hakimi, M.~Kapur, I.~Gurevych, and M.~Sachan,
+``MathTutorBench: A benchmark for measuring open-ended pedagogical
+capabilities of LLM tutors,'' in \emph{Proc. EMNLP},
 2025. arXiv:2502.18940.
 
 \bibitem{raft}
-W.~Xiong \emph{et al.}, ``A minimalist approach to LLM reasoning: from
-rejection sampling to REINFORCE,'' arXiv:2504.11343, 2025.
+W.~Xiong, J.~Yao, Y.~Xu, B.~Pang, L.~Wang, D.~Sahoo, J.~Li, N.~Jiang,
+T.~Zhang, C.~Xiong, and H.~Dong, ``A minimalist approach to LLM reasoning:
+From rejection sampling to REINFORCE,'' arXiv:2504.11343, 2025.
 
 \bibitem{bastani}
-H.~Bastani \emph{et al.}, ``Generative AI can harm learning,'' IZA Discussion
-Paper 18338, 2025.
+H.~Bastani, O.~Bastani, A.~Sungu, H.~Ge, \"{O}.~Kabak\c{c}{\i}, and
+R.~Mariman, ``Generative AI without guardrails can harm learning: Evidence
+from high school mathematics,'' \emph{Proc. National Academy of Sciences},
+2025. Earlier version: ``Generative AI can harm learning,'' SSRN 4895486, 2024.
 
 \bibitem{hintlevels}
-``Exploring how multiple levels of GPT-generated programming hints support or
-disappoint novices,'' arXiv:2404.02213, 2024. % FILL IN: author list
+R.~Xiao, X.~Hou, and J.~Stamper, ``Exploring how multiple levels of
+GPT-generated programming hints support or disappoint novices,'' in
+\emph{Extended Abstracts CHI Conf. Human Factors in Computing Systems (CHI EA)},
+2024. arXiv:2404.02213.
 
 \bibitem{ppo}
 J.~Schulman, F.~Wolski, P.~Dhariwal, A.~Radford, and O.~Klimov,
@@ -1321,8 +1341,8 @@ arXiv:2108.07732, 2021.
 L.~S. Vygotsky, \emph{Mind in Society: The Development of Higher
 Psychological Processes}. Cambridge, MA: Harvard Univ. Press, 1978.
 
-\bibitem{qwen} % VERIFY the arXiv identifier before submission
-Qwen Team, ``Qwen2.5 technical report,'' 2024.
+\bibitem{qwen}
+Qwen Team, ``Qwen2.5 technical report,'' arXiv:2412.15115, 2024.
 
 \end{thebibliography}
 
