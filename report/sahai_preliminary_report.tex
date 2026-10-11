@@ -389,7 +389,7 @@ run, inspected directly.
 %=======================================================================
 
 \begin{table}[t]
-\caption{Per-epoch training metrics. \emph{solve} is the mean of
+\caption{Per-episode training metrics, \textbf{earlier run} (ten episodes, before the instrumentation fixes of Sec.~\ref{sec:instrument}). \emph{solve} is the mean of
 $r_{\mathrm{sol}}$ over the epoch's 32 rollouts.}
 \label{tab:epochs}
 \centering
@@ -528,6 +528,8 @@ No tutor $\rightarrow$ oracle   & $+0.417$ & 28:3  & $\mathbf{<0.0001}$ \\
 \end{tabular}
 \end{table}
 
+Table~\ref{tab:threearm} gives the four arms under both framings and Table~\ref{tab:mcnemar} the paired tests.
+
 Four readings, in descending order of importance.
 
 First, \textbf{the harm we reported was ours, not the tutor's.} Under the full
@@ -661,6 +663,88 @@ three. Together with the entry-point fix this takes the oracle arm from $0.633$
 to $0.783$.
 
 %=====================================================================
+\subsection{How many episodes, and why we stopped there}
+\label{sec:episodes}
+
+One episode is a pass over a batch of four problems at eight rollouts each, so
+32 dialogues, each of up to four tutor turns, four student turns and one scored
+solution attempt. That is roughly 288 separate generations per episode. The run
+reported here ran eight.
+
+\begin{table}[t]
+\caption{Per-episode training metrics, \textbf{reported run} (eight episodes, all fixes present). \emph{Solved} is
+the strict all-or-nothing rate over the episode's 32 rollouts; \emph{partial}
+credits the fraction of unit tests passed. The probe is a strict solve rate on
+20 problems from a split the final evaluation does not report on, run every
+second episode.}
+\label{tab:episodes}
+\centering
+\small
+\begin{tabular}{rrrrrrr}
+\toprule
+\textbf{Ep} & \textbf{Reward} & \textbf{Solved} & \textbf{Partial} &
+\textbf{Ped} & \textbf{Leak} & \textbf{Probe} \\
+\midrule
+0 & $-0.233$ & 0.188 & 0.260 & 0.885 & 0.158 & --- \\
+1 & $-0.300$ & 0.250 & 0.323 & 0.857 & 0.234 & 0.150 \\
+2 & $-0.319$ & 0.281 & 0.323 & 0.850 & 0.141 & --- \\
+3 & $-0.262$ & 0.250 & 0.271 & 0.906 & 0.116 & 0.250 \\
+4 & $-0.117$ & 0.188 & 0.333 & 0.919 & 0.109 & --- \\
+5 & $-0.233$ & 0.156 & 0.312 & 0.951 & 0.094 & \textbf{0.350} \\
+6 & $-0.158$ & 0.188 & 0.438 & 0.903 & 0.133 & --- \\
+7 & $+0.140$ & 0.594 & 0.740 & 0.943 & 0.128 & 0.250 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{The stopping criterion is the probe, not the loss and not the reward.}
+The group-relative surrogate is near zero at every episode by construction,
+because advantages are $z$-scored within their group and therefore sum to zero;
+measured policy loss across this run ran $0.0008$ to $0.0042$ and gives no
+descending curve to converge. Stopping on reward would be worse than useless:
+an earlier run took held-out solve from $16.3\%$ to $6.2\%$ while its mean
+reward reached its first positive value, so reward rising is a documented
+failure mode of this project rather than a hypothetical one.
+
+The probe therefore drives both stopping and checkpoint selection. It rose
+across the first three measurements and fell at the fourth, so the selected
+model is episode 5 and not the final episode. Two earlier seeded runs peaked
+sooner still, at episodes 1 and 3, which is why the budget was eight rather
+than a larger number.
+
+\textbf{Two cautions about Table~\ref{tab:episodes}.} The probe is 20 problems,
+so each step of $0.05$ is one problem and the series $0.150, 0.250, 0.350,
+0.250$ is three, five, seven and five problems solved. That is consistent with
+noise around $0.25$, and we initially over-read the first three points as a
+trend before the fourth arrived. Separately, episode 7's apparent jump in
+rollout solve rate is a property of the problems drawn rather than of the
+policy: across episodes, the correlation between solve rate and the syntactic
+size of the problems drawn is $-0.623$, against $+0.434$ for episode number,
+and episode 7 drew the smallest problems of the run. Rollout solve rate is not
+a learning signal here, and the probe falling in the same episode confirms it.
+
+\begin{table}[t]
+\caption{Wall clock per episode on one Apple Silicon device. Episode 1 is an
+outlier caused by memory contention with another process on the same machine
+and is reported rather than excluded.}
+\label{tab:walltime}
+\centering
+\small
+\begin{tabular}{rrrrrrrr}
+\toprule
+\textbf{Ep} & 0 & 1 & 2 & 3 & 4 & 5 & 6 \\
+\midrule
+\textbf{min} & 72 & \textit{436} & 38 & 50 & 31 & 48 & 25 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:walltime} gives the wall clock. Excluding the contended episode, an episode costs 25 to 72 minutes, and the
+eight-episode run plus its probes took about twelve hours. The budget is
+therefore a compute constraint as much as a convergence judgement, and
+Sec.~\ref{sec:nomove} shows the constraint was not the binding one.
+
+%=====================================================================
 \subsection{The policy never moved}
 \label{sec:nomove}
 
@@ -687,7 +771,7 @@ $B$ max $|w|$                 & 0.004822 & 0.005863 \\
 \end{tabular}
 \end{table}
 
-With $\alpha/r = 2$ at rank 8 this is an effective weight perturbation near
+Table~\ref{tab:movement} gives the magnitudes. With $\alpha/r = 2$ at rank 8 this is an effective weight perturbation near
 $5\times10^{-5}$ against base weights of order $0.02$, about $0.2\%$. The
 divergence from the frozen reference agrees: across all eight epochs it never
 left the noise of its estimator and changed sign at random, where an earlier
@@ -723,29 +807,52 @@ different: one is measured and negative, the other is unmeasured.
 \textbf{Helping the student solve: measured, and negative.} Every arm is paired
 on the same 60 held-out problems under the corrected framing.
 
+
+
 \begin{table}[t]
-\caption{Five tutoring conditions, 60 held-out problems, every arm paired on
-the same bank in the same order. Leakage is the share of the tutor's text that
-discloses the solution; pedagogy is the graded rule-based judge. The
-disclosed-solution arm has no tutor object, so the harness does not measure
-either column for it.}
-\label{tab:claims}
+\caption{Inference study. Every condition scored the same 60 held-out problems
+in the same order on one NVIDIA T4. \emph{Trained} is our adapter;
+\emph{untrained} is the identical weights with the adapter disabled;
+\emph{prompted} is a larger model given the same system prompt and no training
+of any kind. Minutes are wall clock for all 60 problems.}
+\label{tab:inference}
 \centering
 \small
-\begin{tabular}{lrrrr}
+\begin{tabular}{llrrrr}
 \toprule
-\textbf{Condition} & \textbf{Solve} & \textbf{Leak} & \textbf{Ped} & \textbf{min} \\
+\textbf{Condition} & \textbf{Model} & \textbf{Solve} & \textbf{Leak} &
+\textbf{Ped} & \textbf{min} \\
 \midrule
-Solution disclosed            & 0.833 & ---   & ---   & 3.4 \\
-\textbf{No tutor at all}      & \textbf{0.433} & 0.000 & ---   & 3.0 \\
-\textbf{Prompted 3B, untrained} & \textbf{0.417} & \textbf{0.017} & \textbf{0.997} & 15.0 \\
-Untrained policy, adapter off & 0.350 & 0.249 & 0.768 & 22.9 \\
-\textbf{Trained policy}       & \textbf{0.333} & 0.137 & 0.893 & 21.1 \\
+Solution disclosed  & ---            & 0.833 & ---   & ---   & 3.4 \\
+No tutor            & ---            & 0.433 & 0.000 & ---   & 3.0 \\
+Prompted, untrained & Qwen2.5-3B     & 0.417 & \textbf{0.017} & \textbf{0.997} & 15.0 \\
+Untrained, adapter off & Qwen2.5-1.5B & 0.350 & 0.249 & 0.768 & 22.9 \\
+\textbf{Trained (ours)} & Qwen2.5-1.5B & \textbf{0.333} & 0.137 & 0.893 & 21.1 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-A model we did not train, prompted with the same instructions and carrying no
+\begin{table}[t]
+\caption{Paired exact tests on the conditions of
+Table~\ref{tab:inference}. Discordant counts are problems the first condition
+solved and the second did not, against the reverse. At $n{=}60$ this protocol
+resolves about $0.15$, so none of these differences is established.}
+\label{tab:inferencestats}
+\centering
+\small
+\begin{tabular}{llrr}
+\toprule
+\textbf{A} & \textbf{B} & \textbf{Discordant} & \textbf{$p$} \\
+\midrule
+No tutor & Trained            & 5:11 & 0.2101 \\
+No tutor & Prompted 3B        & 6:7  & 1.0000 \\
+Trained  & Prompted 3B        & 9:4  & 0.2668 \\
+Untrained & Trained           & 6:7  & 1.0000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:inference} gives the five conditions and Table~\ref{tab:inferencestats} the paired tests. A model we did not train, prompted with the same instructions and carrying no
 adapter, no reward function and no reinforcement learning, is better than the
 trained policy on every axis we measure at once: it solves more problems, it
 discloses the solution eight times less often, and it satisfies the pedagogy
@@ -857,7 +964,7 @@ L5 & the reference solution     & \textbf{0.833} & $+0.400$ & \textbf{0.0000} & 
 \end{tabular}
 \end{table}
 
-\textbf{No level short of complete disclosure beats giving no help at all.} The
+\textbf{Table~\ref{tab:ladder} gives the ladder. No level short of complete disclosure beats giving no help at all.} The
 skeleton is $+0.017$ at $p{=}1.0$, which is noise. Naming the approach and
 asking a guiding question both land below the floor. The analogous worked
 example, which the hint-granularity literature predicted would be the most
@@ -934,7 +1041,7 @@ L5 & the reference solution    & 0.833 & \textbf{0.752} & \textbf{0.0000} \\
 \end{tabular}
 \end{table}
 
-The skeleton still does nothing, $-0.015$ at $p{=}0.8388$. Making the structure
+Table~\ref{tab:ladder2} compares the two banks. The skeleton still does nothing, $-0.015$ at $p{=}0.8388$. Making the structure
 informative did not make the structural hint work. What the harder set adds is
 significance in the other direction: naming the approach costs $0.102$
 ($p{=}0.0094$) and the analogous worked example costs $0.102$ ($p{=}0.0243$),
@@ -994,7 +1101,7 @@ L4 & worked example    & \textbf{0.234} & 0.250 & 0.356 & \textbf{0.0243} \\
 \end{tabular}
 \end{table}
 
-Paired on the same problem, overlap with the example rises by only $0.0169$
+Table~\ref{tab:anchor} gives the result. Paired on the same problem, overlap with the example rises by only $0.0169$
 under L4, and just 64 of 137 problems move toward it at all, which is below
 chance. The learner borrows the example's function name on 5 problems of 137
 against 4 unaided. On the 24 problems L0 solved and L4 lost, 16 move toward the
@@ -1248,7 +1355,7 @@ Held-out solve                                   & $0.218$ & $0.200$ \\
 \end{tabular}
 \end{table}
 
-\textbf{The arm that was not paid for correctness improved it more than the arm
+\textbf{Table~\ref{tab:correctness} reports both arms. The arm that was not paid for correctness improved it more than the arm
 that was.} Coverage was $72$--$88\%$ in both, so this is not sparsity.
 Correctness rises during training whether rewarded or not, as a by-product of
 leakage falling: a tutor making fewer claims of any kind makes fewer wrong
