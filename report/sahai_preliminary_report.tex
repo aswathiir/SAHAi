@@ -256,84 +256,30 @@ Development~\cite{vygotsky}.
 %=======================================================================
 \section{The Interactive System}
 \label{sec:interactive}
-%=======================================================================
 
-A trained adapter is not a usable tutor. The serving half of SAHAi is a
-six-service containerised stack. It is described here for two reasons: two
-of its constraints fed back into the training design, as the next two
-paragraphs set out, and it is the part of the project that is finished,
-which the training half is not.
+An untrained policy is not a usable tutor, so the other half of SAHAi is six
+containerised services. We describe them briefly because two of their
+constraints shaped the training half, and because this half is finished where
+the training half is not.
 
-\textbf{The boundary.} The research prototype conflated two situations that
-behave differently. In training, the student is a model driven in a loop,
-control flow is batch, and mastery state is synthetic and discarded. In
-production, the student is a person sending one turn and waiting, state
-must survive restarts, and mastery belongs to that person permanently. The
-dialogue engine therefore became two things, a batch runner for RL and a
-state machine over a persisted transcript. Both score through one shared
-domain library, so that pedagogy and leakage cannot drift apart
-between what is optimised and what is served.
+The training and serving halves were initially one codebase, and they have
+different shapes: training drives a model in a batch loop and discards its
+state, while serving answers one turn at a time and must survive restarts.
+Splitting the dialogue engine into a batch runner and a state machine over a
+persisted transcript removed that conflation, with scoring kept in a shared
+library so that pedagogy and leakage cannot diverge between the two.
 
-\textbf{Containment.} The security-relevant property is that \emph{scoring}
-is separated from \emph{execution}. In the prototype, the code verifier
-sat beside the reward logic, so anything importing the reward stack
-inherited the ability to execute arbitrary model output. In the deployed
-system the shared library is enforced by test to expose no code runner at
-all, and untrusted code runs only in an executor container whose
-containment is layered: an internal-only network with no egress, a
-read-only root filesystem, a non-root user with all capabilities dropped,
-process and memory limits, and a fresh interpreter per test case. The
-verdict is read from a sentinel line, so a candidate program's own output
-can neither corrupt nor forge it.
+Scoring and execution are separated by construction. Learner code runs only in
+an executor container with no network egress, a non-root user, a read-only
+filesystem, a fresh interpreter per test case, and process and memory limits;
+the verdict is read from a sentinel line so a candidate program cannot forge
+it. The learner interface provides a workspace with a code editor, a progress
+view, a graded placement test, and speech input for Indic languages, with
+per-skill mastery persisted in an append-only observation log.
 
-\textbf{Learner interface.} Three pages are served: a workspace with a
-problem picker, the tutoring conversation, a code editor with
-submit-and-run, a live per-skill mastery panel and a microphone control; a
-progress page showing streak, activity grid, per-skill mastery, course
-tracks and a next-problem recommendation; and a timed, graded coding
-placement. Two behaviours were failures first. A turn is \emph{atomic}: the
-learner's turn was previously committed before the tutor was called, so a
-timeout left a turn with no reply and a retry appended a second learner
-turn, breaking the role alternation that prompt assembly and the pedagogy
-judge both assume, with no error raised anywhere. A response for a
-conversation the learner has left is \emph{discarded, not rendered}, using
-an epoch token compared on arrival.
+No cohort has used any of it, so nothing here is evidence that the interface,
+the placement seeding or the curriculum improves learning.
 
-\textbf{Voice.} Speech wraps the existing text path rather than
-duplicating it: the websocket handler calls the same turn endpoint the text
-box calls, and so inherits learner context and problem statement. Stages
-are reported as they complete rather than batched, because recognition
-takes seconds while generation can take minutes. On the development host,
-a CPU-only container runtime, Indic recognition completed in $13$--$34$\,s
-and is usable, whereas Indic synthesis did not finish a 16-character
-sentence within $840$\,s; synthesis is therefore budgeted and degrades to
-text-only. These are single-host observations, not a benchmark.
-
-\textbf{Learner state and turn adaptation.} Priors are seeded either by a
-self-assessment, mapped into $[0.15,0.65]$ because a self-report is
-evidence rather than proof, or by importing a public repository of solved
-problems. In the latter, source is parsed and discarded at the import
-boundary: only skill tags and one technique phrase per problem are
-retained, never a line of code. Streak, activity, mastery and track
-completion are all projected from a single append-only observation log
-rather than from separate tables. Finally, a high-precision rule layer
-reads what the learner just wrote, in English and romanized Hindi and
-Tamil, to tell whether they are stuck, asking to be handed the answer, or
-posting an attempt. It is rule-based because the tutor already owns
-$200$\,s of a $240$\,s turn budget; a fourth rule, recognising a proposed
-approach, is deliberately absent because no cheap detector separates
-proposing from guessing, and the design rule is that detection must stay
-silent when unsure.
-
-\textbf{Invariants and gaps.} Each hop outlasts the one it calls
-($270>240>200$\,s); inverted, the outer caller abandons a request the inner
-one was about to answer, and a real turn was lost this way. Every model
-call carries its own deadline, since a client timeout does not cancel
-server-side work. Identity is a bearer token of which only a hash is
-stored, which authenticates a bearer rather than a person, and the internal
-hop rests on network topology rather than cryptography.
-
-%=======================================================================
 \section{Experimental Setup}
 \label{sec:setup}
 %=======================================================================
@@ -416,48 +362,12 @@ $r_{\mathrm{sol}}$ over the epoch's 32 rollouts.}
 \end{tabular}
 \end{table}
 
-\begin{figure}[t]
-\centering
-\begin{tikzpicture}
-\begin{axis}[
-  width=\columnwidth, height=4.6cm,
-  xlabel={epoch}, ylabel={value},
-  xmin=-0.3, xmax=9.3,
-  legend style={font=\scriptsize, at={(0.5,1.02)}, anchor=south,
-                legend columns=4, draw=none},
-  grid=major, grid style={gray!20},
-  tick label style={font=\scriptsize}, label style={font=\scriptsize},
-]
-\addplot[thick, mark=*, mark size=1.2pt] coordinates {
- (0,-0.576)(1,-0.820)(2,-0.288)(3,-0.399)(4,-0.223)
- (5,0.026)(6,-0.344)(7,0.108)(8,0.124)(9,0.071)};
-\addlegendentry{reward}
-\addplot[thick, mark=square*, mark size=1.2pt, dashed] coordinates {
- (0,0.086)(1,0.063)(2,0.156)(3,0.000)(4,0.039)
- (5,0.219)(6,0.008)(7,0.344)(8,0.273)(9,0.297)};
-\addlegendentry{$r_{\mathrm{sol}}$}
-\addplot[thick, mark=triangle*, mark size=1.4pt, dotted] coordinates {
- (0,0.802)(1,0.661)(2,0.904)(3,0.922)(4,0.981)
- (5,0.997)(6,0.978)(7,0.984)(8,0.997)(9,0.988)};
-\addlegendentry{$r_{\mathrm{ped}}$}
-\addplot[thick, mark=o, mark size=1.2pt, dashdotted] coordinates {
- (0,0.328)(1,0.563)(2,0.219)(3,0.167)(4,0.109)
- (5,0.103)(6,0.078)(7,0.094)(8,0.065)(9,0.083)};
-\addlegendentry{$L$}
-\end{axis}
-\end{tikzpicture}
-\caption{Training-epoch reward components. The deterministic,
-tutor-controlled terms ($r_{\mathrm{ped}}$, $L$) move smoothly in the
-intended direction; the outcome term $r_{\mathrm{sol}}$ oscillates with an
-epoch-to-epoch standard deviation of $0.121$, roughly $3.8\times$ the
-$0.031$ expected from sampling alone.}
-\label{fig:curves}
-\end{figure}
+
 
 \subsection{Training dynamics}
 
 Every aggregate moves in the intended direction
-(Table~\ref{tab:epochs}, Fig.~\ref{fig:curves}). Mean reward rises from
+(Table~\ref{tab:epochs}). Mean reward rises from
 $-0.576$ to $+0.071$ and first becomes positive at epoch 5. Pedagogy rises
 from $0.802$ to $0.988$ while leakage falls from $0.328$ to $0.083$. The
 correlation between epoch and $r_{\mathrm{sol}}$ reaches $+0.65$, higher
@@ -468,25 +378,29 @@ monotonically. This is roughly five times the $0.005$ reached by an earlier
 20-epoch run, and it is the one unambiguous confirmation that raising the
 learning rate from $2\times10^{-5}$ to $1\times10^{-4}$ did what it was
 meant to do. The policy now measurably moves away from the base model.
-Even so, Fig.~\ref{fig:curves} should not be read as evidence of learning
+Even so should not be read as evidence of learning
 to teach, for reasons developed in Sec.~\ref{sec:channel}.
 
-\subsection{Held-out evaluation: the controlled comparison}
+\subsection{The controlled comparison}
 \label{sec:controlled}
 
-Every evaluation before this one scored a single arm and compared it against a
-number remembered from an earlier run, at $n{=}20$, unpaired. At that size and
-a true rate near $0.15$, a two-proportion test cannot detect an improvement
-smaller than roughly $40$ points; no difference this project has ever reported
-was that large. We therefore re-ran the comparison with every arm on the same
-problems in the same order, compared with McNemar's exact test on the problems
-where two arms disagree, which discards the problems both arms solve and both
-arms miss because neither carries information about which arm is better.
+Every evaluation before this one scored a single arm against a number
+remembered from an earlier run, at $n{=}20$, unpaired. At that size a
+two-proportion test cannot detect an improvement below roughly 40 points, and
+no difference this project reported was that large. We therefore re-ran with
+every arm on the same problems in the same order, compared by McNemar's exact
+test on the discordant problems.
+
+Two framings of the student's final attempt are reported. Under \emph{full} the
+transcript is replayed with the student's own turns in the model's assistant
+history. Under \emph{hints} only the tutor's turns reach the attempt. The two
+are compared by replaying one fixed set of saved transcripts twice, so the
+framing is the only thing that varies.
 
 \begin{table}[t]
-\caption{Four arms, 60 held-out problems, paired, under both transcript
-framings. The two framings differ only in whether the student's own replies
-appear in the context of its final attempt.}
+\caption{Four arms, 60 held-out problems, paired, under both framings of the
+student's final attempt. The disclosure arm carries no tutor object, so the
+harness does not measure its pedagogy or leakage.}
 \label{tab:threearm}
 \centering
 \small
@@ -496,16 +410,16 @@ appear in the context of its final attempt.}
 \cmidrule(lr){2-3}
 \textbf{Arm} & \textbf{Full} & \textbf{Hints} & \textbf{Ped} & \textbf{Leak} \\
 \midrule
-No tutor (empty dialogue)       & 0.367 & 0.367 & ---   & 0.000 \\
-Base checkpoint, LoRA off       & 0.183 & \textbf{0.350} & 0.888 & 0.164 \\
-Trained adapter                 & 0.333 & \textbf{0.350} & 0.913 & 0.125 \\
-Oracle (solution disclosed)     & \multicolumn{2}{c}{\textit{0.783}} & ---   & --- \\
+No tutor (empty dialogue)   & 0.367 & 0.367 & ---   & 0.000 \\
+Base checkpoint, LoRA off   & 0.183 & \textbf{0.350} & 0.888 & 0.164 \\
+Trained adapter             & 0.333 & \textbf{0.350} & 0.913 & 0.125 \\
+Solution disclosed          & \multicolumn{2}{c}{\textit{0.783}} & --- & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{table}[t]
-\caption{Paired comparisons (McNemar, exact, $n{=}60$)}
+\caption{Paired comparisons (McNemar, exact, $n{=}60$).}
 \label{tab:mcnemar}
 \centering
 \small
@@ -513,154 +427,87 @@ Oracle (solution disclosed)     & \multicolumn{2}{c}{\textit{0.783}} & ---   & -
 \toprule
 \textbf{Comparison} & \textbf{$\Delta$} & \textbf{Discordant} & \textbf{$p$} \\
 \midrule
-\multicolumn{4}{l}{\emph{Full framing: the student's own replies are replayed}} \\
+\multicolumn{4}{l}{\emph{Full framing}} \\
 No tutor $\rightarrow$ base     & $-0.184$ & 2:13  & $\mathbf{0.0074}$ \\
-No tutor $\rightarrow$ trained  & $-0.034$ & 9:11  & $0.824$ \\
-Base $\rightarrow$ trained      & $+0.150$ & 12:3  & $\mathbf{0.035}$ \\
+No tutor $\rightarrow$ trained  & $-0.034$ & 9:11  & $0.8238$ \\
+Base $\rightarrow$ trained      & $+0.150$ & 12:3  & $\mathbf{0.0352}$ \\
 \midrule
-\multicolumn{4}{l}{\emph{Hints framing: only the tutor's turns are replayed}} \\
-No tutor $\rightarrow$ base     & $-0.017$ & 7:8   & $1.000$ \\
-No tutor $\rightarrow$ trained  & $-0.017$ & 6:7   & $1.000$ \\
-Base $\rightarrow$ trained      & $0.000$  & 5:5   & $1.000$ \\
+\multicolumn{4}{l}{\emph{Hints framing}} \\
+No tutor $\rightarrow$ base     & $-0.017$ & 7:8   & $1.0000$ \\
+No tutor $\rightarrow$ trained  & $-0.017$ & 6:7   & $1.0000$ \\
+Base $\rightarrow$ trained      & $0.000$  & 5:5   & $1.0000$ \\
 \midrule
-No tutor $\rightarrow$ oracle   & $+0.417$ & 28:3  & $\mathbf{<0.0001}$ \\
+No tutor $\rightarrow$ disclosed & $+0.417$ & 3:28 & $\mathbf{<0.0001}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:threearm} gives the four arms under both framings and Table~\ref{tab:mcnemar} the paired tests.
+Table~\ref{tab:threearm} gives the arms and Table~\ref{tab:mcnemar} the tests.
+Three readings follow.
 
-Four readings, in descending order of importance.
+\textbf{The harm we reported was ours.} Under the full framing a tutored
+student solves $0.183$ against $0.367$ untutored, $p{=}0.0074$, which is the
+result this project reported in five forms. Replaying the identical transcripts
+without the student's own replies lifts the same arm to $0.350$, $p{=}1.0000$.
+No tutoring changed, only whether the student had its own words in front of it.
+The mechanism is unknown: the explanation we first gave, that the model
+conditions on its own recorded confusion, fails its own prediction, and so does
+the alternative that the assistant role is responsible.
 
-First, \textbf{the harm we reported was ours, not the tutor's.} Under the full
-framing a tutored student solves $0.183$ against $0.367$ untutored, thirteen
-problems lost against two gained, $p{=}0.0074$. That is the result this project
-reported in five forms. Replaying the identical transcripts while omitting the
-student's own replies from the context of its final attempt lifts the same arm
-to $0.350$, seven discordant one way and eight the other, $p{=}1.000$. No
-tutoring changed, only whether the student's own words were in front of it. The
-deficit is an artefact of how the transcript was replayed, and we had carried
-it for six runs.
+\textbf{Training is inert, and the one result suggesting otherwise was the
+artefact again.} Under the corrected framing both adapters score $0.350$, five
+discordant each way. Under the broken framing the trained adapter won at
+$p{=}0.0352$, which measured its partial immunity to our instrument rather than
+better teaching.
 
-We cannot say why, and we have excluded the two explanations we offered.
-Recovery does not track whether the student declared itself lost (Fisher exact
-$p{=}0.4378$ pooled, $p{=}1.0000$ in the untrained arm), and the problems the
-change broke carry marginally more such declarations than those it left solved,
-so the signal is not directional. A third framing that preserves every
-character of the transcript in a single user message, holding quantity fixed
-and removing only the role in which the student's words are recorded, does not
-recover the deficit either: on the problems where the first two framings
-disagree it follows the harmful one 14 times to 8, and in the trained arm on
-all 8. What separates recovered problems from those that stayed failed is the
-quantity of prior student text, 843 characters against 534. We report that
-contrast as the surviving description rather than as a mechanism, because we
-have not tested it.
+\textbf{The prize is larger than we stated.} Disclosure reaches $0.783$ rather
+than the $0.633$ previously reported, two defects of Sec.~\ref{sec:instrument}
+accounting for the difference, so the headroom is $0.417$ against a protocol
+resolving about $0.15$.
 
-Second, \textbf{training is inert, and the one result suggesting otherwise was
-the artefact again.} Under the corrected framing the trained and untrained
-adapters both score $0.350$, five discordant pairs each way, $p{=}1.000$. Under
-the broken framing the trained adapter beat the untrained one at $p{=}0.035$,
-and the natural reading was that training helped a little. It did not. The
-trained policy elicits student turns that hedge less, which interacts less
-badly with a replay that feeds those turns back, so what that comparison
-measured was partial immunity to our own instrument.
+A caveat on precision. The attempt is decoded greedily, so replaying a saved
+transcript should reproduce it exactly; it reproduces 57 of 60 in both arms.
+The residual is nondeterminism in GPU reductions and sets a floor of about
+three problems per arm, which the untrained arm's framing effect clears and the
+trained arm's does not.
 
-Third, \textbf{the mechanism for the inertia is unchanged and is not in
-dispute.} Every term the policy can compute from its own output saturates:
-pedagogy moves $0.76\rightarrow0.97$ and leakage $0.44\rightarrow0.09$ across
-training, ending at $0.913$ and $0.125$ against the untrained $0.888$ and
-$0.164$. The outcome term does not move. The optimiser works; what it optimises
-is disconnected from what the system is for. Correcting the framing does not
-address this, because it changes how the outcome is measured and not how
-strongly the outcome is weighed.
-
-Fourth, \textbf{the prize is more than twice what we previously stated.} The
-oracle arm discloses the reference solution, so no tutor can beat it. We
-reported it at $0.633$. Two defects described in
-Section~\ref{sec:instrument} accounted for nine of its twenty-two failures, and
-with those corrected it reaches $0.783$, twenty-eight problems gained against
-three lost relative to no tutoring, $p<0.0001$. The headroom available to a
-tutor is therefore $0.417$ rather than $0.273$, against a paired evaluation at
-$n{=}60$ that resolves about $0.15$. The student can use what is in the
-dialogue, decisively, and the earlier conclusion that it could barely do so was
-measuring our extraction code.
-
-A caveat on precision. The student's final attempt is decoded greedily, so
-replaying a saved transcript should reproduce its recorded outcome exactly. It
-reproduces $57$ of $60$ in both arms. The residual is nondeterminism in GPU
-reductions rather than a difference in logic, and it puts a noise floor of
-roughly three problems on any single arm. The framing effect on the untrained
-arm is twelve gained against two lost and sits far outside that floor; the
-effect on the trained arm is seven against six and sits entirely inside it,
-which is why we read the trained arm as unaffected by framing rather than as
-mildly improved by it.
-
-\subsection{Four instrumentation defects}
+\subsection{Six instrumentation defects}
 \label{sec:instrument}
 
-Both were found by asking why a result looked the way it did, not by a test
-failing, and both depressed numbers this project has already published.
+Each was found by asking why a result looked as it did, not by a test failing,
+and each changed numbers we had published.
 
-\textbf{The verifier marked correct solutions wrong.} The candidate's return
-value is serialised with \texttt{json.dumps} in the sandbox and parsed back, so
-a tuple arrives as a list and an integer dictionary key arrives as a string.
-The expected value is a Python literal parsed from the problem's assertion and
-makes no such trip. Comparing them directly failed $9$ of $60$ held-out
-reference solutions against their own tests, so the maximum achievable solve rate
-was never $1.0$ but $0.850$. Normalising both sides through the same round-trip
-reduces that to $5$ of $60$, and $29$ of $198$ training problems to $10$. We
-attributed the residual to dataset quality. That was wrong, and the next defect
-is what it actually was.
+\textbf{The verifier failed correct code.} The student's output passes through a
+JSON round trip and the expected value, parsed from the problem's assertion,
+does not. Comparing them directly failed 9 of 60 reference solutions against
+their own tests, so the achievable maximum was never $1.0$.
 
-The consequence for training is worse than for evaluation. A problem whose
-reference fails its own tests gives $r_{\mathrm{sol}}{=}0$ to every rollout in
-its group regardless of what the tutor said, so the group has no reward
-variance, every advantage in \eqref{eq:adv} is exactly zero, and it contributes
-no gradient while consuming a full generation budget. Roughly one training
-group in seven was dead before this fix, and one in twenty after.
+\textbf{The seed was never applied}, then applied too late. It was read nowhere
+in the training path, so identical configurations drew different problems before
+any gradient step and a two-arm experiment was not paired. Once fixed it still
+ran after the adapter's random initialisation, so runs diverged from the first
+update.
 
-\textbf{The seed was never applied.} \texttt{settings.seed} existed from the
-first commit and was read nowhere in the training path. Problem selection draws
-randomly within its difficulty window, so two runs of an identical
-configuration took different problems in epoch 0, before any gradient step. A
-two-arm experiment we had built specifically to isolate one reward coefficient
-was therefore not paired, and we report its result as uninterpretable rather
-than as evidence. The repeat with seeding applied is
-Sec.~\ref{sec:correctness}.
+\textbf{The entry point was the wrong function.} Each problem's callable was
+taken from the first function the reference defines, while the name the tests
+call was parsed from the assertion and discarded. These differ whenever a
+reference opens with a helper. The verifier then executed the helper and
+compared it against the entry point's expected value, and the same field reaches
+the student's prompt as the signature to implement. Five of 60 held-out
+problems were unwinnable in every arm and sat in every denominator we reported.
 
-\textbf{The entry point was the wrong function.} Each problem's callable name
-was taken from the first function its reference solution defines. The name the
-tests call was already available, parsed out of the assertion and then
-discarded. These disagree whenever a reference opens with a helper, which on
-this dataset is common: one reference defines a greatest-common-divisor routine
-over two integers before the function the tests call, which takes a list.
+\textbf{Correct code was discarded over its name.} The extraction step sought
+the literal expected definition and, failing, replaced the reply with a stub
+that fails by construction. Every mismatch observed was styling, the dataset
+using mixed case where the student writes snake case; three otherwise-correct
+solutions scored zero.
 
-The field is not cosmetic. The verifier calls it, so it executed the helper and
-compared its return value against the entry point's expected value, which is
-why those references failed their own tests. It is also interpolated into the
-student's prompt as the signature to implement, so on one problem the student
-was asked for a digit-reversal routine while scoring called a predicate about
-that routine. No output could pass. Five of sixty held-out problems and six of
-$198$ training problems were therefore unwinnable in every arm, and they sat in
-the denominator of every solve rate we have reported. Reading the entry point
-from the assertions takes references passing their own tests to $60$ of $60$
-held out and $194$ of $198$ in training.
+\textbf{The transcript was replayed harmfully}, which Sec.~\ref{sec:controlled}
+reports, and \textbf{the adapter was never weighed}, which
+Sec.~\ref{sec:nomove} reports.
 
-The oracle arm shows the cost most clearly, because it pastes the reference
-into the dialogue: it was displaying correct code for a function the verifier
-never called.
-
-\textbf{A correct solution was discarded over its name.} The step that recovers
-code from the student's reply checked for the literal text of the expected
-definition and, failing that, replaced the entire reply with a stub that fails
-by construction. Every name mismatch we observed was styling rather than
-refusal: this dataset uses mixed case for several functions and the student
-writes snake case. On the oracle arm, where a correct solution sits in front of
-the student, this fired on five of sixty problems and three were otherwise
-correct. Binding the student's last defined function to the expected name,
-which preserves recursion in a way renaming would not, recovers exactly those
-three. Together with the entry-point fix this takes the oracle arm from $0.633$
-to $0.783$.
+The entry-point and extraction fixes together raise the disclosure ceiling from
+$0.633$ to $0.783$.
 
 %=====================================================================
 \subsection{How many episodes, and why we stopped there}
@@ -797,23 +644,19 @@ The check costs one minute from a saved adapter and we had never run it. It
 should precede any claim about reward design.
 
 %=====================================================================
-\subsection{What the system does and does not achieve}
+\subsection{The inference study: a prompted larger model dominates}
 \label{sec:claims}
 
 The aim was a tutor that outperforms available models and helps a student
-solve problems. We separate the two halves because their evidentiary status is
-different: one is measured and negative, the other is unmeasured.
-
-\textbf{Helping the student solve: measured, and negative.} Every arm is paired
-on the same 60 held-out problems under the corrected framing.
-
-
+solve. The second half is measured above and is negative. The first half had
+never been measured at all: every arm this project had scored used one
+checkpoint with the adapter enabled or disabled, so no model we did not train
+had ever been evaluated as a tutor.
 
 \begin{table}[t]
 \caption{Inference study. Every condition scored the same 60 held-out problems
-in the same order on one NVIDIA T4. \emph{Trained} is our adapter;
-\emph{untrained} is the identical weights with the adapter disabled;
-\emph{prompted} is a larger model given the same system prompt and no training
+in the same order on one NVIDIA T4, under the corrected framing.
+\emph{Prompted} is a larger model given the same system prompt and no training
 of any kind. Minutes are wall clock for all 60 problems.}
 \label{tab:inference}
 \centering
@@ -833,10 +676,10 @@ Untrained, adapter off & Qwen2.5-1.5B & 0.350 & 0.249 & 0.768 & 22.9 \\
 \end{table}
 
 \begin{table}[t]
-\caption{Paired exact tests on the conditions of
-Table~\ref{tab:inference}. Discordant counts are problems the first condition
-solved and the second did not, against the reverse. At $n{=}60$ this protocol
-resolves about $0.15$, so none of these differences is established.}
+\caption{Paired exact tests on Table~\ref{tab:inference}. Discordant counts are
+problems the first condition solved and the second did not, against the
+reverse. At $n{=}60$ this protocol resolves about $0.15$, so no difference in
+the solve column is established.}
 \label{tab:inferencestats}
 \centering
 \small
@@ -844,248 +687,107 @@ resolves about $0.15$, so none of these differences is established.}
 \toprule
 \textbf{A} & \textbf{B} & \textbf{Discordant} & \textbf{$p$} \\
 \midrule
-No tutor & Trained            & 5:11 & 0.2101 \\
-No tutor & Prompted 3B        & 6:7  & 1.0000 \\
-Trained  & Prompted 3B        & 9:4  & 0.2668 \\
-Untrained & Trained           & 6:7  & 1.0000 \\
+No tutor  & Trained      & 5:11 & 0.2101 \\
+No tutor  & Prompted 3B  & 6:7  & 1.0000 \\
+Trained   & Prompted 3B  & 9:4  & 0.2668 \\
+Untrained & Trained      & 6:7  & 1.0000 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:inference} gives the five conditions and Table~\ref{tab:inferencestats} the paired tests. A model we did not train, prompted with the same instructions and carrying no
-adapter, no reward function and no reinforcement learning, is better than the
-trained policy on every axis we measure at once: it solves more problems, it
-discloses the solution eight times less often, and it satisfies the pedagogy
-rules almost perfectly. There is no frontier position for the trained model to
-occupy. It is dominated.
+Table~\ref{tab:inference} gives the conditions and
+Table~\ref{tab:inferencestats} the tests. A model we did not train, prompted
+with the same instructions and carrying no adapter, no reward function and no
+reinforcement learning, is better than the trained policy on every axis we
+measure at once: it solves more, discloses the solution eight times less often,
+and satisfies the pedagogy rules almost perfectly. There is no frontier
+position for the trained model to occupy.
 
 The gap is widest where it should have been narrowest. Non-disclosure is the
-behaviour this project spent its entire optimisation budget on, and it is the
-axis on which a larger model with a prompt beats it most decisively, $0.017$
-against $0.137$.
+behaviour this project spent its entire optimisation budget on.
 
-\textbf{What the training did achieve, stated precisely.} Between the untrained
-and trained policy, leakage fell from $0.249$ to $0.137$ and pedagogy rose from
-$0.768$ to $0.893$. Reinforcement learning moved both terms the policy computes
-from its own text, substantially, in the intended direction. This is the
-asymmetry of Sec.~\ref{sec:channel} appearing one final time: the controllable
-channel responded, the outcome did not, and the behaviour that was successfully
-installed turns out to be available at no cost from a model twice the size.
+\textbf{What the training did achieve, precisely.} Between the untrained and
+trained policy, leakage fell $0.249 \rightarrow 0.137$ and pedagogy rose
+$0.768 \rightarrow 0.893$. Reinforcement learning moved both terms the policy
+computes from its own text, substantially and in the intended direction. This
+is the asymmetry of Sec.~\ref{sec:channel} once more: the controllable channel
+responded, the outcome did not, and the behaviour installed is available free
+from a larger model.
 
-\textbf{What is not established.} No difference in the solve column is
-significant at this sample size. Paired exact tests give $p{=}0.2101$ for no
-tutor against the trained policy, $p{=}1.0000$ for no tutor against the
-prompted model, $p{=}0.2668$ for the trained policy against the prompted model,
-and $p{=}1.0000$ between the trained and untrained policies. At $n{=}60$ this
-protocol resolves roughly $0.15$ and no pair differs by that much, so the
-ordering of the solve column is the direction of the evidence and not a result.
-In particular we do not claim that training made the tutor worse than its own
-base, which was six discordant one way and seven the other.
-
-The leakage and pedagogy columns are means of a continuous measure over 60
-dialogues rather than a 60-sample binomial, and an eight-fold difference there
-is not plausibly sampling noise.
-
-
-Three readings follow and none of them supports the aim. The trained tutor does
-not beat no tutoring at all. It does not beat the same model with the adapter
-disabled, which is to say reinforcement learning added nothing a prompt did not
-already give. And it is less than half as effective as simply disclosing the
-answer, which is the one action the system is designed to prevent.
-
-A caveat on the disclosed-solution row. Its leakage and pedagogy are not
-measured: the harness records leakage as zero and pedagogy as undefined
-whenever an arm has no tutor object, and the disclosed-solution arm is built
-that way even though its dialogue contains the solution. Its true leakage is
-one by construction. We state it rather than print a zero that would read as a
-measurement.
-
-The weight-space measurement in Sec.~\ref{sec:nomove} explains the second of
-those directly: the adapter moved $0.2\%$ from its initialisation, so the
-trained and untrained arms are close to the same function.
-
-\textbf{Outperforming available models: never measured.} The evaluation harness
-supports four arms and all four use the same 1.5B checkpoint, differing only in
-whether the adapter is enabled and whether the reference solution is disclosed.
-No model other than this one has ever been scored as a tutor in this project.
-There is no comparison against a larger model of the same family, against a
-proprietary tutoring model, or against the straightforward baseline of a strong
-general model under a careful tutoring prompt. The claim is not weakly
-supported; it has no measurements behind it, and we withdraw it rather than
-qualify it.
-
-\textbf{What is supported.} A complete and running system, described in
-Sec.~\ref{sec:interactive}: six containerised services with code execution
-isolated from scoring by construction, speech input for Indic languages, a
-persistent Bayesian learner model driving placement and curriculum from an
-append-only log, and skill priors seeded from a learner's own public solution
-history with the source parsed and discarded at the boundary. Those are
-engineering results and we report them as such, with the explicit caveat that no
-human cohort has used any of it.
-
-The research contribution is the diagnosis, not the tutor. Four instrumentation
-defects, a retracted central claim, a transcript framing worth more than the
-effect the protocol was built to detect, and a policy that never moved while
-twenty runs of reward engineering were performed on it. We would rather report
-that than a solve rate.
+\textbf{What is not established.} No difference in the solve column clears the
+protocol's resolution, so its ordering is the direction of the evidence and not
+a result. In particular we do not claim that training made the tutor worse than
+its own base. The leakage and pedagogy columns are means of a continuous
+measure over 60 dialogues rather than a 60-sample binomial, and an eight-fold
+difference there is not plausibly sampling noise.
 
 %=====================================================================
 \subsection{Only the complete answer helps}
 \label{sec:ladder}
 
-Two points on this bank were known and nothing between them: with no dialogue
-the student solves $0.433$, and with the reference solution in front of it
-$0.833$. Every experiment in this paper lives in that unmeasured gap, and the
-question none of them asked is whether the gap is reachable by anything short
+Two points were known on this bank and nothing between them: $0.433$ with no
+dialogue, $0.783$ with the solution disclosed. Every experiment above lives in
+that gap, and none of them asked whether the gap is reachable by anything short
 of disclosure.
 
 We measure six levels of hint concreteness. Every hint is constructed
 programmatically from the reference solution, so no tutor model is involved and
-no policy quality can confound the result. This measures the task.
+no policy quality can confound the result. This measures the task and the
+learner. We then repeat it on problems selected for scaffoldable structure: all
+splits pooled, keeping the 137 of 558 references with at least four statements
+in the function body and at least one loop or conditional, averaging $11.9$
+lines and $2.9$ control-flow nodes. Pooling is sound because no trained model
+is involved.
 
 \begin{table}[t]
-\caption{Hint concreteness against student outcome, 60 held-out problems, every
-level paired on the same bank. Leakage is our own disclosure metric. The final
-column is whether the tutor's system prompt permits a turn of that kind.}
+\caption{Hint concreteness against learner outcome, paired within each bank.
+\emph{Allowed} is whether the tutor's system prompt permits a turn of that
+kind; it forbids code, code blocks and pseudocode. The $p$ values are against
+L0 on the 137-problem bank, which resolves $16.6\%$ against the 60-problem
+bank's $25.1\%$.}
 \label{tab:ladder}
 \centering
 \small
 \begin{tabular}{llrrrl}
 \toprule
- & \textbf{Hint} & \textbf{Solve} & \textbf{$\Delta$} & \textbf{$p$} & \textbf{Allowed} \\
+ & \textbf{Hint} & \textbf{60} & \textbf{137} & \textbf{$p$} & \textbf{Allowed} \\
 \midrule
-L0 & nothing                   & 0.433 & ---      & ---    & yes \\
-L1 & Socratic question         & 0.400 & $-0.033$ & 0.7744 & yes \\
-L2 & approach named            & 0.383 & $-0.050$ & 0.5488 & yes \\
-L3 & skeleton, logic removed   & 0.450 & $+0.017$ & 1.0000 & no \\
-L4 & analogous worked example  & \textbf{0.317} & $-0.117$ & 0.0654 & no \\
-L5 & the reference solution     & \textbf{0.833} & $+0.400$ & \textbf{0.0000} & no \\
+L0 & nothing                   & 0.433 & 0.336 & ---    & yes \\
+L1 & Socratic question         & 0.400 & 0.263 & 0.0639 & yes \\
+L2 & approach named            & 0.383 & \textbf{0.234} & \textbf{0.0094} & yes \\
+L3 & skeleton, logic removed   & 0.450 & 0.321 & 0.8388 & no \\
+L4 & analogous worked example  & 0.317 & \textbf{0.234} & \textbf{0.0243} & no \\
+L5 & the reference solution    & \textbf{0.833} & \textbf{0.752} & \textbf{0.0000} & no \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\textbf{Table~\ref{tab:ladder} gives the ladder. No level short of complete disclosure beats giving no help at all.} The
-skeleton is $+0.017$ at $p{=}1.0$, which is noise. Naming the approach and
-asking a guiding question both land below the floor. The analogous worked
-example, which the hint-granularity literature predicted would be the most
-helpful of the non-disclosing rungs, is the worst row in the table.
+Table~\ref{tab:ladder} gives both banks. \textbf{No level short of complete
+disclosure beats giving no help at all}, on either bank. The skeleton is
+$+0.017$ then $-0.015$, noise both times. On the harder bank two rungs harm
+significantly: naming the approach costs $0.102$ and the analogous example
+costs $0.102$, each worse than telling the learner nothing.
 
-\textbf{This settles the paper.} The $0.40$ gap is reachable only by
-disclosing, so on this benchmark no tutor bound by a non-disclosure constraint
-can win, at any model size, under any prompt, with any reward, after any amount
-of training. It is a property of the task and not of a policy, and it subsumes
-our other negative results rather than competing with them. The policy failing
-to move and the tutor having no information advantage over its student would
-both have mattered if there had been something to win.
+\textbf{This settles the paper.} The gap is reachable only by disclosing, so on
+this benchmark no tutor bound by a non-disclosure constraint can win, at any
+model size, under any prompt, with any reward, after any amount of training. It
+is a property of the task and the learner, not of a policy, and it subsumes our
+other negative results rather than competing with them.
 
-The benchmark is why. Its reference solutions are one to three lines, so there
-is no intermediate reasoning state to scaffold: the skeleton of a one-line
-solution is a signature and a placeholder, which carries nothing. Either the
-learner knows the idiom or it does not, and a four-turn Socratic dialogue
-cannot install an idiom without stating it.
+\textbf{It is not the benchmark, and we tested that.} The obvious objection is
+that one-to-three-line references make a skeleton vacuous, which is why the
+137-problem bank exists; on it a skeleton shows a four-branch decision
+sequence. The skeleton still does nothing. Making the structure informative did
+not make the structural hint work.
 
-\textbf{The harmful rung is the most interesting number here.} L4 shows the
-learner a correct, working solution to a \emph{different} problem sharing
-syntactic constructs with this one, and the learner then does worse than if it
-had been shown nothing. The plausible mechanism is that it transfers the
-analogous pattern instead of solving the problem in front of it, which would
-make a well-intentioned worked example actively harmful. We did not confirm it:
-this run recorded outcomes and not the learner's code, so the mechanism is a
-hypothesis and the effect is $p{=}0.0654$.
-
-It is not isolated. A randomised trial in secondary mathematics reports that
-unrestricted assistance improved supported practice while reducing subsequent
-\emph{unaided} examination performance against a control~\cite{bastani}. Our
-result has the same shape in a simulated setting, which is the strongest
-external support any finding in this paper has.
-
-\textbf{A prediction of ours that this falsifies.} We built this experiment
-expecting the opposite. A think-aloud study of twelve novice
-programmers~\cite{hintlevels} reports that high-level natural-language hints
-alone can be unhelpful or misleading while commented code examples support
-novices better, and our tutor's prompt forbids code, code blocks and
-pseudocode. We predicted that the two rungs containing code would recover much
-of the gap and that our own constraint would be the binding one. Neither rung
-helped and one of them hurt. We report the prediction and its failure because
-the alternative, presenting the ladder as confirmation of a constraint we had
-already named, is the error this paper is otherwise about.
-
-\textbf{The benchmark is not the explanation, and we tested it.} The reading
-above invites the obvious objection: these reference solutions are one to three
-lines, so the skeleton of one is a signature and a placeholder. We therefore
-pooled every split and selected the 137 problems of 558 whose reference has at
-least four statements in the function body and at least one loop or
-conditional, averaging $11.9$ lines and $2.9$ control-flow nodes. On that set a
-skeleton shows a four-branch decision sequence rather than a placeholder.
-Pooling splits is sound because the ladder uses no trained model: hints come
-from the reference and the learner is the base student.
-
-\begin{table}[t]
-\caption{The same ladder on the default bank and on problems selected for
-scaffoldable structure. At $n{=}137$ the protocol resolves $16.6\%$ against the
-$25.1\%$ of the 60-problem bank.}
-\label{tab:ladder2}
-\centering
-\small
-\begin{tabular}{llrrr}
-\toprule
- & \textbf{Hint} & \textbf{60} & \textbf{137} & \textbf{$p$} \\
-\midrule
-L0 & nothing                  & 0.433 & 0.336 & --- \\
-L1 & Socratic question        & 0.400 & 0.263 & 0.0639 \\
-L2 & approach named           & 0.383 & \textbf{0.234} & \textbf{0.0094} \\
-L3 & skeleton, logic removed  & 0.450 & 0.321 & 0.8388 \\
-L4 & analogous worked example & 0.317 & \textbf{0.234} & \textbf{0.0243} \\
-L5 & the reference solution    & 0.833 & \textbf{0.752} & \textbf{0.0000} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Table~\ref{tab:ladder2} compares the two banks. The skeleton still does nothing, $-0.015$ at $p{=}0.8388$. Making the structure
-informative did not make the structural hint work. What the harder set adds is
-significance in the other direction: naming the approach costs $0.102$
-($p{=}0.0094$) and the analogous worked example costs $0.102$ ($p{=}0.0243$),
-both worse than telling the learner nothing. Only complete disclosure helps,
-and it helps by $0.416$.
-
-\textbf{The constraint is the learner.} This is the third explanation this
-paper has offered for one null and the first the data supports. Not the reward,
-which was debugged across twenty runs. Not the policy, which moved $0.2\%$ from
-its initialisation. Not the prompt's prohibition on code, since the rungs that
-contain code do not help. Not the benchmark, since selecting for scaffoldable
-structure changed nothing. A 1.5B learner given partial information performs
-worse than the same learner given none, and the plausible mechanism is
-anchoring: an incomplete pattern displaces a prior that was better than the
-fragment. The analogous worked example is the clearest case, since the learner
-sees correct code for a different problem and plausibly transfers it rather
-than solving the one in front of it. We did not confirm the mechanism, because
-these runs recorded outcomes and not the learner's code.
-
-\textbf{This generalises past our system, and it is the paper's most useful
-claim.} A tutor evaluated against a simulated learner is scored by something
-that is harmed by partial, non-disclosing hints and helped only by the answer.
-That penalises precisely the behaviour pedagogy requires, so any reward built
-on such a learner pushes a tutor toward disclosure or toward silence. Every
-reward in this paper inherited that, and so does the evaluation in any work
-that scores tutors against an LLM learner. The simulated-learner line of
-research rests on the assumption that a simulated student responds to teaching
-as a student would, and we are not aware of a paper that tests
-it~\cite{rev-simstudents}. Our two ladders are such a test, and the assumption
-does not hold for a 1.5B learner on program synthesis.
-
-The direction is consistent with human evidence rather than opposed to it.
-A randomised trial in secondary mathematics reports that unrestricted
-assistance improved supported practice while reducing subsequent unaided
-performance~\cite{bastani}. Whether the mechanism is the same is unknown.
-
-A 1.5B learner given partial information performs worse than the same learner
-given none. We proposed that it transfers the analogous pattern rather than
-solving the problem in front of it, and a further run with the learner's code
-recorded rules that out.
+\textbf{It is not copying either.} We proposed that the learner transfers the
+analogous pattern rather than solving the problem, and re-ran three rungs
+recording its code.
 
 \begin{table}[t]
 \caption{411 generations with the learner's code recorded, same 137 problems.
-Similarity is token overlap. The one-sentence rung contains no code at all.}
+Similarity is token overlap against the example and against the reference. The
+one-sentence rung contains no code at all.}
 \label{tab:anchor}
 \centering
 \small
@@ -1094,51 +796,57 @@ Similarity is token overlap. The one-sentence rung contains no code at all.}
  & \textbf{Hint} & \textbf{Solve} & \textbf{sim}$_{\text{ex}}$ &
  \textbf{sim}$_{\text{ref}}$ & \textbf{$p$} \\
 \midrule
-L0 & nothing           & 0.336 & 0.233 & 0.359 & --- \\
-L2 & approach named    & \textbf{0.234} & 0.205 & \textbf{0.319} & \textbf{0.0094} \\
-L4 & worked example    & \textbf{0.234} & 0.250 & 0.356 & \textbf{0.0243} \\
+L0 & nothing        & 0.336 & 0.233 & 0.359 & --- \\
+L2 & approach named & \textbf{0.234} & 0.205 & \textbf{0.319} & \textbf{0.0094} \\
+L4 & worked example & \textbf{0.234} & 0.250 & 0.356 & \textbf{0.0243} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:anchor} gives the result. Paired on the same problem, overlap with the example rises by only $0.0169$
-under L4, and just 64 of 137 problems move toward it at all, which is below
-chance. The learner borrows the example's function name on 5 problems of 137
-against 4 unaided. On the 24 problems L0 solved and L4 lost, 16 move toward the
-example, $p{=}0.152$.
-
-\textbf{The decisive argument is the one-sentence rung.} It contains no code,
-and it harms by exactly as much as the worked example, $0.234$ against
+Table~\ref{tab:anchor} gives the result. Overlap with the example rises by only
+$0.0169$ under L4, and just 64 of 137 problems move toward it, below chance.
+The learner borrows the example's function name on 5 problems against 4
+unaided. \textbf{The decisive argument is the one-sentence rung}: it contains
+no code and harms by exactly as much as the worked example, $0.234$ against
 $0.234$. A hint with nothing to copy cannot do equal damage if copying is the
 mechanism.
 
 What the code shows instead is two different routes of comparable size, neither
-significant on its own. Naming the approach moves the learner's output
-\emph{away} from the correct solution, overlap $0.359$ to $0.319$, without
-moving it toward anything in particular. The worked example leaves it about as
-close to the correct solution but inflates it, from $76.2$ to $84.4$ abstract
-syntax tree nodes, and on the problems it loses the learner writes more code
-than it did unaided in 17 of 24 cases ($p{=}0.064$). In the clearest single
-case the learner, shown a binary-search example on a median-of-two-arrays
-problem, attempted a full partition algorithm with sentinel values where
-unaided it had written something simpler that passed.
+significant alone. Naming the approach moves the learner's output \emph{away}
+from the correct solution, $0.359 \rightarrow 0.319$, without moving it toward
+anything. The worked example leaves it as close to correct but inflates it,
+$76.2 \rightarrow 84.4$ syntax-tree nodes, and on the problems it loses the
+learner writes more code than unaided in 17 of 24 cases ($p{=}0.064$).
 
-\textbf{Partial help is not inert, and the aggregate hides that.} The
-one-sentence rung fixes 6 problems the learner could not do alone and breaks
-20; the worked example fixes 10 and breaks 24. Help works, and it works less
-often than it backfires, which is a different claim from help being useless and
-a more uncomfortable one.
+\textbf{Partial help is not inert, and the averages hide that.} The
+one-sentence rung fixes 6 problems the learner cannot do alone and breaks 20;
+the worked example fixes 10 and breaks 24. Help works, and less often than it
+backfires, which is a different and more uncomfortable claim than help being
+useless.
 
-\textbf{We state the mechanism as unidentified.} Three explanations have been
-offered in this paper for one effect: that our prompt forbade the hint register
-that works, that the benchmark's one-line solutions made structural hints
-vacuous, and that the learner copies worked examples. The first was falsified by
-the rungs containing code failing to help, the second by selecting for
-scaffoldable structure and changing nothing, the third by the measurements
-above. The effect is firm across two ladders and 197 problems. No proposed
-mechanism for it survives, and settling the question needs a study varying one
-property of the hint at a time at a sample size resolving $0.05$, which is
-roughly 800 problems per rung rather than our 137.
+\textbf{We state the mechanism as unidentified.} Three explanations were
+offered in this paper for one effect: that our prompt forbade the register that
+works, that short reference solutions made structural hints vacuous, and that
+the learner copies worked examples. Each was falsified by a measurement run to
+test it. The effect is firm across two banks and 197 problems; settling the
+mechanism needs one hint property varied at a time at a sample size resolving
+$0.05$, roughly 800 problems per rung against our 137.
+
+\textbf{This generalises past our system, and it is the paper's most useful
+claim.} A tutor evaluated against a simulated learner is scored by something
+harmed by partial, non-disclosing hints and helped only by the answer. That
+penalises precisely the behaviour pedagogy requires, so any reward built on such
+a learner pushes a tutor toward disclosure or toward silence. Every reward here
+inherited it, as does any evaluation that scores tutors against a
+language-model learner. That line of work rests on the assumption that a
+simulated student responds to teaching as a student
+would~\cite{rev-simstudents}, and we are not aware of a paper that tests it.
+Our two ladders are such a test, and the assumption does not hold for a 1.5B
+learner on program synthesis. The direction is consistent with a randomised
+trial in secondary mathematics reporting that unrestricted assistance improved
+supported practice while reducing subsequent unaided
+performance~\cite{bastani}, though whether the mechanism is the same is
+unknown.
 
 \subsection{Run history}
 
@@ -1249,55 +957,35 @@ against a required 4.
 \subsection{Only half the reward can teach}
 \label{sec:channel}
 
-This is the most consequential finding in the project, and it subsumes the
-others. Equation~\eqref{eq:reward} contains two
-kinds of term. $r_{\mathrm{ped}}$ and $L$ are \textbf{deterministic
-functions of the tutor's own text}: identical text always scores
-identically, and the policy controls them completely. $r_{\mathrm{sol}}$ is
-a \textbf{sampled estimate} of whether a different, frozen, quantised model
-writes passing code afterwards; the tutor influences it weakly, indirectly,
-and through another model's decoding.
+Equation~\eqref{eq:reward} contains two kinds of term. Pedagogy and leakage are
+\textbf{deterministic} functions of the tutor's own text: identical text scores
+identically and the policy controls them outright. The outcome term is a
+\textbf{sampled estimate} of whether a different, frozen model writes passing
+code afterwards, which the tutor influences only weakly and indirectly.
 
-Across the three preceding 10-epoch runs,
-$\mathrm{corr}(\text{epoch},r_{\mathrm{ped}})$ was $+0.80/+0.99/+0.64$ and
-$\mathrm{corr}(\text{epoch},L)$ was $-0.64/-0.80/-0.48$, while
-$\mathrm{corr}(\text{epoch},r_{\mathrm{sol}})$ was $+0.48/+0.54/+0.01$. On
-retained rollout records, mean \emph{within-group} variance, which is the
-only variance \eqref{eq:adv} converts into gradient, was $0.0482$ for
-$r_{\mathrm{ped}}$ against $0.0098$ for $r_{\mathrm{sol}}$, with 22 of 24
-rollouts scoring $r_{\mathrm{sol}}{=}0.00$ exactly. The pedagogy term
-supplied roughly five times the usable signal of the term the project
-exists to optimise.
+Across the last three ten-episode runs the correlation between episode and
+pedagogy was $+0.80/+0.99/+0.64$ and between episode and leakage
+$-0.64/-0.80/-0.48$, while between episode and the outcome term it was
+$+0.48/+0.54/+0.01$. On mean between-group variance, which is the only variance
+that becomes gradient under~\eqref{eq:adv}, pedagogy measured $0.0482$ against
+$0.0098$ for the outcome: roughly five times the usable signal on the term the
+project exists to optimise, with 22 of 24 rollouts scoring the outcome exactly
+zero.
 
-\textbf{That ordering has since reversed, and the reversal is not a
-vindication.} Scoring $r_{\mathrm{sol}}$ as the fraction of tests passed
-rather than as an all-or-nothing gate was predicted to restore resolution to
-the outcome term, and it did: measured over a later run, within-group variance
-is $0.0481$ for $r_{\mathrm{sol}}$ against $0.0150$ for $r_{\mathrm{ped}}$, a
-three-to-one advantage in the opposite direction. $r_{\mathrm{ped}}$ collapsed
-for its own reason, saturation, with 234 of 320 rollouts scoring exactly
-$1.0$ and 207 of those never solving the problem.
+That ratio reversed under the change made to fix it. With greedy decoding and
+partial test-case credit the outcome term measures $0.0481$ and pedagogy
+$0.0150$, and held-out solve still does not move. Two qualifications keep this
+from being a clean reversal: $76\%$ of rollouts still score exactly zero, and
+$197$ of $198$ problems carry exactly three assertions, so the continuous
+outcome term has four levels. Gradient starvation was real and worth removing.
+It was not what prevented learning, and we report both measurements rather than
+the one that suits the argument.
 
-The outcome term now carries the most gradient of the three and held-out solve
-still does not move. Gradient starvation was a real defect and fixing it was
-necessary; it was not what was preventing learning. Two caveats keep this from
-being as strong as it looks. $76\%$ of rollouts still score
-$r_{\mathrm{sol}}{=}0$ exactly, so the distribution is wider rather than
-continuous, and $197$ of $198$ training problems carry exactly three
-assertions, so partial credit can only take four values. The ``continuous''
-outcome term has four levels.
-
-A policy optimises whatever part of its reward it can control, which is
-what the pattern in Sec.~\ref{sec:results} reflects. Gains came from
-repairing the controllable channel. The one incentive that was added got
-gamed within a single run. And \emph{teaching that causes a student to
-solve problems was never trained at all}, for want of a usable gradient. In the reported run,
-$r_{\mathrm{sol}}$ still has an epoch-to-epoch standard deviation of
-$0.121$ against a sampling-noise floor of $\approx0.031$. That floor assumes
-the four samples drawn per rollout are independent, which they are not, so
-the true floor is higher and the ratio correspondingly smaller. Even
-allowing for this, the variation remains dominated by which problems were
-drawn rather than by policy state.
+A policy optimises whatever part of its reward it can control, which is the
+pattern in Sec.~\ref{sec:results}: gains followed repairs to the controllable
+channel, the one behavioural incentive added was gamed within a run, and
+teaching that causes a student to solve was never trained for want of a usable
+gradient.
 
 %=======================================================================
 \subsection{What the transcripts show}
@@ -1423,196 +1111,105 @@ the direction we would now take.
 \subsection{Was reinforcement learning the right tool?}
 \label{sec:method-choice}
 
-The case for it was sound at the outset. No corpus of human programming-tutoring
-dialogue exists at the scale supervised learning needs, which the review that
-this design follows gives as its own motivation, and the outcome of tutoring is
-cheaply verifiable by executing the student's attempt. Absent demonstrations and
-present a verifier is the situation reinforcement learning from verifiable
-rewards exists for.
+The case for it was sound: no corpus of human programming-tutoring dialogue
+exists at the scale supervised learning needs, and the outcome of tutoring is
+cheaply verifiable by execution. Absent demonstrations and present a verifier
+is the setting reinforcement learning from verifiable rewards exists for.
 
-The case for the particular estimator was also sound, and for a reason that is
-about hardware rather than statistics. Proximal policy optimisation needs a
-learned critic, which is another network resident in memory, and a tutor and a
-student already occupy a 16\,GB accelerator. Replacing the critic with a
-within-group $z$-score costs no additional model.
+The case for a critic-free estimator was also sound, and for a hardware reason
+rather than a statistical one, as Sec.~\ref{sec:method} notes. What it costs is
+that the learning signal becomes entirely within-group reward variance, and
+much of this project's reward engineering was in retrospect an effort to keep
+that variance non-zero. By the final run it had succeeded: no group was dead
+and the outcome term carried the largest share of usable variance. The policy
+still did not move, for the reason in Sec.~\ref{sec:nomove}.
 
-What it costs instead is that the learning signal becomes \emph{entirely}
-within-group reward variance. A group whose rollouts all score alike has
-$\sigma = 0$, every advantage in it is exactly zero, and it consumes a full
-generation budget to contribute no gradient. Much of this project's reward
-engineering was, in retrospect, an effort to keep that variance non-zero, and
-by the final run it had succeeded: no group was dead and the outcome term
-carried the largest share of usable variance. The policy still did not move,
-for the reason in Sec.~\ref{sec:nomove}.
-
-Given what we now measure, a simpler objective fits our constraints better.
-Rejection-sampling fine-tuning trains only on the rollouts that succeeded and
-is reported competitive with both group-relative optimisation and proximal
-policy optimisation, with the observation that the former's advantage comes
-from discarding prompts whose rollouts all fail rather than from normalising
-rewards~\cite{raft}. For us the decisive property is different: an ordinary
+Given what we measure, a simpler objective fits our budget better.
+Rejection-sampling fine-tuning trains only on successful rollouts and is
+reported competitive with both group-relative and proximal policy
+optimisation, with the observation that the former's advantage comes from
+discarding prompts whose rollouts all fail rather than from normalising
+rewards~\cite{raft}. The decisive property for us is different: an ordinary
 cross-entropy objective has a loss of order one rather than $0.002$, so the
-policy moves. The data for it already exists in our own rollouts, where $45$
-dialogues had the tutor teach without disclosing and the student then solve.
-Its weakness is equally clear, since those $45$ cover only $15$ distinct
-problems.
+policy moves. Its weakness is equally clear, since the 45 usable dialogues in
+our own rollouts cover only 15 distinct problems.
 
 We therefore do not conclude that reinforcement learning is wrong for
-pedagogical alignment. We conclude that a critic-free policy gradient at this
-compute scale produces a gradient too small to move a policy, that the
-constraint which made it attractive is the same constraint that made it
-ineffective, and that a method whose objective is not a near-zero surrogate
-should be tried first at this budget.
+pedagogical alignment, but that a critic-free policy gradient at this compute
+scale produces a gradient too small to move a policy, and that the constraint
+which made it attractive is the one that made it ineffective.
 
 \section{Threats to Validity}
 \label{sec:threats}
-%=======================================================================
 
-\textbf{The baselines now exist, and they are what changed the paper.} Earlier
-versions of this report carried, in this position, the admission that no run
-had ever been compared against a control, and that the headline solve rate was
-therefore uninterpretable in absolute terms. Both controls have since been
-measured, the untrained checkpoint under the same prompt and the student with
-no dialogue at all, and the result is Sec.~\ref{sec:controlled}. We leave the
-admission on the record because it was correct and because the sign of the
-conclusion changed when it was addressed: a number that looked like weak
-progress was a deficit against doing nothing. No measurement in this paper is
-now reported without the arm it should be compared against.
+\textbf{The missing baseline was this project's largest defect, and running it
+changed the sign of the conclusion twice.} Every run before this revision
+reported a solve rate after tutoring with no control, and the harness had been
+written to accept several arms while only ever being given one. A number that
+read as weak progress, $17.5\%$ against a previous best of $16.3\%$, became a
+deficit against doing nothing, and then became an artefact of the transcript
+framing. We regard this as the most transferable result in the paper.
 
-\textbf{The evaluation set cannot resolve the comparisons made with it.}
-Bootstrapping a 20-problem mean: at a true solve rate of $0.10$ the
-estimate has s.d.\ $0.068$ and $95\%$ of runs land in $[0.00,0.25]$; at
-$0.16$, s.d.\ $0.082$ and $[0.00,0.35]$. Every run-to-run conclusion in
-this project's history rests on approximately two problems. The set size
-was raised to 60 in configuration ($\text{s.d.}\approx0.047$), but the
-reported run nonetheless evaluated on 20.
+\textbf{The evaluation resolves less than the effects it was asked to detect.}
+At $n{=}20$ a bootstrap of the mean has standard deviation $0.068$ at a true
+rate of $0.10$, so every run-to-run conclusion in this project's history rests
+on about two problems. The held-out set is now 60 and the ladder bank 137,
+resolving about $0.15$ and $0.17$ respectively, which is why we report
+directions rather than results for the solve column throughout.
 
-\textbf{Provenance of the reported run.} We record a discrepancy found by
-inspecting the run's own outputs, because it materially limits
-interpretation. Three signals disagree with the current implementation: the
-run's evaluation summary omits a partial-credit column the current
-evaluator emits; its saved report omits the corresponding field; and the
-curriculum band was observed to empty, which the difficulty-targeted
-sampler was written to prevent. Together these indicate that the code
-executed predates the staged corrections. Specifically, it used the
-unclipped surrogate rather than the clipped one, a 4-sample all-or-nothing
-$r_{\mathrm{sol}}$ rather than greedy decoding with partial test-case
-credit, and the mastery-band curriculum rather than the difficulty-targeted
-one. The run log independently confirms evaluation on 20 problems, although
-the configuration specifies 60. Three consequences follow, and should not
-be softened. The method as executed is \textbf{REINFORCE with a $z$-scored
-baseline and a KL penalty}, not clipped GRPO, and its 16 sequential
-optimiser steps per epoch consume rollouts from a policy that has already
-moved, uncorrected. The headline $17.5\%$ \textbf{does not measure the
-staged fixes}. And the gain in statistical power that motivated the larger
-evaluation set was not realised.
+\textbf{The reported run predated its own configuration.} An earlier run
+executed code preceding the staged corrections, so the method as run was
+REINFORCE with a $z$-scored baseline rather than clipped group-relative
+optimisation, with a four-sample all-or-nothing outcome term and a
+mastery-banded curriculum. Every number in Sec.~\ref{sec:controlled} onward
+comes from runs where all corrections are present and logged.
 
-\textbf{Simulator validity and unpriced leakage.} The student is a language
-model, not a learner, and a policy can in principle improve reward by
-exploiting simulator quirks rather than by teaching. The designed defence
-(assistance-corrected effect probes, which fire when the student solved
-\emph{and} the tutor made no difference) is implemented but has never been
-supplied with data, so non-causal solves are unpriced. Separately, all
-three pedagogy checks are syntactic and leakage is lexical plus
-execution-based, so a tutor that states the entire algorithm in prose,
-writing no code, scores $r_{\mathrm{ped}}{=}1.00$ and $L{=}0.00$. A high-reward
-first-epoch rollout in an earlier run did exactly this. We did not
-re-examine the reported run's transcripts for the same behaviour, so given
-the degenerate held-out columns we cannot exclude that some of the
-$17.5\%$ arises this way.
+\textbf{The simulator is a model, not a learner.} A policy can in principle
+raise reward by exploiting simulator quirks rather than by teaching. The
+designed defence, an assistance-corrected effect probe, is implemented and has
+never been supplied with data. Separately, all pedagogy checks are syntactic
+and leakage is lexical plus execution-based, so a tutor stating an algorithm
+entirely in prose scores perfectly on both.
 
-\textbf{The served policy is not prompted as it was trained.} The
-interactive system adds instructions the policy was never optimised
-against: a per-turn adaptation block, a dangling-colon rule, and
-code-mixing guidance. Any behavioural measurement taken through the serving
-path is therefore not a measurement of the trained policy alone. The
-training prompt is deliberately left unchanged, because altering it would
-invalidate comparison with every run in Table~\ref{tab:history}.
+\textbf{No human validation.} Sec.~\ref{sec:interactive} describes function,
+not efficacy. No cohort has used the system, so nothing here shows that the
+interface, placement seeding, curriculum or turn adaptation improves learning.
 
-\textbf{No human validation.} Sec.~\ref{sec:interactive} describes
-function, not efficacy. No human-subject study has been run, so no claim is
-made that the interface, placement seeding, curriculum or turn adaptation
-improves learning, and the learner-state layer has never been exercised by
-a real cohort.
-
-%=======================================================================
 \subsection{Threats introduced by this revision}
 
-\textbf{The corrected framing is itself a choice, and nothing was trained
-against it.} Omitting the student's own replies from the context of its final
-attempt is not obviously the right reconstruction of what a tutored learner
-knows. It is one of three framings we implemented, and the one we adopted is the
-one that scored highest, which is a weak basis for calling it correct. A learner
-who has been tutored has in fact said things, and a measurement that pretends
-otherwise may discard signal along with the artefact. Every policy reported here
-was trained with the outcome term computed under the framing we now believe is
-distorting, so none has been optimised against a clean reward.
+\textbf{The corrected framing is itself a choice and nothing was trained
+against it.} Omitting the student's own replies is not obviously the right
+reconstruction of what a tutored learner knows; it is one of three framings we
+implemented and the one we adopted scored highest, which is a weak basis for
+calling it correct. What we can defend is narrower: the framings disagree by
+more than the effect every arm was built to detect, so no conclusion that does
+not state its framing is interpretable. Every policy reported here was trained
+with the outcome term computed under the framing we now believe distorting.
 
-\textbf{The served policy is not prompted as it was trained.} The serving path
-adds instructions the policy was never optimised against: a per-turn adaptation
-block, a dangling-colon rule, and code-mixing guidance. A fourth case was worse
-than a prompt difference. The personalisation block derived from the learner
-model was gated on a switch in the training path that defaulted off, and built
-unconditionally in the serving path, so the deployed tutor received a block in
-its system prompt that its adapter had never seen, and nothing recorded the
-discrepancy because each side was internally consistent. Both halves now read
-one definition of that switch. The training prompt is otherwise left unchanged,
-because altering it would invalidate comparison with every run in
-Table~\ref{tab:history}.
+\textbf{Several defects were found in one audit of one arm.} Two of the six
+came from asking why the disclosure arm fails at all, a question not asked for
+six runs. We have no reason to believe the audit is complete, and the base rate
+it establishes is poor: every assumed measurement we have examined has been
+wrong.
 
-
-Five limitations are specific to the results added here and are not covered by
-the threats above.
-
-\textbf{The corrected framing is itself a choice, and it was never trained
-against.} Removing the student's own replies from the context of its final
-attempt is not obviously the right reconstruction of what a tutored learner
-knows; it is one of two we implemented, and the better one is the one that
-scored higher, which is a weak basis for calling it correct. A learner who has
-been tutored has in fact said things, and a measurement that pretends otherwise
-may be discarding signal along with the artefact. What we can defend is
-narrower than our headline: the two framings disagree by more than the effect
-every arm of this project was built to detect, so no conclusion that does not
-state its framing is interpretable. Every policy reported here was trained with
-the outcome term computed under the framing we now believe is distorting, so
-none of them has been optimised against a clean reward, and we have not yet run
-the retrain that would say whether that matters.
-
-\textbf{Two of the four instrumentation defects were found in the same
-afternoon, by auditing one arm.} Both came from asking why the oracle arm fails
-at all, a question we had not asked for six runs. We have no reason to believe
-the audit is complete, and the base rate it establishes is poor: every time we
-have examined an assumed measurement in this project, it has been wrong.
+\textbf{The ladder's mechanism tests are underpowered.} The analogy rung's
+code-similarity contrast is $n{=}137$ with the decisive subgroup at $n{=}24$,
+and the two damage routes we can distinguish sit at $p{=}0.064$ and above. The
+effect is firm; no mechanism for it is.
 
 \textbf{The correctness experiment is a single pair of runs.} Both arms were
-seeded identically and drew the same problems through epoch 4, diverging
-thereafter because a different reward produces a different policy and therefore
-a different curriculum, which is the treatment propagating, not a confound,
-but it does mean the arms are not problem-matched late in training. One pair
-cannot separate a null effect from an effect smaller than run-to-run variance,
-and we have not characterised that variance because doing so costs a run per
-sample.
-
-\textbf{The oracle ceiling is a lower bound on what a tutor could achieve, not
-an upper bound on what a better student could.} It measures this student's
-ability to reproduce code it has been shown. A stronger student would raise
-both the ceiling and the untutored baseline, and we do not know which moves
-more; the headroom of $0.417$ is a property of the pair, not of tutoring.
-
-\textbf{The judge is a 7B model reading a 1.5B model.} Its verdicts carry its
-own errors, and we have validated it only against outcome agreement on 180
-transcripts from one adapter. We report its discrimination
-($+0.212$ after the anchoring fix) rather than treating its labels as ground
-truth, and we do not train against it.
+seeded identically and drew the same problems through episode 4, diverging
+afterwards because a different reward produces a different curriculum, which is
+the treatment propagating rather than a confound but does leave the arms
+unmatched late in training. One pair cannot separate a null from an effect
+smaller than run-to-run variance, which we have not characterised.
 
 \section{Conclusion and Future Work}
 
 We have described an end-to-end system that trains a programming tutor by
 critic-free reinforcement learning against a simulated, knowledge-traced
-student with execution-verified outcome supervision, together with the serving
-half: six containerised services with code execution isolated from scoring by
-construction, speech input for Indic languages, and a persistent Bayesian
-learner model driving placement and curriculum from an append-only log.
+student with execution-verified supervision, together with a working serving
+half described in Sec.~\ref{sec:interactive}.
 
 \textbf{The tutor does not teach better, and we can now say why rather than
 only that.} Across twenty runs no configuration improved the simulated
@@ -1620,44 +1217,38 @@ student's held-out solve rate. The explanation is not the reward, which was
 debugged, graded, re-weighted and extended; not the optimiser, which moved
 every term it could reach; and not the policy, which we measure at $0.2\%$ from
 its initialisation. It is that on this task the learner is helped only by being
-given the answer. Six graded levels of help on 197 problems show that nothing
-short of complete disclosure beats offering nothing, and that two intermediate
-levels do significant harm.
+given the answer. Six graded levels of help across 197 problems show that
+nothing short of complete disclosure beats offering nothing, and that two
+intermediate levels do significant harm.
 
-\textbf{The transferable result is about evaluation.} A simulated learner that
-is damaged by partial, non-disclosing hints and rescued only by the solution
+\textbf{The transferable result is about evaluation.} A simulated learner
+damaged by partial, non-disclosing hints and rescued only by the solution
 cannot be used to score a tutor, because the reward it induces points away from
-teaching and toward either disclosure or silence. That is what every reward in
-this paper did, and it is a property of the evaluation rather than of our
-implementation of it. The simulated-learner line of work rests on the
-assumption that a language-model student responds to teaching as a student
-would~\cite{rev-simstudents}; our two ladders are a direct test and the
-assumption fails for a 1.5B learner on program synthesis. We would want this
-checked before any further tutor is optimised against a simulated student,
-and the check is cheap: it needs no training and no tutor model.
+teaching toward either disclosure or silence. That is what every reward here
+did, and it is a property of the evaluation rather than of our implementation
+of it. The assumption that a language-model student responds to teaching as a
+student does is widely relied upon and, as far as we can find, untested; our
+two ladders test it directly and it fails for a 1.5B learner on program
+synthesis. The check is cheap, needing no training and no tutor model, and we
+would want it run before any further tutor is optimised against a simulated
+student.
 
-\textbf{What we got wrong, and how it was caught.} Every substantive correction
-here came from a measurement that had been assumed rather than taken: an
-untutored arm nobody had run, a seed applied after the adapter was built, an
-entry point read from the first function a reference defines rather than the
-one its tests call, an extraction step that discarded correct code over a
-capitalised name, a transcript framing worth more than the effect the protocol
-could detect, and an adapter nobody had weighed. We also offered three
-mechanisms for the central effect, that our prompt forbade the register that
-works, that the benchmark's short solutions made structural hints vacuous, and
-that the learner copies worked examples. All three are falsified above by
-measurements we ran specifically to test them, and we report the mechanism as
-unidentified rather than adopting the least damaged of the three.
+\textbf{What we got wrong.} Every substantive correction here came from a
+measurement assumed rather than taken: an untutored arm nobody had run, a seed
+applied after the adapter was built, an entry point read from the wrong
+function, an extraction step discarding correct code over a capitalised name, a
+transcript framing worth more than the effect the protocol could detect, and an
+adapter nobody had weighed. We also offered three mechanisms for the central
+effect and each was falsified by a measurement run to test it, so we report the
+mechanism as unidentified rather than adopting the least damaged of the three.
 
-\textbf{Future work.} Settling the mechanism needs a study varying one property
-of a hint at a time at a sample size that resolves $0.05$, roughly 800 problems
-per level against our 137. Establishing whether the effect is a property of
-small models or of language-model learners in general needs the same ladder run
-across model scales, which is inexpensive because it requires no training.
-Independently, a tutor intended for deployment should be compared against a
-prompted larger model on outcome and on disclosure together, since on our
-measurements that baseline dominates a trained small model on both, and we are
-not aware of this comparison being reported elsewhere.
+\textbf{Future work.} Running the ladder across model scales would say whether
+the effect belongs to small models or to language-model learners generally, and
+costs no training. Settling the mechanism needs one hint property varied at a
+time at roughly 800 problems per level. And a tutor intended for deployment
+should be compared against a prompted larger model on outcome and disclosure
+together, since on our measurements that baseline dominates a trained small
+model on both.
 
 \begin{thebibliography}{99}
 
